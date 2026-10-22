@@ -11,9 +11,9 @@ set role authenticated;
 \set B 'select set_config(''request.jwt.claim.sub'',''00000000-0000-0000-0000-00000000000b'',false) \\g /dev/null'
 :A
 \echo [Admin] Einladungen (inkl. Duplikat Gross/klein -> FEHLER erwartet beim 2.)
-insert into ws_einladungen(email,rolle,eingeladen_von) values ('DEV@x.at','entwickler',auth.uid());
-insert into ws_einladungen(email,rolle,eingeladen_von) values ('dev@X.AT','leser',auth.uid());
-insert into ws_einladungen(email,rolle,eingeladen_von) values ('opfer@x.at','leser',auth.uid()),('dev2@x.at','entwickler',auth.uid()),('texter@x.at','texter',auth.uid()),('leser@x.at','leser',auth.uid());
+insert into ws_einladungen(email,rolle,eingeladen_von,projekt_id) values ('DEV@x.at','entwickler',auth.uid(),'trainer-to-go');
+insert into ws_einladungen(email,rolle,eingeladen_von,projekt_id) values ('dev@X.AT','leser',auth.uid(),'trainer-to-go');
+insert into ws_einladungen(email,rolle,eingeladen_von,projekt_id) values ('opfer@x.at','leser',auth.uid(),'trainer-to-go'),('dev2@x.at','entwickler',auth.uid(),'trainer-to-go'),('texter@x.at','texter',auth.uid(),'trainer-to-go'),('leser@x.at','leser',auth.uid(),'trainer-to-go');
 \echo [Unbestaetigt] annehmen -> FEHLER erwartet
 :B
 select ws_einladung_annehmen('Opfer');

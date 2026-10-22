@@ -1,7 +1,6 @@
-# Rechte-Test Programmierumgebung (ws_*)
+# Rechte-Tests Codeschmiede (ws_*)
 
-Von der unabhängigen Prüfung am 2026-10-22 (Urteil GEPRÜFT, Commit df1c7b2). Läuft gegen ein lokales Postgres 16:
-1. `mock2.sql` – stellt Supabase nach (Rollen anon/authenticated, auth.users, auth.uid(), Realtime-Veröffentlichung)
-2. `supabase/dev-data/20261022_programmierumgebung.sql` und `..._features.sql` einspielen (zweimal)
-3. `t3.sql` (rund 60 Fälle: Angriffe und erlaubte Abläufe je Rolle), `t4.sql` (Stände der Admin-Stationen, Freigabe nur mit Pull Request)
-Keine echten Daten, nur erfundene Test-Konten.
+Unabhängige Prüfung 2026-10-22: Datenbank v1 GEPRÜFT (df1c7b2), v2 mit Projekten GEPRÜFT (e85816d).
+Ablauf in einem lokalen Postgres 16: `mock2.sql` (stellt Supabase nach) → `../migrations/0001_grundlage.sql` → `../migrations/0002_projekte_verbrauch.sql`
+→ Tests `t3v2.sql` (Rollen, Angriffe), `t4.sql` (Stände der Admin-Stationen), `t5.sql` (Trennung der Projekte), `t6.sql` (Mitglieder sichtbar nur bei gemeinsamem Projekt, Verbrauch, Einladungen).
+Nur erfundene Test-Konten.
