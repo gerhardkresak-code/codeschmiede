@@ -10,7 +10,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { ohneGeheimnisse, kuerzen } from "./lib/geheim.mjs";
-import { passtRegel, fuehrtCodeAus } from "./lib/ergebnis.mjs";
+import { passtRegel, fuehrtCodeAus, dauerErlaubbar } from "./lib/ergebnis.mjs";
 
 const AUFTRAG = Number(process.env.CS_AUFTRAG);
 const GRUPPE = process.env.CS_GRUPPE;
@@ -33,6 +33,7 @@ async function entscheide(werkzeug, eingabe) {
   if ((regeln || []).some((r) => passtRegel(r, werkzeug, text))) return true;
   // Bei Befehlen, die Code ausführen: zeigen, welche Dateien die Werkstatt geändert hat (der Befehl führt sie ggf. aus)
   let grund = "Die Werkstatt braucht das für diesen Auftrag.";
+  if (werkzeug === "Bash" && !dauerErlaubbar(text) && !fuehrtCodeAus(text)) grund = "Einmalige Erlaubnis. Kein „Immer erlauben“ für diesen Befehl.";
   if (werkzeug === "Bash" && fuehrtCodeAus(text)) {
     try {
       const { stdout } = await promisify(execFile)("git", ["status", "--porcelain"], { cwd: process.cwd() });
