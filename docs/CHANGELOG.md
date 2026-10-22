@@ -4,6 +4,7 @@ Jede Änderung: **was**, **wer**, **wann**. Neue Zeilen oben.
 
 | Version | Datum | Wer | Was |
 |---|---|---|---|
+| – (Technik) | 2026-10-22 | Claude | **Prüfung hing:** „Systembibliotheken für Tauri“ blieb zweimal 20 Min. hängen (GitHub stellt `ubuntu-latest` seit 19.10. auf Ubuntu 26 um). Prüfung fest auf `ubuntu-24.04`, Zeitlimits (Schritt 8 Min., Job 20 Min.). |
 | – | 2026-10-22 | Claude, **Neue Anweisung** Gerhard 22:40 | **Entwurf 0.9 freigegeben** (App-Designer: Grunddesign, Seiten-Vorlagen, Baustein-Bibliothek, App-Mails, Marke/Logo-Designer mit Logo C; Regelwerk-Editor). **PR-Freigabe gilt dauerhaft**: Zusammenführen bei grünen Prüfungen. PR #6 (Rückfragen sichtbar) zusammengeführt. |
 | – (Konzept) | 2026-10-22 | Claude, **Neue Anweisung** Gerhard 22:38 | **Nur für Gerhard selbst:** Verkauf/Mandanten/Lizenz werden nicht gebaut, Konzept „Codeschmiede als Produkt“ nur als Idee für später. |
 | – (Konzept) | 2026-10-22 | Claude, **Neue Anweisungen** Gerhard 22:26 / 22:31 | **Codeschmiede als Produkt** (Käufer betreibt alles selbst, Einrichtungs-Assistent mit Prüfung + Ampel, Claude per Abo oder API-Schlüssel, Windows + Mac) und **Features aus dem Gespräch & Bezüge** (Anlegen nach Ja/Nein, `@Liga` als Referenz, Nachziehen per Rückfrage, nur im selben Projekt). Entwürfe 0.9 (mit „Marke“, Logo C) und Regelwerk veröffentlicht. Noch nicht gebaut. |
