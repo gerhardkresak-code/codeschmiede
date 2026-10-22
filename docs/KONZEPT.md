@@ -19,6 +19,7 @@ seit 13:16 eigenes Programm für alle Projekte. Entwurf: `docs/entwurf-0.4.html`
 | 13:18 | Nutzungslimits immer sichtbar und live; Modellwahl nach Aufwand und Komplexität |
 | 13:19 | Eigene Datenbank in Frankfurt – **vorerst** im Supabase-Testprojekt von Trainer to go (kostenloser Platz belegt); Umzug, sobald ein Platz frei ist |
 | 13:5x | Platz frei geworden: eigenes Supabase-Projekt `codeschmiede` in Frankfurt (eu-central-1) |
+| 14:50 | Projekt war seit dem Anlegen defekt („account does not have the necessary privileges“) → von Gerhard gelöscht und neu angelegt: `mvzlbpijdvsjnemubofy`, Region EU (eu-west-1, Irland – im Gratis-Tarif keine Stadtwahl). Datenbank 0001–0004 eingespielt (17 Tabellen, alle mit RLS, 127 Funktionen von Trainer to go) |
 | 14:22 | **Werkstatt über das offizielle Claude Code mit dem eigenen Abo-Login** (kein API-Schlüssel); „Nutzungslimits“ = **Abo-Limits** (5-Stunden-Fenster und Woche), immer sichtbar; Werkstatt richtet sich danach. Nur interne Nutzung |
 
 ## Aufbau

@@ -22,7 +22,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Oberfläche bauen
         env:
-          VITE_SUPABASE_URL: https://xbopedkuxiyaiiezityx.supabase.co
+          VITE_SUPABASE_URL: https://mvzlbpijdvsjnemubofy.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: pruefung
         run: npm run build
   dienst:

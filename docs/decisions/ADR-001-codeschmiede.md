@@ -3,7 +3,7 @@ Status: AKZEPTIERT (geändert 14:22) · Datum: 2026-10-22 · Entschieden von: Ge
 
 ## Entscheidung
 Ein Programm „Codeschmiede“ (Tauri, Windows + Mac) mit Projektwechsel für alle Apps; eigenes Repository; eigene Datenbank (Supabase,
-Frankfurt). Die Werkstatt startet das **offizielle Claude Code**, das jede Person auf ihrem PC mit ihrem **eigenen Claude-Abo** angemeldet hat
+EU – Irland, seit 14:50; Frankfurt im Gratis-Tarif nicht wählbar). Die Werkstatt startet das **offizielle Claude Code**, das jede Person auf ihrem PC mit ihrem **eigenen Claude-Abo** angemeldet hat
 (14:22, ersetzt „API-Schlüssel“ von 13:14). Die **Abo-Nutzungslimits** (5-Stunden-Fenster, Woche) sind immer sichtbar; die Werkstatt
 wählt das Modell nach Aufwand und geht bei knappem Abo eine Stufe kleiner bzw. pausiert.
 

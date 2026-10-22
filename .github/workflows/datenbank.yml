@@ -1,6 +1,6 @@
 name: Datenbank einspielen
 
-# Spielt eine SQL-Datei aus supabase/migrations/ oder supabase/admin/ in die Codeschmiede-Datenbank (Supabase, Frankfurt) ein.
+# Spielt eine SQL-Datei aus supabase/migrations/ oder supabase/admin/ in die Codeschmiede-Datenbank (Supabase, EU – Irland) ein.
 # Start: von Hand („Run workflow“, sobald der Ablauf in main ist) oder durch eine Änderung an supabase/einspielen.txt
 # auf einem Zweig (eine Datei je Zeile, in Reihenfolge) – Anweisung Gerhard 2026-10-22 („richte alles ein“).
 on:
@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 env:
-  SUPABASE_PROJECT_REF: xbopedkuxiyaiiezityx   # codeschmiede (Frankfurt) – fest eingetragen
+  SUPABASE_PROJECT_REF: mvzlbpijdvsjnemubofy   # codeschmiede (EU, eu-west-1) – fest eingetragen
 
 jobs:
   einspielen:
