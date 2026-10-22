@@ -1,0 +1,290 @@
+<title>Codeschmiede Feature-Arbeitsplatz</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Layout: App-Rahmen wie die Codeschmiede (dunkle Seitenleiste, helle Arbeitsfläche); Arbeitsplatz = Chat links | Vorschau rechts */
+:root{
+  --bg:#f4f7f5; --fl:#ffffff; --fg:#122019; --mut:#5d6f66; --rand:#dbe4df;
+  --gruen:#047857; --gruen-h:#ecfdf5; --leiste:#0f2a22; --leiste-fg:#d1fae5;
+  --warn:#b45309; --warn-h:#fffbeb; --rot:#b91c1c; --rot-h:#fef2f2; --blau:#1d4ed8; --blau-h:#eff6ff;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif; --text:"Barlow",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0b1411; --fl:#111d18; --fg:#e3efe8; --mut:#93a89d; --rand:#22332c; --gruen:#34d399; --gruen-h:#0f2d22;
+  --warn:#fbbf24; --warn-h:#2a2110; --rot:#f87171; --rot-h:#2c1414; --blau:#93c5fd; --blau-h:#13203a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0b1411; --fl:#111d18; --fg:#e3efe8; --mut:#93a89d; --rand:#22332c; --gruen:#34d399; --gruen-h:#0f2d22;
+  --warn:#fbbf24; --warn-h:#2a2110; --rot:#f87171; --rot-h:#2c1414; --blau:#93c5fd; --blau-h:#13203a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--text);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px}
+h1,h2,h3{font-family:var(--display);letter-spacing:.01em;text-wrap:balance;margin:0}
+.kopf{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;max-width:1400px;margin:0 auto 12px}
+.kopf h1{font-size:28px}.kopf p{margin:0;color:var(--mut);font-size:14px;max-width:70ch}
+.app{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:200px minmax(0,1fr);border:1px solid var(--rand);border-radius:14px;overflow:hidden;background:var(--fl);min-height:640px}
+.leiste{background:var(--leiste);color:var(--leiste-fg);padding:14px 10px;display:flex;flex-direction:column;gap:4px;font-size:14px}
+.leiste b{font-family:var(--display);font-size:20px;color:#fff;padding:0 6px 10px}
+.leiste span{padding:6px 8px;border-radius:8px;opacity:.85}.leiste span.akt{background:rgba(255,255,255,.1);opacity:1}
+.haupt{min-width:0;display:flex;flex-direction:column}
+.zeile{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--rand);flex-wrap:wrap}
+.krumen{font-size:14px;color:var(--mut)}.krumen strong{color:var(--fg)}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;border:1px solid transparent}
+.p-live{background:var(--gruen-h);color:var(--gruen)} .p-arbeit{background:var(--warn-h);color:var(--warn);border-color:var(--warn)}
+.p-claude{background:var(--blau-h);color:var(--blau)} .p-gruppe{background:var(--gruen-h);color:var(--gruen)}
+.punkt{width:8px;height:8px;border-radius:50%;background:currentColor;animation:puls 1.4s infinite}
+@keyframes puls{50%{opacity:.3}}@media (prefers-reduced-motion:reduce){.punkt{animation:none}}
+button{font:inherit;cursor:pointer}
+.knopf{border:1px solid var(--rand);background:var(--fl);color:var(--fg);border-radius:10px;padding:6px 12px;font-size:14px;font-weight:600}
+.knopf.voll{background:var(--gruen);border-color:var(--gruen);color:#fff}
+:root:not([data-theme="light"]) .knopf.voll{color:#05271b}
+.knopf:focus-visible,.feat:focus-visible{outline:3px solid var(--gruen);outline-offset:2px}
+.knopf.an{background:var(--gruen-h);border-color:var(--gruen);color:var(--gruen)}
+/* Zentrale */
+.zentrale{display:grid;grid-template-columns:minmax(0,1fr) 300px;flex:1;min-height:0}
+.raster{padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;align-content:start}
+.feat{border:1px solid var(--rand);border-radius:12px;padding:10px 12px;background:var(--fl);text-align:left;color:var(--fg);display:flex;flex-direction:column;gap:6px;user-select:none}
+.feat:hover{border-color:var(--gruen)}.feat.gew{border-color:var(--gruen);box-shadow:0 0 0 2px var(--gruen-h)}
+.feat .nr{font:12px var(--mono);color:var(--mut)}.feat .nm{font-weight:600;line-height:1.3}
+.info{border-left:1px solid var(--rand);padding:16px;display:flex;flex-direction:column;gap:12px;font-size:14px;min-width:0}
+.info dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0}.info dt{color:var(--mut)}.info dd{margin:0}
+.hinweis{font-size:13px;color:var(--mut);background:var(--bg);border-radius:10px;padding:10px}
+/* Arbeitsplatz */
+.platz{display:grid;grid-template-columns:minmax(300px,var(--links,38%)) 6px minmax(0,1fr);flex:1;min-height:0}
+.chat{display:flex;flex-direction:column;min-width:0;min-height:0}
+.verlauf{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:92%;border-radius:12px;padding:8px 12px;font-size:14px;background:var(--bg)}
+.msg.ich{align-self:flex-end;background:var(--gruen-h)}
+.msg .meta{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--mut);margin-bottom:4px;flex-wrap:wrap}
+.msg.baustein{border:1px dashed var(--gruen)}
+.code{font:12px var(--mono);background:var(--fl);border:1px solid var(--rand);border-radius:6px;padding:2px 6px}
+.eingabe{display:flex;gap:8px;padding:10px;border-top:1px solid var(--rand)}
+.eingabe textarea{flex:1;min-width:0;resize:none;border:1px solid var(--rand);border-radius:10px;padding:8px 10px;font:inherit;background:var(--bg);color:var(--fg)}
+.trenner{background:var(--rand);cursor:col-resize}
+.vorschau{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg)}
+.adr{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--rand);flex-wrap:wrap;background:var(--fl)}
+.adr .url{flex:1;min-width:160px;font:12px var(--mono);color:var(--mut);background:var(--bg);border-radius:8px;padding:6px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.buehne{flex:1;display:flex;justify-content:center;align-items:flex-start;padding:16px;overflow:auto}
+.geraet{background:#fff;color:#0f172a;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.12);width:100%;max-width:var(--breite,900px);overflow:hidden;transition:max-width .25s}
+.ttg-kopf{background:#047857;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-family:var(--display);font-size:20px}
+.ttg{padding:16px;display:flex;flex-direction:column;gap:12px}
+.ttg h3{font-size:22px;color:#0f172a}
+.pakete{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.paket{border:1px solid #d1d5db;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.paket .preis{font-family:var(--display);font-size:28px;color:#047857}
+.paket ul{margin:0;padding-left:18px;font-size:13px;color:#334155}
+.ttg table{width:100%;border-collapse:collapse;font-size:13px}.ttg td,.ttg th{border-bottom:1px solid #e5e7eb;padding:6px;text-align:left}
+.ttg td.z{text-align:right;font-variant-numeric:tabular-nums}
+.zeigen [data-baustein]:hover{outline:2px solid #f97316;outline-offset:2px;cursor:crosshair}
+.markiert{outline:3px solid #f97316!important;outline-offset:2px}
+.zettel{position:fixed;z-index:20;background:var(--fl);border:1px solid var(--rand);border-radius:12px;padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.2);width:min(320px,calc(100vw - 32px));display:flex;flex-direction:column;gap:8px;font-size:14px}
+.zettel textarea{border:1px solid var(--rand);border-radius:8px;padding:6px 8px;font:inherit;background:var(--bg);color:var(--fg);min-height:60px}
+.neu-stand{position:absolute;right:16px;top:58px;z-index:5}
+/* Weg eines Auftrags: Stationsleiste + Übersicht + Schrittanzeige im Chat */
+.stationen{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--rand);background:var(--fl)}
+.station{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--rand);border-radius:999px;padding:4px 6px 4px 12px;background:var(--fl);color:var(--fg);font-size:13px;font-weight:600}
+.station .zahl{min-width:24px;text-align:center;border-radius:999px;padding:1px 7px;background:var(--bg);font-variant-numeric:tabular-nums}
+.station.hat .zahl{background:var(--warn);color:#fff}.station.akt{border-color:var(--gruen);background:var(--gruen-h)}
+.station:hover{border-color:var(--gruen)}
+.uebersicht{padding:16px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+.uebersicht .kopfz{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.gruppe-f{border:1px solid var(--rand);border-radius:12px;overflow:hidden}
+.gruppe-f h3{font-size:17px;padding:8px 12px;background:var(--bg);display:flex;gap:8px;align-items:baseline}
+.auftr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:10px 12px;border-top:1px solid var(--rand);align-items:center}
+.auftr .t{font-weight:600}.auftr .d{font-size:13px;color:var(--mut)}
+.leer{color:var(--mut);font-size:14px;padding:12px;border:1px dashed var(--rand);border-radius:12px}
+.schritte{display:flex;gap:4px;flex-wrap:wrap;margin:6px 0 2px}
+.schritt{font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;border:1px solid var(--rand);color:var(--mut)}
+.schritt.fertig{background:var(--gruen-h);color:var(--gruen);border-color:transparent}
+.schritt.jetzt{background:var(--gruen);color:#fff;border-color:var(--gruen)}
+:root:not([data-theme="light"]) .schritt.jetzt{color:#05271b}
+.schritt.rot{background:var(--rot-h);color:var(--rot);border-color:var(--rot)}
+.auftragkarte{border:1px solid var(--rand);border-radius:12px;padding:8px 12px;background:var(--fl);font-size:13px}
+.zu{opacity:.7}.zu .meta::after{content:"abgeschlossen";margin-left:auto;font-weight:600;color:var(--gruen)}
+.erkl{max-width:1400px;margin:14px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.erkl div{background:var(--fl);border:1px solid var(--rand);border-radius:12px;padding:12px 14px;font-size:14px}
+.erkl h3{font-size:18px;margin-bottom:4px}
+@media (max-width:900px){
+  .app{grid-template-columns:1fr}.leiste{display:none}
+  .zentrale{grid-template-columns:1fr}.info{border-left:0;border-top:1px solid var(--rand)}
+  .platz{grid-template-columns:1fr}.trenner{display:none}.chat{max-height:420px;border-bottom:1px solid var(--rand)}
+}
+</style>
+
+<div class="kopf">
+  <h1>Entwurf 0.7 · Feature-Arbeitsplatz &amp; Stationen</h1>
+  <p>Klickbarer Entwurf, Stand 22.10.2026 20:45. Oben die Stationen anklicken (z. B. „Zusammenführen“). Einfach klicken zeigt die Kurzinfo, doppelt klicken öffnet den Arbeitsplatz mit Chat und Live-Vorschau. Beispieldaten aus Trainer to go.</p>
+</div>
+
+<div class="app">
+  <nav class="leiste" aria-label="Navigation">
+    <b>Codeschmiede</b>
+    <span class="akt">Auftrags-Zentrale</span><span>Live-Vorschau</span><span>Zweige &amp; Versionen</span><span>Prüfstand</span><span>Wissensdatenbank</span><span>Benutzer &amp; Rechte</span><span>Verbrauch &amp; Limits</span>
+  </nav>
+
+  <section class="haupt" id="ansicht-zentrale">
+    <div class="stationen" id="stationen" role="toolbar" aria-label="Weg eines Auftrags"></div>
+    <div class="uebersicht" id="uebersicht" hidden></div>
+    <div class="zeile" id="zeile-z"><span class="krumen">Trainer to go › Plattform › <strong>ERP &amp; Vertrieb</strong></span><span class="pill p-live">8 Funktionen</span></div>
+    <div class="zentrale" id="zentrale-raster">
+      <div class="raster" id="raster"></div>
+      <aside class="info" id="info" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section class="haupt" id="ansicht-platz" hidden>
+    <div class="zeile">
+      <button class="knopf" id="zurueck" type="button">← Zentrale</button>
+      <span class="krumen">ERP &amp; Vertrieb › <strong id="pl-name"></strong></span>
+      <span class="pill p-arbeit"><span class="punkt"></span>Hier wird gerade gearbeitet · Werkstatt SFGK</span>
+      <span style="flex:1"></span>
+      <button class="knopf" type="button" id="fenster">Vorschau im eigenen Fenster</button>
+    </div>
+    <div class="platz" id="platz">
+      <div class="chat">
+        <div class="verlauf" id="verlauf"></div>
+        <form class="eingabe" id="form"><textarea id="txt" rows="2" placeholder="Auftrag oder Antwort zu diesem Feature …"></textarea><button class="knopf voll" type="submit">Senden</button></form>
+      </div>
+      <div class="trenner" id="trenner" title="Ziehen, um die Breite zu ändern"></div>
+      <div class="vorschau" style="position:relative">
+        <div class="adr">
+          <span class="url" id="url">https://cs-12-module-preise.trainer-to-go.pages.dev/admin/erp/pakete</span>
+          <button class="knopf" type="button" data-breite="390">Handy</button>
+          <button class="knopf" type="button" data-breite="768">Tablet</button>
+          <button class="knopf an" type="button" data-breite="900">Desktop</button>
+          <button class="knopf" type="button" id="zeigen">Zeigen &amp; kommentieren</button>
+        </div>
+        <button class="knopf voll neu-stand" type="button" id="neustand" hidden>Neuer Stand da · neu laden</button>
+        <div class="buehne"><div class="geraet" id="geraet">
+          <div class="ttg-kopf" data-baustein="AppKopf"><span>Trainer to go · ERP</span><span style="font-size:14px;font-family:var(--text)">Testseite Auftrag #12</span></div>
+          <div class="ttg">
+            <h3 data-baustein="PaketeSeite › Überschrift">Pakete &amp; Preise</h3>
+            <div class="pakete">
+              <div class="paket" data-baustein="PaketKarte (Basis)"><b>Basis</b><span class="preis">19 €</span><ul><li>Kader &amp; Spieler</li><li>Trainingsplanung</li></ul></div>
+              <div class="paket" data-baustein="PaketKarte (Verein)"><b>Verein</b><span class="preis" id="vereinpreis">49 €</span><ul><li>alles aus Basis</li><li>Kalender &amp; Spiele</li><li>Mitgliedsbeiträge</li></ul></div>
+              <div class="paket" data-baustein="PaketKarte (Profi)"><b>Profi</b><span class="preis">129 €</span><ul><li>alles aus Verein</li><li>Scouting &amp; Leistungstests</li><li>ERP &amp; Website</li></ul></div>
+            </div>
+            <table data-baustein="ModulPreisTabelle">
+              <thead><tr><th>Modul</th><th>Paket</th><th class="z">Preis / Monat</th></tr></thead>
+              <tbody><tr><td>Mitgliedsbeiträge</td><td>Verein</td><td class="z">12,00 €</td></tr><tr><td>Kalender &amp; Spiele</td><td>Verein</td><td class="z">18,00 €</td></tr><tr><td>Scouting</td><td>Profi</td><td class="z">35,00 €</td></tr></tbody>
+            </table>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="erkl">
+  <div><h3>Einfach &amp; doppelt klicken</h3>Ein Klick zeigt rechts Stand, letzten Auftrag und wer gerade arbeitet. Ein Doppelklick (am Handy: „Öffnen“ in der Kurzinfo) öffnet den Arbeitsplatz.</div>
+  <div><h3>Live-Vorschau</h3>Jeder Auftrag hat eine eigene Testseite bei Cloudflare. Nach jeder Änderung baut Cloudflare neu (1–3 Min.). Dann erscheint „Neuer Stand da“, und die Vorschau lädt neu. Vor dem ersten Auftrag zeigt sie die aktuelle App.</div>
+  <div><h3>Zeigen &amp; kommentieren</h3>Einschalten, auf ein Element in der Vorschau klicken, Kommentar schreiben. Die Nachricht nennt den Baustein (z. B. „PaketKarte (Verein)“) und landet im Chat dieses Features.</div>
+  <div><h3>Stationen oben</h3>Die Zahlen zeigen, wie viele Aufträge an jeder Station warten. Ein Klick öffnet die Übersicht nach Feature: alle auf einmal oder einzeln. Ablauf: Freigeben → Sicherheitsprüfung (automatisch) → Zusammenführen in eine Testfassung → ganzes Feature wird geprüft (automatisch) → erst dann live und ins Wissen. Rot geht als Nacharbeit zurück an die Werkstatt, live geht dann nichts.</div>
+  <div><h3>Schritte im Chat</h3>Jeder Auftrag zeigt im Chat seinen Weg; die aktuelle Station ist grün hervorgehoben und wechselt live. Erledigte Aufträge und beantwortete Fragen werden als „abgeschlossen“ markiert.</div>
+  <div><h3>Alles landet beim Feature</h3>Nachrichten aus dem Gruppen-Chat und aus dem Claude-Chat erscheinen hier mit Herkunft (Abzeichen „Gruppe“ bzw. „Claude-Chat“). Was Claude dort baut, steht ebenfalls hier.</div>
+</div>
+
+<script>
+const FEATURES=[
+ {nr:"F-150",nm:"Abo-Pakete",st:"live",info:"Zuletzt geändert 19.10."},
+ {nr:"F-151",nm:"Rechnungen & Mahnwesen",st:"live",info:"Kein offener Auftrag"},
+ {nr:"F-152",nm:"Kundenverwaltung (Vereine)",st:"live",info:"Kein offener Auftrag"},
+ {nr:"F-154",nm:"Module & Preise je Feature",st:"arbeit",info:"Auftrag #12 läuft · Werkstatt SFGK · Modell groß"},
+ {nr:"F-155",nm:"Website-Preisliste",st:"live",info:"Hängt an F-154 (Preise in Echtzeit)"},
+ {nr:"F-156",nm:"Gutscheine & Rabatte",st:"live",info:"Kein offener Auftrag"},
+ {nr:"F-157",nm:"Testphase 30 Tage",st:"live",info:"Kein offener Auftrag"},
+ {nr:"F-158",nm:"Umsatz-Übersicht",st:"live",info:"Kein offener Auftrag"}];
+const VERLAUF=[
+ {karte:true},
+ {wer:"Gerhard",ich:true,kanal:"Claude-Chat",z:"16:38",t:"Ich möchte alle Features als eigene Module haben, jedem einen Preis geben und daraus den Paketpreis berechnen. Der soll in Echtzeit auf die Webseite."},
+ {wer:"Werkstatt",kanal:"",z:"16:39",zu:true,t:"Rückfrage: Sollen Preise netto oder brutto gepflegt werden, und gilt der Paketpreis als Summe der Module oder mit Paketrabatt?"},
+ {wer:"Gerhard",ich:true,kanal:"Gruppe",z:"16:41",t:"Netto pflegen, brutto anzeigen. Paket = Summe minus 15 %."},
+ {wer:"Werkstatt",kanal:"",z:"16:44",t:"Erledigt auf Zweig feature/cs-12-module-preise: Tabelle „Module“, Preisfeld je Feature, Paketpreis wird live berechnet. Testseite wird gebaut …"}];
+const $=s=>document.querySelector(s);
+const STATIONEN=[["auftrag","Auftrag"],["arbeit","In Arbeit"],["freigabe","Freigabe"],["sicherheit","Sicherheitsprüfung"],["zusammen","Zusammenführen"],["feature","Feature-Prüfung"],["wissen","Live & Wissen"]];
+const AUFTRAEGE=[
+ {nr:3,f:"F-154",fn:"Module & Preise je Feature",t:"Testanfrage",st:"freigabe",pr:15,wer:"Gerhard"},
+ {nr:4,f:"F-005",fn:"Mehrere Vereine mit einem Konto",t:"Mehrere Vereine in die Einstellungen umziehen",st:"freigabe",pr:16,wer:"Gerhard"},
+ {nr:7,f:"F-150",fn:"Abo-Pakete",t:"Testphase im Paket anzeigen",st:"freigabe",pr:17,wer:"Werkstatt"},
+ {nr:12,f:"F-154",fn:"Module & Preise je Feature",t:"Module mit Preis, Paketpreis live",st:"arbeit",pr:null,wer:"Werkstatt SFGK"}];
+let offen=null;
+function zeichneStationen(){
+  $("#stationen").innerHTML=STATIONEN.map(([k,n])=>{const z=AUFTRAEGE.filter(a=>a.st===k).length;
+    return `<button type="button" class="station ${z&&["freigabe","zusammen"].includes(k)?"hat":""} ${offen===k?"akt":""}" data-st="${k}">${n}<span class="zahl">${z}</span></button>`;}).join("");
+  document.querySelectorAll(".station").forEach(b=>b.addEventListener("click",()=>{offen=offen===b.dataset.st?null:b.dataset.st;zeigeUebersicht();}));
+}
+// Freigeben → Sicherheitsprüfung läuft automatisch → Zusammenführen (Klick) → Feature-Prüfung automatisch → live
+const AKTION={freigabe:["Freigeben","Alle freigeben","sicherheit"],sicherheit:["","",""],zusammen:["Zusammenführen","Alle zusammenführen","feature"],feature:["","",""],arbeit:["","",""],auftrag:["","",""],wissen:["","",""]};
+const AUTO={sicherheit:"zusammen",feature:"wissen"};
+function zeigeUebersicht(){
+  zeichneStationen();
+  const u=$("#uebersicht");u.hidden=!offen;$("#zeile-z").hidden=!!offen;$("#zentrale-raster").hidden=!!offen;
+  if(!offen)return;
+  const name=STATIONEN.find(s=>s[0]===offen)[1];const liste=AUFTRAEGE.filter(a=>a.st===offen);const [einz,alle,nach]=AKTION[offen];
+  const proF={};liste.forEach(a=>(proF[a.f]=proF[a.f]||{fn:a.fn,l:[]}).l.push(a));
+  u.innerHTML=`<div class="kopfz"><h2 style="font-size:24px">${name}</h2><span class="pill p-arbeit">${liste.length} Aufträge</span><span style="flex:1"></span>${alle&&liste.length>1?`<button class="knopf voll" type="button" id="alle">${alle}</button>`:""}<button class="knopf" type="button" id="schliessen">Schließen</button></div>`+
+   (liste.length?Object.entries(proF).map(([f,g])=>`<div class="gruppe-f"><h3><span class="code">${f}</span>${g.fn}</h3>${g.l.map(a=>`<div class="auftr"><div><div class="t">#${a.nr} ${a.t}</div><div class="d">${a.pr?`Pull Request #${a.pr} · `:""}${offen==="zusammen"?"Sicherheitsprüfung grün · wartet auf Zusammenführen":offen==="freigabe"?"Bauen &amp; Tests am PC: grün · wartet auf deine Freigabe":offen==="sicherheit"?"Unabhängige Prüfung läuft …":offen==="feature"?"Ganzes Feature wird in der Testfassung geprüft …":"Werkstatt arbeitet"}</div></div>${einz?`<button class="knopf voll" type="button" data-nr="${a.nr}">${einz}</button>`:""}</div>`).join("")}</div>`).join(""):`<div class="leer">An dieser Station wartet gerade nichts.</div>`);
+  $("#schliessen").addEventListener("click",()=>{offen=null;zeigeUebersicht();});
+  const weiter=nrs=>{nrs.forEach(n=>{const a=AUFTRAEGE.find(x=>x.nr===n);a.st=nach;if(AUTO[nach])setTimeout(()=>{a.st=AUTO[nach];zeichneStationen();if(offen)zeigeUebersicht();},3000);});zeigeUebersicht();};
+  u.querySelectorAll("[data-nr]").forEach(b=>b.addEventListener("click",()=>nach&&weiter([+b.dataset.nr])));
+  $("#alle")?.addEventListener("click",()=>weiter(liste.map(a=>a.nr)));
+}
+function schritteHtml(st,rot){const i=STATIONEN.findIndex(s=>s[0]===st);return `<div class="schritte">${STATIONEN.map(([k,n],j)=>`<span class="schritt ${j<i?"fertig":j===i?(rot?"rot":"jetzt"):""}">${n}</span>`).join("")}</div>`;}
+let gew=null;
+function zeichneRaster(){
+  $("#raster").innerHTML="";
+  FEATURES.forEach((f,i)=>{
+    const b=document.createElement("button");b.type="button";b.className="feat"+(gew===i?" gew":"");
+    b.innerHTML=`<span class="nr">${f.nr}</span><span class="nm">${f.nm}</span>${f.st==="arbeit"?'<span class="pill p-arbeit"><span class="punkt"></span>in Arbeit</span>':'<span class="pill p-live">live</span>'}`;
+    b.addEventListener("click",()=>{gew=i;zeichneRaster();zeigeInfo();});
+    b.addEventListener("dblclick",()=>oeffne(i));
+    b.addEventListener("keydown",e=>{if(e.key==="Enter"&&gew===i){e.preventDefault();oeffne(i);}});
+    $("#raster").appendChild(b);
+  });
+}
+function zeigeInfo(){
+  const f=FEATURES[gew];const el=$("#info");
+  if(!f){el.innerHTML='<h3>Kurzinfo</h3><p class="hinweis">Ein Feature einmal anklicken zeigt hier seinen Stand. Doppelt klicken öffnet den Arbeitsplatz mit Chat und Live-Vorschau.</p>';return;}
+  el.innerHTML=`<h3>${f.nm}</h3><dl><dt>Nummer</dt><dd><span class="code">${f.nr}</span></dd><dt>Stand</dt><dd>${f.st==="arbeit"?"in Arbeit":"live"}</dd><dt>Zuletzt</dt><dd>${f.info}</dd><dt>Nachrichten</dt><dd>${f.st==="arbeit"?"4 (2 aus Claude-Chat/Gruppe)":"–"}</dd></dl><button class="knopf voll" type="button" id="oeffnen">Öffnen</button><p class="hinweis">Tipp: Doppelklick auf die Karte öffnet direkt.</p>`;
+  $("#oeffnen").addEventListener("click",()=>oeffne(gew));
+}
+function msgHtml(m){
+  if(m.karte)return `<div class="auftragkarte"><b>Auftrag #12 · Module mit Preis, Paketpreis live</b>${schritteHtml("arbeit")}<span style="color:var(--mut)">Wechselt live, sobald du freigibst oder zusammenführst.</span></div>`;
+  const k=m.kanal?`<span class="pill ${m.kanal==="Claude-Chat"?"p-claude":"p-gruppe"}">aus ${m.kanal}</span>`:"";
+  return `<div class="msg ${m.ich?"ich":""} ${m.bau?"baustein":""} ${m.zu?"zu":""}"><div class="meta"><b>${m.wer}</b>${k}<span>${m.z}</span></div>${m.bau?`<div style="margin-bottom:4px">Baustein <span class="code">${m.bau}</span></div>`:""}${m.t}</div>`;
+}
+function oeffne(i){
+  gew=i;const f=FEATURES[i];
+  $("#ansicht-zentrale").hidden=true;$("#ansicht-platz").hidden=false;$("#pl-name").textContent=`${f.nr} · ${f.nm}`;
+  const v=f.st==="arbeit"?VERLAUF:[{wer:"Codeschmiede",z:"",t:"Noch kein Auftrag zu diesem Feature. Schreib unten, was sich ändern soll; die Vorschau zeigt bis dahin die aktuelle App."}];
+  $("#verlauf").innerHTML=v.map(msgHtml).join("");$("#verlauf").scrollTop=1e6;
+  if(f.st==="arbeit")setTimeout(()=>{$("#neustand").hidden=false;},2500);
+}
+$("#zurueck").addEventListener("click",()=>{$("#ansicht-platz").hidden=true;$("#ansicht-zentrale").hidden=false;zeichneRaster();zeigeInfo();});
+$("#form").addEventListener("submit",e=>{e.preventDefault();const t=$("#txt").value.trim();if(!t)return;
+  $("#verlauf").insertAdjacentHTML("beforeend",msgHtml({wer:"Gerhard",ich:true,z:"jetzt",t}));$("#txt").value="";$("#verlauf").scrollTop=1e6;});
+document.querySelectorAll("[data-breite]").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("[data-breite]").forEach(x=>x.classList.remove("an"));b.classList.add("an");$("#geraet").style.setProperty("--breite",b.dataset.breite+"px");}));
+$("#neustand").addEventListener("click",()=>{$("#neustand").hidden=true;$("#vereinpreis").textContent="25,50 €";
+  $("#verlauf").insertAdjacentHTML("beforeend",msgHtml({wer:"Codeschmiede",z:"jetzt",t:"Vorschau neu geladen: Stand von Commit 3f2a91c."}));$("#verlauf").scrollTop=1e6;});
+$("#fenster").addEventListener("click",()=>{$("#fenster").textContent="Im Programm öffnet sich ein zweites Fenster";});
+let zeigen=false;
+$("#zeigen").addEventListener("click",()=>{zeigen=!zeigen;$("#zeigen").classList.toggle("an",zeigen);$("#geraet").classList.toggle("zeigen",zeigen);});
+$("#geraet").addEventListener("click",e=>{
+  if(!zeigen)return;const el=e.target.closest("[data-baustein]");if(!el)return;e.preventDefault();
+  document.querySelectorAll(".markiert").forEach(x=>x.classList.remove("markiert"));el.classList.add("markiert");
+  document.querySelectorAll(".zettel").forEach(x=>x.remove());
+  const r=el.getBoundingClientRect();const z=document.createElement("form");z.className="zettel";
+  z.style.left=Math.max(16,Math.min(r.left,innerWidth-336))+"px";z.style.top=Math.min(r.bottom+8,innerHeight-190)+"px";
+  z.innerHTML=`<b>Baustein: <span class="code">${el.dataset.baustein}</span></b><textarea id="kom" placeholder="Was soll sich hier ändern?"></textarea><div style="display:flex;gap:8px;justify-content:flex-end"><button class="knopf" type="button" id="abbr">Abbrechen</button><button class="knopf voll" type="submit">In den Chat</button></div>`;
+  document.body.appendChild(z);z.querySelector("textarea").focus();
+  z.querySelector("#abbr").addEventListener("click",()=>{z.remove();el.classList.remove("markiert");});
+  z.addEventListener("submit",ev=>{ev.preventDefault();const t=z.querySelector("textarea").value.trim()||"(ohne Text)";
+    $("#verlauf").insertAdjacentHTML("beforeend",msgHtml({wer:"Gerhard",ich:true,z:"jetzt",bau:el.dataset.baustein,t}));$("#verlauf").scrollTop=1e6;z.remove();el.classList.remove("markiert");});
+});
+// Trennlinie ziehen
+(()=>{const t=$("#trenner"),p=$("#platz");let zieh=false;
+ t.addEventListener("pointerdown",e=>{zieh=true;t.setPointerCapture(e.pointerId);});
+ t.addEventListener("pointermove",e=>{if(!zieh)return;const r=p.getBoundingClientRect();const pr=Math.min(70,Math.max(25,(e.clientX-r.left)/r.width*100));p.style.setProperty("--links",pr+"%");});
+ t.addEventListener("pointerup",()=>zieh=false);})();
+zeichneRaster();zeigeInfo();zeichneStationen();
+</script>

@@ -26,7 +26,7 @@ seit 13:16 eigenes Programm für alle Projekte. Entwurf: `docs/entwurf-0.4.html`
 | Teil | Wo | Aktualisierung |
 |---|---|---|
 | Oberfläche | `web/`, gehostet (Cloudflare Pages), im Programmfenster live geladen | sofort nach Veröffentlichung |
-| Programm-Hülle | `desktop/src-tauri` (Tauri 2), Windows + Mac | Selbst-Update beim Start |
+| Programm-Hülle | `desktop/src-tauri` (Tauri 2), Windows + Mac | automatisches Update (signiert) über `codeschmiede-updates.pages.dev`: im Hintergrund geladen, beim nächsten Start aktiv |
 | Werkstatt-Dienst | `desktop/dienst` (Node; startet das offizielle Claude Code mit dem Abo-Login der Person) | mit dem Programm |
 | Daten | Supabase, Tabellen `ws_*` mit RLS und Live-Abgleich | live |
 | Code der Projekte | GitHub-Repository je Projekt | Pull Request je Auftrag |
@@ -46,9 +46,18 @@ stellt beim ersten Auftrag eines neuen Projekts zuerst ihre Fragen (Pflicht-Star
 | Leser (je Projekt) | nein | nein | nein | nein | nein |
 Neue Projekte, Gruppen, Mitglieder, Abo-Schwellen: nur Admin.
 
-## Weg eines Auftrags
-Auftrag (Zentrale) → In Arbeit (Werkstatt-PC, eigener Zweig) → Freigabe (PR mit grüner Prüfung; Admin oder Recht) → Zusammenführen →
-Sicherheitsprüfung → Wissen & veröffentlicht (die letzten drei auf dem Admin-PC).
+## Weg eines Auftrags (seit 0.3.0, Entwurf 0.7 freigegeben 2026-10-22 20:41)
+Auftrag → In Arbeit (Werkstatt-PC, eigener Zweig, danach Bauen & Tests auf dem PC) → **Freigabe** (Klick; Admin oder Recht) →
+**Sicherheitsprüfung** (automatisch auf dem Admin-PC: Bauen & Tests + unabhängige Claude-Prüfung der Änderung) → **Zusammenführen** (Klick) →
+**Feature-Prüfung** (automatisch: Testfassung = Zweig + neuester main, Bauen & Tests, unabhängige Prüfung des ganzen Features) →
+bei Grün Pull Request in main = **live** → **Live & Wissen**. Rot an einer Prüfung → **Nacharbeit** (Werkstatt behebt, dann wieder Freigabe);
+live geht dabei nichts. Reine Fragen → beantwortet, „erledigt“. Stationen oben in der Zentrale anklickbar (Übersicht nach Feature, einzeln oder alle).
+Solange GitHub-Prüfungen nicht laufen (Gratis-Minuten), gelten Bauen & Tests auf dem PC als Prüfung (Entscheidung 20:36).
+
+## Feature-Arbeitsplatz (seit 0.3.0)
+Klick auf ein Feature = Kurzinfo; Doppelklick = Chat links, Live-Vorschau rechts (Trennlinie verschiebbar). Vorschau = Testseite des Zweigs
+(`<zweig>.<vorschau_domain>`), sonst die App; „Neuer Stand da“ über `version.json`; „Zeigen & kommentieren“ über den Vorschau-Helfer der App
+(nur Testseiten). Nachrichten aus Gruppen-Chat und Claude-Chat erscheinen beim Feature mit Herkunft.
 
 ## Werkstatt (Schritt 2)
 - Läuft im Programm, wenn „Werkstatt an“; holt den nächsten wartenden Auftrag aus Gruppen, in denen der Benutzer Auftragsrecht hat.

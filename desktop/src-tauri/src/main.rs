@@ -12,6 +12,77 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
+use tauri_plugin_updater::UpdaterExt;
+
+/// Automatische Updates (Anweisung Gerhard 2026-10-22 16:25): im Hintergrund laden, beim nächsten Start aktiv,
+/// Knopf „Jetzt neu starten“; nie mitten in einem laufenden Auftrag. Quelle: codeschmiede-updates.pages.dev (signiert).
+#[derive(Default)]
+struct UpdateStand {
+    version: Option<String>,
+    bereit: Option<(tauri_plugin_updater::Update, Vec<u8>)>,
+    fehler: Option<String>,
+}
+struct Updates(Arc<Mutex<UpdateStand>>);
+
+#[derive(Serialize)]
+struct UpdateInfo {
+    aktuell: String,
+    neu: Option<String>,
+    bereit: bool,
+    fehler: Option<String>,
+}
+
+async fn update_pruefen(app: tauri::AppHandle, stand: Arc<Mutex<UpdateStand>>) {
+    let ergebnis: Result<(), String> = async {
+        let updater = app.updater().map_err(|e| e.to_string())?;
+        if let Some(update) = updater.check().await.map_err(|e| e.to_string())? {
+            let schon_da = {
+                let s = stand.lock().unwrap();
+                s.version.as_deref() == Some(update.version.as_str()) && s.bereit.is_some()
+            };
+            if schon_da {
+                return Ok(());
+            }
+            stand.lock().unwrap().version = Some(update.version.clone());
+            let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+            stand.lock().unwrap().bereit = Some((update, bytes));
+        }
+        Ok(())
+    }
+    .await;
+    stand.lock().unwrap().fehler = ergebnis.err();
+}
+
+#[tauri::command]
+fn ws_update_status(app: tauri::AppHandle, updates: tauri::State<'_, Updates>) -> UpdateInfo {
+    let s = updates.0.lock().unwrap();
+    UpdateInfo {
+        aktuell: app.package_info().version.to_string(),
+        neu: s.version.clone(),
+        bereit: s.bereit.is_some(),
+        fehler: s.fehler.clone(),
+    }
+}
+
+#[tauri::command]
+fn ws_update_neustart(app: tauri::AppHandle, updates: tauri::State<'_, Updates>, state: tauri::State<'_, Zustand>) -> Result<(), String> {
+    {
+        let mut w = state.0.lock().unwrap();
+        if w.auftrag.is_some() {
+            return Err("Gerade läuft ein Auftrag – das Update wird danach bzw. beim nächsten Start eingespielt.".into());
+        }
+        if let Some(e) = w.eingabe.as_mut() {
+            let _ = writeln!(e, "{}", serde_json::json!({ "stop": true }));
+        }
+        if let Some(mut k) = w.kind.take() {
+            std::thread::sleep(std::time::Duration::from_millis(800));
+            let _ = k.kill();
+        }
+    }
+    let (update, bytes) = updates.0.lock().unwrap().bereit.take().ok_or("Kein Update bereit.")?;
+    update.install(bytes).map_err(|e| e.to_string())?;
+    app.restart();
+}
 
 #[derive(Default)]
 struct Werkstatt {
@@ -222,9 +293,16 @@ fn ws_stop(state: tauri::State<'_, Zustand>) -> Result<(), String> {
     Ok(())
 }
 
+async fn tokio_schlaf(sekunden: u64) {
+    let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(std::time::Duration::from_secs(sekunden))).await;
+}
+
 fn main() {
     let zustand = Arc::new(Mutex::new(Werkstatt::default()));
     let beim_beenden = zustand.clone();
+    let updates = Arc::new(Mutex::new(UpdateStand::default()));
+    let updates_setup = updates.clone();
+    let updates_ende = updates.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _a, _c| {
             if let Some(w) = app.get_webview_window("main") {
@@ -235,8 +313,22 @@ fn main() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Zustand(zustand))
-        .invoke_handler(tauri::generate_handler![ws_check, ws_start, ws_token, ws_stop, ws_status, ws_statuszeile])
+        .manage(Updates(updates))
+        .setup(move |app| {
+            let handle = app.handle().clone();
+            let stand = updates_setup.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio_schlaf(15).await;
+                loop {
+                    update_pruefen(handle.clone(), stand.clone()).await;
+                    tokio_schlaf(3600).await;
+                }
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![ws_check, ws_start, ws_token, ws_stop, ws_status, ws_statuszeile, ws_update_status, ws_update_neustart])
         .build(tauri::generate_context!())
         .expect("Codeschmiede konnte nicht starten")
         .run(move |_app, ereignis| {
@@ -248,6 +340,11 @@ fn main() {
                 if let Some(mut k) = w.kind.take() {
                     std::thread::sleep(std::time::Duration::from_millis(800));
                     let _ = k.kill();
+                }
+                drop(w);
+                // fertig geladenes Update beim Beenden einspielen („beim nächsten Start aktiv“)
+                if let Some((update, bytes)) = updates_ende.lock().unwrap().bereit.take() {
+                    let _ = update.install(bytes);
                 }
             }
         });

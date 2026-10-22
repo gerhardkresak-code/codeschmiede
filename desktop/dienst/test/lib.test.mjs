@@ -4,6 +4,7 @@ import { ohneGeheimnisse } from "../lib/geheim.mjs";
 import { waehleModell } from "../lib/modell.mjs";
 import { werteAus, zweigName, passtRegel, fuehrtCodeAus } from "../lib/ergebnis.mjs";
 import { ohneGeheimnisse as og, heikleDatei } from "../lib/geheim.mjs";
+import { pruefErgebnis, cfAlias } from "../lib/pruefung.mjs";
 
 test("Geheimnisse werden entfernt", () => {
   assert.equal(ohneGeheimnisse("key sk-ant-abc123def456ghi789"), "key [entfernt]");
@@ -80,4 +81,20 @@ test("Code ausführende Befehle nie über „immer“; sk- nicht mitten im Wort"
   }
   assert.ok(!fuehrtCodeAus("git push origin feature/cs-1-x") && !fuehrtCodeAus("gh pr view 3"));
   assert.equal(og("task-list-item-abcdefghijklmnopqrstuvwxyz"), "task-list-item-abcdefghijklmnopqrstuvwxyz");
+});
+
+test("Antworten, Feature-Zeile, Prüfergebnisse, Testseiten-Adresse", () => {
+  assert.deepEqual(werteAus("FEATURE: F-005\nANTWORT: Ja, das ist seit gestern live."), { art: "antwort", text: "Ja, das ist seit gestern live.", feature: "F-005" });
+  const r = werteAus("- erledigt\nFEATURE: F-154\nERGEBNIS-PR: #18 feature/cs-7-x");
+  assert.equal(r.art, "pr"); assert.equal(r.feature, "F-154"); assert.equal(r.nummer, 18);
+  assert.equal(werteAus("ANTWORT: x\nERGEBNIS-PR: #2 feature/cs-2-y").art, "pr");
+  assert.deepEqual(pruefErgebnis("Alles sauber.\nPRÜFUNG: GRÜN"), { ergebnis: "gruen", befund: "Alles sauber." });
+  assert.equal(pruefErgebnis("1. Schlüssel im Code\nPRUEFUNG: ROT").ergebnis, "rot");
+  assert.equal(pruefErgebnis("PRÜFUNG: GRÜN\nnachgedacht\nPRÜFUNG: ROT").ergebnis, "rot");
+  assert.equal(pruefErgebnis("Befund\nPRÜFUNG: GRÜN, aber eigentlich nicht").ergebnis, "rot");
+  assert.equal(pruefErgebnis("PRÜFUNG: GRÜN\nNoch ein Satz danach.").ergebnis, "rot");
+  assert.equal(pruefErgebnis("ok\n**PRÜFUNG: GRÜN**\n").ergebnis, "gruen");
+  assert.equal(pruefErgebnis("keine Zeile").ergebnis, "rot");
+  assert.equal(cfAlias("feature/cs-4-das-geho-rt-in-die-einstellung"), "feature-cs-4-das-geho-rt-in");
+  assert.equal(cfAlias("feature/cs-3-testanfrage"), "feature-cs-3-testanfrage");
 });
