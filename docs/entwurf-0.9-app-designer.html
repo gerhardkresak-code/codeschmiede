@@ -149,7 +149,7 @@ select,input[type=text],input[type=number]{border:1px solid var(--rand2);border-
   <div class="editor">
     <div class="leiste" role="toolbar" aria-label="Werkzeugleiste">
       <div class="titel"><small>App-Designer · Trainer to go</small><b id="modustitel">Grunddesign</b></div>
-      <div class="seg" role="group" aria-label="Bereich"><button type="button" aria-pressed="true" data-modus="grund">Grunddesign</button><button type="button" aria-pressed="false" data-modus="bib">Bausteine <small>118</small></button></div>
+      <div class="seg" role="group" aria-label="Bereich"><button type="button" aria-pressed="true" data-modus="grund">Grunddesign</button><button type="button" aria-pressed="false" data-modus="bib">Bausteine <small>118</small></button><button type="button" aria-pressed="false" data-modus="marke">Marke</button></div>
       <select id="entwurf" aria-label="Entwurf"></select>
       <button class="knopf" type="button" id="kopie">Entwurf kopieren</button>
       <span class="trenn"></span>
@@ -201,6 +201,7 @@ select,input[type=text],input[type=number]{border:1px solid var(--rand2);border-
   <div><h3>So arbeitest du</h3><ul><li>Links einen Bereich wählen oder in der Mitte darauf klicken</li><li>Rechts einstellen oder im Chat mit Claude besprechen – Claude macht Vorschläge, die du übernimmst oder ablehnst</li><li>Ziehen im Gerüst (z. B. Navigation nach oben) – immer auch per Auswahlfeld möglich</li><li>Entwürfe kopieren, vergleichen; „Als Auftrag senden“ → Werkstatt baut → echte Testseite → Freigabe → Prüfungen → live</li></ul></div>
   <div><h3>Seiten-Vorlagen</h3>Übersicht, Liste mit Filter, Detail, Formular, Einstellungen. Jedes neue Feature baut auf einer Vorlage, dem Gerüst und den Grundwerten auf – ändert sich das Grunddesign, ändern sich alle Seiten mit. Bestehende Seiten werden einmalig je Bereich umgestellt (eigene Aufträge mit Prüfung).</div>
   <div><h3>Bausteine</h3>Oben auf „Bausteine“ umschalten: Bibliothek aller Bausteine der App (aus dem Code), Varianten × Zustände als Matrix, „verwendet an N Stellen“, Aufräum-Vorschläge für Doppelte, App-E-Mails. Ändern per Regler oder Chat; wirkt nach dem Auftrag überall.</div>
+  <div><h3>Marke · Logo-Designer</h3>Logo per Chat entwerfen lassen (3 Vorschläge), von Hand bearbeiten (Ebenen ziehen, Form, Farbe, Schriftzug) oder beides. Automatische Prüfung in hell/dunkel und als App-Symbol 64/32/16 px; daraus App-Symbol, Favicon, Mail-Kopf und das Logo in der Projektliste der Codeschmiede.</div>
   <div><h3>Abgrenzung</h3>Ein Grunddesign für die ganze App, nicht je Rolle. Vereine stellen im Design-Studio der App nur Vereinsfarbe und Logo ein; die Grundfarben kommen von hier.</div>
 </div>
 
@@ -355,7 +356,8 @@ function zeigeChat(){$$("[data-r]").forEach(x=>x.setAttribute("aria-selected",x.
 $("#chatform").addEventListener("submit",e=>{e.preventDefault();const t=$("#chattext").value.trim();if(!t)return;
   VERLAUF.push({wer:"Du",t:t.replace(/</g,"&lt;")});$("#chattext").value="";chat();
   setTimeout(()=>{const v={wer:"Claude",t:"Verstanden. So würde ich es im Entwurf umsetzen – passt das?"};
-    if(/oben/i.test(t))v.vorschlag={titel:"Vorschlag: Navigation oben",punkte:[`Navigation ${KLASSEN.find(x=>x[0]===klasse)[1]}: Leiste oben`,"Gruppen bleiben als Ausklapp-Menüs"],tun:d=>{d.nav[klasse]={art:"oben",breite:0,einklapp:false,gruppen:true};}};
+    if(modus==="marke")v.vorschlag={titel:"Vorschlag: Logo",punkte:["Glut kräftiger (#ea580c)","Schriftzug extra fett, Sperrung 2"],tun:()=>{LOGO.bogen.glut="#ea580c";LOGO.name.gewicht=800;LOGO.name.abstand=2;}};
+    else if(/oben/i.test(t))v.vorschlag={titel:"Vorschlag: Navigation oben",punkte:[`Navigation ${KLASSEN.find(x=>x[0]===klasse)[1]}: Leiste oben`,"Gruppen bleiben als Ausklapp-Menüs"],tun:d=>{d.nav[klasse]={art:"oben",breite:0,einklapp:false,gruppen:true};}};
     else if(/logo/i.test(t)&&/mitte/i.test(t))v.vorschlag={titel:"Vorschlag: Logo",punkte:["Logo & Name in die Mitte des Kopfbands","Suche und Aktionen rechts"],tun:d=>{d.kopf.logo="mitte";}};
     else if(/dunkel|farbe|hintergrund/i.test(t))v.vorschlag={titel:"Vorschlag: Grundfarben",punkte:["Hintergrund #f8fafc, Flächen weiß","Kopfband #13211a, Akzent #047857 (Kontrast 5,5 : 1)"],tun:d=>{d.farben.hell.bg="#f8fafc";d.farben.hell.kopf="#13211a";}};
     else v.vorschlag={titel:"Vorschlag",punkte:[`Bezug: ${$("#bezug").textContent.replace("Bezug: ","")}`,"Ich formuliere es als Auftrag, sobald du „Als Auftrag senden“ klickst"],tun:()=>{}};
@@ -372,6 +374,55 @@ $("#kopie").addEventListener("click",()=>{ENT.push({name:`${String.fromCharCode(
 $("#versionen").addEventListener("click",()=>{mitte="vergl";$$("[data-m]").forEach(x=>x.setAttribute("aria-selected",x.dataset.m==="vergl"));flaeche();});
 $("#senden").addEventListener("click",()=>{gesendet=true;const s=$("#status");s.textContent="Auftrag #21 · Werkstatt baut …";s.classList.add("bau");mitte="test";$$("[data-m]").forEach(x=>x.setAttribute("aria-selected",x.dataset.m==="test"));flaeche();
   setTimeout(()=>{s.textContent="Auftrag #21 · Testseite fertig → Freigabe";s.classList.remove("bau");flaeche();},3500);});
+// ---------------- Marke / Logo-Designer ----------------
+const LOGO={bogen:{farbe:"#047857",glut:"#f59e0b",staerke:12,x:0,y:0,s:1},cursor:{farbe:"#13211a",x:0,y:0,an:true},name:{text:"CODESCHMIEDE",farbe:"#13211a",gewicht:700,abstand:1,x:0,y:0,an:true}};
+let ebene="bogen";
+function logoSvg(hell=true,mitName=true,groesse=null){
+  const L=LOGO;const cur=hell?L.cursor.farbe:"#ffffff";const nam=hell?L.name.farbe:"#ffffff";const id="g"+Math.random().toString(36).slice(2,7);
+  const zeichen=`<defs><linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="${hell?L.bogen.farbe:"#34d399"}"/><stop offset=".7" stop-color="${hell?L.bogen.farbe:"#34d399"}"/><stop offset="1" stop-color="${L.bogen.glut}"/></linearGradient></defs>
+    <g data-e="bogen" transform="translate(${4+L.bogen.x},${8+L.bogen.y}) scale(${L.bogen.s})"><path d="M54 18A26 26 0 1 0 54 46" stroke="url(#${id})" stroke-width="${L.bogen.staerke}" fill="none" stroke-linecap="round"/></g>
+    ${L.cursor.an?`<g data-e="cursor" transform="translate(${4+L.cursor.x},${8+L.cursor.y})"><rect x="40" y="24" width="5" height="16" rx="2.5" fill="${cur}"/></g>`:""}`;
+  if(!mitName)return `<svg viewBox="0 0 72 80" width="${groesse}" height="${groesse}" aria-hidden="true">${zeichen}</svg>`;
+  return `<svg viewBox="0 0 320 80" width="100%" style="max-width:520px" role="img" aria-label="Logo">${zeichen}${L.name.an?`<g data-e="name" transform="translate(${L.name.x},${L.name.y})"><text x="80" y="50" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-weight="${L.name.gewicht}" font-size="38" fill="${nam}" letter-spacing="${L.name.abstand}">${L.name.text}</text></g>`:""}</svg>`;
+}
+function markeLinks(){
+  $("#links").innerHTML=`<div class="kasten"><h4>Logo · Ebenen</h4><ul class="baum">${[["bogen","Zeichen „C“ (Bogen)"],["cursor","Cursor-Strich"],["name","Schriftzug"]].map(([id,n])=>`<li><button type="button" aria-current="${ebene===id}" data-e2="${id}"><span class="punkt p"></span>${n}</button></li>`).join("")}</ul></div>
+    <div class="kasten"><h4>Projekt</h4><div class="pruef"><div>Codeschmiede (gewählt: C)</div><div style="color:var(--mut)">Trainer to go · eigenes Logo</div></div></div>
+    <div class="kasten"><h4>Prüfungen</h4><div class="pruef"><div><span class="ok">✓</span>lesbar bei 16 px</div><div><span class="ok">✓</span>hell und dunkel</div><div><span class="ok">✓</span>nur Grundfarben</div></div></div>`;
+  $$("[data-e2]").forEach(b=>b.addEventListener("click",()=>{ebene=b.dataset.e2;alles();}));
+}
+function markeFlaeche(){
+  $("#flaeche").innerHTML=`<div style="width:100%;display:flex;flex-direction:column;gap:14px">
+    <div class="massband" style="text-align:left">Marke › Logo · Ebene ziehen oder rechts genau einstellen</div>
+    <div id="logobuehne" style="background:#f7faf8;border:1px solid var(--rand);border-radius:12px;padding:30px;display:grid;place-items:center;background-image:linear-gradient(rgba(0,0,0,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.04) 1px,transparent 1px);background-size:16px 16px">${logoSvg(true)}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      <div class="verw" style="background:#0f2a22;color:#fff;display:grid;place-items:center">${logoSvg(false)}</div>
+      <div class="verw" style="display:flex;gap:14px;align-items:flex-end;justify-content:center">${[64,32,16].map(g=>`<div style="text-align:center"><div style="background:#0f2a22;border-radius:${g/4}px;display:inline-grid;place-items:center;width:${g}px;height:${g}px">${logoSvg(false,false,g*0.9)}</div><div style="font-size:11px;color:var(--mut)">${g}</div></div>`).join("")}</div>
+      <div class="verw" style="font-size:12px"><b>Wird verwendet in</b><br>Kopfband · App-Symbol & Favicon · Mail-Kopf · Projektliste der Codeschmiede</div></div></div>`;
+  // Ziehen der gewählten Ebene (zusätzlich immer per Zahlenfeld möglich)
+  const svg=$("#logobuehne svg");const g=svg?.querySelector(`[data-e="${ebene}"]`);if(!g)return;g.style.cursor="move";g.style.outline="none";
+  g.setAttribute("filter","drop-shadow(0 0 2px #f97316)");
+  let start=null;g.addEventListener("pointerdown",e=>{start={x:e.clientX,y:e.clientY,ox:LOGO[ebene].x,oy:LOGO[ebene].y};g.setPointerCapture(e.pointerId);});
+  g.addEventListener("pointermove",e=>{if(!start)return;const k=320/svg.getBoundingClientRect().width;LOGO[ebene].x=Math.round(start.ox+(e.clientX-start.x)*k);LOGO[ebene].y=Math.round(start.oy+(e.clientY-start.y)*k);g.setAttribute("transform",g.getAttribute("transform").replace(/translate\([^)]*\)/,`translate(${(ebene==="name"?0:4)+LOGO[ebene].x},${(ebene==="name"?0:8)+LOGO[ebene].y})`));});
+  g.addEventListener("pointerup",()=>{if(start){start=null;alles();}});
+}
+function markeEig(){
+  const L=LOGO[ebene];const ab=(t,inner)=>`<div class="abschnitt"><h4>${t}</h4><div class="feld">${inner}</div></div>`;
+  const farbwahl=(id,wert,opts)=>`<span class="swatches">${opts.map(c=>`<button type="button" class="sw" aria-pressed="${wert===c}" style="background:${c}" data-lf="${id}" data-c="${c}" aria-label="${c}"></button>`).join("")}</span>`;
+  let h=`<div><div class="pfad">Marke › Logo › ${ebene}</div><h3>${{bogen:"Zeichen „C“",cursor:"Cursor-Strich",name:"Schriftzug"}[ebene]}</h3></div>`;
+  const pos=feld("X",zahl("l-x",L.x,-60,60),"l-x")+feld("Y",zahl("l-y",L.y,-40,40),"l-y");
+  if(ebene==="bogen")h+=ab("Form",feld("Strichstärke",`<input type="range" id="l-st" min="6" max="16" value="${L.staerke}">`,"l-st")+feld("Größe",`<input type="range" id="l-s" min="0.7" max="1.2" step="0.05" value="${L.s}">`,"l-s")+pos)+ab("Farbe",'<span class="l">Eisen</span>'+farbwahl("farbe",L.farbe,["#047857","#0f2a22","#1d4ed8"])+'<span class="l">Glut</span>'+farbwahl("glut",L.glut,["#f59e0b","#ea580c","#facc15"]));
+  if(ebene==="cursor")h+=ab("Cursor",feld("Anzeigen",cb("l-an",L.an),"l-an")+pos+'<span class="l">Farbe</span>'+farbwahl("farbe",L.farbe,["#13211a","#047857"]));
+  if(ebene==="name")h+=ab("Schriftzug",feld("Text",`<input type="text" id="l-t" value="${L.text}">`,"l-t")+feld("Gewicht",sel("l-g",L.gewicht,[[600,"halbfett"],[700,"fett"],[800,"extra fett"]]),"l-g")+feld("Sperrung",zahl("l-ab",L.abstand,0,6),"l-ab")+feld("Anzeigen",cb("l-an",L.an),"l-an")+pos);
+  h+='<div class="hinweis">Vorschläge aus dem Chat landen als neue Ebenen-Werte; alles bleibt danach von Hand änderbar. Farben nur aus dem Grunddesign.</div><button class="knopf" type="button" id="frag">Mit Claude über das Logo sprechen</button>';
+  $("#eig").innerHTML=h;
+  const setz={"l-x":v=>L.x=+v,"l-y":v=>L.y=+v,"l-st":v=>L.staerke=+v,"l-s":v=>L.s=+v,"l-an":v=>L.an=v,"l-t":v=>L.text=v.toUpperCase().slice(0,20),"l-g":v=>L.gewicht=+v,"l-ab":v=>L.abstand=+v};
+  $$("#eig select,#eig input").forEach(el=>el.addEventListener(el.type==="range"?"input":"change",()=>{setz[el.id]?.(el.type==="checkbox"?el.checked:el.value);markeFlaeche();if(el.type!=="range")markeEig();}));
+  $$("#eig [data-lf]").forEach(b=>b.addEventListener("click",()=>{L[b.dataset.lf]=b.dataset.c;alles();}));
+  $("#frag").addEventListener("click",()=>{zeigeChat();$("#chattext").focus();});
+  $("#bezug").textContent="Bezug: Logo · "+ebene;
+}
+
 // ---------------- Baustein-Bibliothek ----------------
 let modus="grund",baustein="kpi";
 const BIB=[["Grundbausteine",[["knopf","Knopf",34],["eingabe","Eingabe & Auswahl",61],["abzeichen","Abzeichen",48]]],
@@ -429,9 +480,9 @@ function bibEig(){
   $("#bezug").textContent=`Bezug: Baustein ${b.name}`;
 }
 const linksGrund=$("#links").innerHTML;
-$$("[data-modus]").forEach(b=>b.addEventListener("click",()=>{modus=b.dataset.modus;$$("[data-modus]").forEach(x=>x.setAttribute("aria-pressed",x===b));$("#modustitel").textContent=modus==="bib"?"Bausteine":"Grunddesign";if(modus==="grund")$("#links").innerHTML=linksGrund;alles();}));
+$$("[data-modus]").forEach(b=>b.addEventListener("click",()=>{modus=b.dataset.modus;$$("[data-modus]").forEach(x=>x.setAttribute("aria-pressed",x===b));$("#modustitel").textContent=modus==="bib"?"Bausteine":modus==="marke"?"Marke":"Grunddesign";if(modus==="grund")$("#links").innerHTML=linksGrund;alles();}));
 function alles(){entwuerfe();geraete();
-  if(modus==="bib"){bibBaum();bibFlaeche();bibEig();}else{baum();pruef();flaeche();eig();}
+  if(modus==="bib"){bibBaum();bibFlaeche();bibEig();}else if(modus==="marke"){markeLinks();markeFlaeche();markeEig();}else{baum();pruef();flaeche();eig();}
   $("#undo").disabled=!hist.length;$("#redo").disabled=!zukunft.length;}
 alles();
 </script>

@@ -1,0 +1,110 @@
+<title>Codeschmiede Regelwerk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Layout: Regeldateien | gelesene Datei mit Inhaltsverzeichnis | Chat + Änderungsvorschlag (alt/neu) */
+:root{--bg:#eef2f0;--fl:#ffffff;--fl2:#f7f9f8;--fg:#13211a;--mut:#5b6c63;--rand:#d9e2dd;--gruen:#047857;--gruen-h:#e7f6ef;--rot-h:#fdecec;--rot:#b91c1c;--neu-h:#e7f6ef;--sel:#f97316;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;--text:"Barlow",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0a1310;--fl:#101b17;--fl2:#0d1714;--fg:#e2eee8;--mut:#90a59a;--rand:#203029;--gruen:#34d399;--gruen-h:#0e2b20;--rot-h:#2c1414;--rot:#f87171;--neu-h:#0e2b20;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0a1310;--fl:#101b17;--fl2:#0d1714;--fg:#e2eee8;--mut:#90a59a;--rand:#203029;--gruen:#34d399;--gruen-h:#0e2b20;--rot-h:#2c1414;--rot:#f87171;--neu-h:#0e2b20;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.6 var(--text);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance}
+button,input,textarea{font:inherit;color:inherit}
+.kopf{max-width:1500px;margin:0 auto 12px}.kopf h1{font-size:28px}.kopf p{margin:2px 0 0;color:var(--mut);max-width:80ch}
+.rahmen{max-width:1500px;margin:0 auto;background:var(--fl);border:1px solid var(--rand);border-radius:14px;overflow:hidden;display:grid;grid-template-columns:260px minmax(0,1fr) 360px;min-height:640px}
+.links{border-right:1px solid var(--rand);padding:12px;display:flex;flex-direction:column;gap:10px}
+.links h4,.rechts h4{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin:0}
+.dateien{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.dateien button{width:100%;text-align:left;border:0;background:none;border-radius:8px;padding:6px 8px;cursor:pointer;display:flex;flex-direction:column}
+.dateien button small{color:var(--mut);font-size:12px}.dateien button b{font:500 13px var(--mono)}
+.dateien button[aria-current=true]{background:var(--gruen-h);box-shadow:inset 3px 0 0 var(--gruen)}
+.suche{border:1px solid var(--rand);border-radius:8px;padding:6px 10px;background:var(--fl2);width:100%}
+.mitte{min-width:0;display:grid;grid-template-columns:200px minmax(0,1fr)}
+.toc{border-right:1px solid var(--rand);padding:14px 12px;font-size:13px;position:sticky;top:0;align-self:start}
+.toc ol{padding-left:18px;margin:6px 0 0}.toc a{color:var(--fg)}
+.lese{padding:18px 26px;max-width:78ch;min-width:0}
+.lese h1{font-size:30px}.lese h2{font-size:22px;margin-top:22px;padding-top:8px;border-top:1px solid var(--rand);display:flex;gap:8px;align-items:center}
+.lese h2 button{margin-left:auto;font:600 12px var(--text);border:1px solid var(--rand);border-radius:8px;background:var(--fl);padding:3px 8px;cursor:pointer}
+.lese code{font:13px var(--mono);background:var(--fl2);border:1px solid var(--rand);border-radius:5px;padding:0 4px}
+.lese li{margin:3px 0}
+.lese mark{background:#fde68a;color:#13211a}
+.hinweisband{background:#fff7e6;color:#7c4a03;border:1px solid #f5d38a;border-radius:10px;padding:8px 12px;font-size:13px;margin:10px 0}
+.rechts{border-left:1px solid var(--rand);display:flex;flex-direction:column;min-width:0}
+.rechts .ober{padding:12px;border-bottom:1px solid var(--rand)}
+.verlauf{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.m{border-radius:12px;padding:8px 11px;font-size:13px;background:var(--fl2);border:1px solid var(--rand);max-width:95%}.m.ich{align-self:flex-end;background:var(--gruen-h);border-color:transparent}
+.m .wer{font-size:11px;font-weight:700;color:var(--mut)}
+.diff{margin-top:6px;border:1px solid var(--rand);border-radius:8px;overflow:hidden;font:12px var(--mono)}
+.diff div{padding:4px 8px;white-space:pre-wrap}.diff .alt{background:var(--rot-h);text-decoration:line-through;text-decoration-color:var(--rot)}.diff .neu{background:var(--neu-h)}
+.knopf{border:1px solid var(--rand);background:var(--fl);border-radius:9px;padding:5px 11px;font-size:13px;font-weight:600;cursor:pointer}
+.knopf.voll{background:var(--gruen);border-color:var(--gruen);color:#fff}:root:not([data-theme="light"]) .knopf.voll{color:#04241a}
+.eingabe{border-top:1px solid var(--rand);padding:10px;display:flex;flex-direction:column;gap:6px}
+.eingabe textarea{border:1px solid var(--rand);border-radius:10px;padding:8px 10px;background:var(--fl2);resize:none;min-height:56px}
+.status{font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;background:var(--gruen-h);color:var(--gruen)}
+@media (max-width:1180px){.rahmen{grid-template-columns:220px minmax(0,1fr)}.rechts{grid-column:1/-1;border-left:0;border-top:1px solid var(--rand);min-height:420px}.mitte{grid-template-columns:1fr}.toc{display:none}}
+@media (max-width:760px){.rahmen{grid-template-columns:1fr}.links{border-right:0;border-bottom:1px solid var(--rand)}}
+</style>
+<div class="kopf"><h1>Entwurf · Regelwerk in der Codeschmiede</h1><p>Stand 22.10.2026 22:45 · Alle Regeldateien des Projekts lesen, darüber mit Claude sprechen und ändern. Änderungen laufen wie jeder Auftrag (Freigabe → Prüfungen). Hier mit der echten AGENTS.md der Codeschmiede.</p></div>
+<div class="rahmen">
+  <aside class="links"><h4>Regeldateien · Codeschmiede</h4><input class="suche" id="suche" type="search" placeholder="In allen Regeln suchen …"><ul class="dateien"><li><button type="button" aria-current="true"><b>AGENTS.md</b><small>Hauptregeln der Codeschmiede · heute 22:33</small></button></li><li><button type="button" aria-current="false"><b>CLAUDE.md</b><small>Verweis auf AGENTS.md · 22.10.</small></button></li><li><button type="button" aria-current="false"><b>ai-dev-os › global/AGENTS.md</b><small>Gerhards allgemeines Regelwerk (übergeordnet) · 21.10.</small></button></li><li><button type="button" aria-current="false"><b>docs/KONZEPT.md</b><small>Konzept & Entscheidungen · heute 21:05</small></button></li><li><button type="button" aria-current="false"><b>docs/DATENSCHUTZ.md</b><small>Datenschutz · heute 14:40</small></button></li><li><button type="button" aria-current="false"><b>docs/decisions/ADR-001</b><small>Entscheidung Codeschmiede · heute 14:22</small></button></li><li><button type="button" aria-current="false"><b>docs/KONZEPT-BAUSTEINE.md</b><small>Konzept Baustein-Bibliothek · heute 22:33</small></button></li><li><button type="button" aria-current="false"><b>docs/CHANGELOG.md</b><small>Änderungsprotokoll · heute 22:33</small></button></li></ul>
+    <div class="hinweisband" style="margin:0">Übergeordnet gilt Gerhards Regelwerk <b>ai-dev-os</b>; Projektregeln dürfen es ergänzen, nie abschwächen.</div></aside>
+  <section class="mitte"><nav class="toc" aria-label="Inhalt"><h4 style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin:0">Inhalt</h4><ol><li><a href="#a3">Grundlage</a></li><li><a href="#a8">Was ist die Codeschmiede?</a></li><li><a href="#a11">Projektregeln (Anweisungen von Gerhard)</a></li><li><a href="#a21">Weg in <code>main</code></a></li><li><a href="#a24">Datenschutz und Sicherheit</a></li><li><a href="#a34">Neue Anweisungen</a></li></ol>
+    <p style="font-size:12px;color:var(--mut);margin-top:14px">Zuletzt geändert: heute 22:33 von Claude (Anweisung Gerhard)<br><a href="#" onclick="return false">Verlauf anzeigen</a></p></nav>
+    <article class="lese" id="lese"><h1 id="t0">AGENTS.md – Codeschmiede</h1>
+<p>Gilt für jeden Claude-Chat, jede Werkstatt der Codeschmiede und jedes andere KI-Werkzeug (z. B. OpenCode) in diesem Repository.</p>
+<p>Sprache mit Gerhard: <b>immer Deutsch</b>.</p>
+<h2 id="a3">Grundlage</h2>
+<p>Über dieser Datei steht Gerhards allgemeines Regelwerk <b>AI Development Operating System</b> (Hauptfassung <code>gerhardkresak-code/ai-dev-os</code>,</p>
+<p>Datei <code>global/AGENTS.md</code>). Diese Datei ergänzt es für die Codeschmiede und schwächt es nie ab.</p>
+<p><b>Pflicht-Start:</b> <code>docs/KONZEPT.md</code> und <code>docs/CHANGELOG.md</code> lesen → Anfrage einordnen (Risikostufe KLEIN/NORMAL/HOCH/KRITISCH) → Bestand,</p>
+<p>Widersprüche, Risiken, Empfehlung melden → Fragen stellen → ab NORMAL Freigabe → bauen.</p>
+<h2 id="a8">Was ist die Codeschmiede?</h2>
+<p>Gerhards Programmierumgebung für <b>alle</b> seine Apps (Projekte): ein Programm für Windows und Mac mit Projektwechsel, Auftrags-Zentrale,</p>
+<p>Werkstatt (offizielles Claude Code mit eigenem Abo-Login), Live-Vorschau, Freigabe, Zusammenführen, Sicherheitsprüfung, Wissen. Konzept: <code>docs/KONZEPT.md</code>.</p>
+<h2 id="a11">Projektregeln (Anweisungen von Gerhard)</h2>
+<ul>
+<li>Erst prüfen, ob eine Anweisung Sinn macht, alle Details erfragen, dann bauen. Sichtbare Neuerungen zuerst als klickbarer Entwurf.
+<li>Ansprechend für die breite Masse, einheitlicher Stil: Smaragdgrün, Schrift Barlow, Symbole nur aus Lucide (gleiche Strichstärke), keine Emojis.
+<li>Vollständige Dokumentation (was, wer, wann) in <code>docs/CHANGELOG.md</code> (neue Zeile oben). Jede Version gesichert (<code>version/v&lt;x.y.z&gt;</code>).
+<li><b>Neue Anweisung</b> von Gerhard → hier unter Projektregeln, in <code>docs/CHANGELOG.md</code>.
+<li>Bei Einrichtungen in Web-Oberflächen Gerhard durchlotsen: Seiten selbst öffnen, Stellen zum Klicken markieren.
+<li>Braucht Gerhard etwas zu bestätigen oder zu tun: Push-Nachricht aufs Handy.
+<li><b>Nutzungslimits</b> (Verbrauch der Claude-Schnittstelle) immer sichtbar und live; die Werkstatt achtet auf die Limits und wählt das Modell nach Aufwand und Komplexität (einfach → klein, normal → mittel, komplex/HOCH → groß; bei Fehlschlag eine Stufe höher).
+</ul>
+<h2 id="a21">Weg in <code>main</code></h2>
+<p>Nur über Pull Request mit grüner Prüfung („Prüfung“). Bei HOCH/KRITISCH zusätzlich unabhängiges Review durch einen eigenen Agenten.</p>
+<p>Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freigeben &amp; zusammenführen“ durch Admin oder mit Recht).</p>
+<h2 id="a24">Datenschutz und Sicherheit</h2>
+<ul>
+<li>Die Codeschmiede verarbeitet <b>keine</b> Daten von Vereinsmitgliedern, Kunden oder Kindern – nur Aufträge, Code und Mitglieder des Teams. In Aufträge, Live-Log und Nachrichten gehören keine Personendaten Dritter.
+<li>Jede Tabelle mit Row-Level-Security; Rechte nur über geprüfte Datenbank-Funktionen mit Protokoll (<code>ws_protokoll</code>).
+<li><b>Keine Claude-Zugangsdaten</b> in der Codeschmiede: Die Werkstatt startet das offizielle Claude Code, das jede Person selbst mit ihrem Abo anmeldet (Entscheidung 2026-10-22 14:22). Nur für die interne Nutzung; Weitergabe des Programms an Dritte bräuchte API-Schlüssel.
+<li><b>Abo-Limits beachten:</b> vor jedem Auftrag Stand prüfen; ab Schwelle „klein“ eine Modellstufe kleiner, ab Schwelle „Pause“ keine neuen Aufträge bis zur Rücksetzung.
+<li>Geheimnisse (GitHub-, Supabase-Token) nie in Datenbank, Code, Chat oder Log. Der Werkstatt-Dienst filtert Geheimnisse aus dem Live-Log.
+<li>Keine Dritt-Server ohne Eintrag in <code>docs/DATENSCHUTZ.md</code>. Schriften und Bibliotheken selbst hosten.
+<li>Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf <code>main</code>; heikle Befehle brauchen Erlaubnis im Programm.
+</ul>
+<h2 id="a34">Neue Anweisungen</h2>
+<ul>
+<li><b>2026-10-22 16:25 – Automatische Updates:</b> Jede neue Version des Programms wird automatisch eingespielt (im Hintergrund laden, beim nächsten Start aktiv, Knopf „Jetzt neu starten“, nie mitten in einem Auftrag). Jede Programmänderung in <code>main</code> erhöht die Version in <code>desktop/src-tauri/tauri.conf.json</code>, <code>Cargo.toml</code> und <code>desktop/dienst/package.json</code>; der Ablauf „Programm bauen“ veröffentlicht sie signiert.
+<li><b>2026-10-22 20:39 – Weg bis live:</b> Freigabe → Sicherheitsprüfung → Zusammenführen → Prüfung des ganzen Features in einer Testfassung → erst dann live. Rot an einer Prüfung = Nacharbeit, nichts geht live.
+<li><b>2026-10-22 16:45 – Alles landet beim Feature:</b> Was Gerhard im Gruppen-Chat oder im Claude-Chat zu einem Feature sagt, erscheint beim Feature in der Codeschmiede (Herkunft „aus Gruppe“ / „aus Claude-Chat“). Claude trägt Anweisungen aus dem Claude-Chat als Nachricht (<code>kanal = &#x27;claude-chat&#x27;</code>) beim passenden Auftrag bzw. als neuen Auftrag ein und meldet dort, was gebaut wurde.
+</ul></article></section>
+  <aside class="rechts"><div class="ober"><h4>Chat mit Claude · AGENTS.md</h4><span class="status" id="status">Keine offenen Änderungen</span></div>
+    <div class="verlauf" id="verlauf"><div class="m"><div class="wer">Claude</div>Mir ist beim Lesen aufgefallen: Der Abschnitt „Weg in main“ beschreibt noch den alten Knopf „Freigeben &amp; zusammenführen“. Seit 0.3.0 gilt: Freigabe → Sicherheitsprüfung → Zusammenführen → Feature-Prüfung → live.
+      <div class="diff"><div class="alt">Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freigeben &amp; zusammenführen“ durch Admin oder mit Recht).</div><div class="neu">Zusammengeführt wird nur auf Gerhards Wort: in der Codeschmiede über die Stationen Freigabe → Sicherheitsprüfung → Zusammenführen → Feature-Prüfung → live (Admin oder Recht „Freigeben“).</div></div>
+      <div style="margin-top:6px;display:flex;gap:6px"><button class="knopf voll" type="button" id="uebern">Übernehmen</button><button class="knopf" type="button" id="ablehn">Ablehnen</button></div></div></div>
+    <form class="eingabe" id="form"><textarea id="txt" placeholder="Frag nach einer Regel oder beschreibe, was sich ändern soll …"></textarea><div style="display:flex;gap:6px;align-items:center"><span style="font-size:12px;color:var(--mut)" id="bezug">Bezug: ganze Datei</span><span style="flex:1"></span><button class="knopf" type="button" id="auftrag" disabled>Als Auftrag senden</button><button class="knopf voll" type="submit">Senden</button></div></form></aside>
+</div>
+<script>
+const $=s=>document.querySelector(s);let offen=0;
+document.querySelectorAll(".lese h2").forEach(h=>{const b=document.createElement("button");b.type="button";b.textContent="Darüber sprechen";b.addEventListener("click",()=>{$("#bezug").textContent="Bezug: Abschnitt „"+h.firstChild.textContent+"“";$("#txt").focus();});h.appendChild(b);});
+$("#uebern").addEventListener("click",()=>{offen++;$("#status").textContent=offen+" Änderung bereit – als Auftrag senden";$("#auftrag").disabled=false;$("#uebern").parentElement.innerHTML="<span style='color:var(--gruen);font-weight:700'>✓ übernommen (noch nicht gesendet)</span>";});
+$("#ablehn").addEventListener("click",()=>{$("#ablehn").parentElement.innerHTML="abgelehnt";});
+$("#auftrag").addEventListener("click",()=>{$("#status").textContent="Auftrag #22 · Regelwerk · wartet auf Freigabe";$("#auftrag").disabled=true;});
+$("#form").addEventListener("submit",e=>{e.preventDefault();const t=$("#txt").value.trim();if(!t)return;const v=$("#verlauf");
+  v.insertAdjacentHTML("beforeend",`<div class="m ich"><div class="wer">Du · ${$("#bezug").textContent}</div>${t.replace(/</g,"&lt;")}</div>`);$("#txt").value="";
+  setTimeout(()=>{v.insertAdjacentHTML("beforeend",`<div class="m"><div class="wer">Claude</div>${/\?$/.test(t)?"Die Regel bedeutet: … (Erklärung mit Beispiel). Soll ich sie klarer formulieren?":"So würde ich es formulieren – passt das?<div class=diff><div class=neu>- (neue Regel nach deinem Wunsch, mit Datum und „Neue Anweisung“)</div></div>"}</div>`);v.scrollTop=1e6;},500);});
+$("#suche").addEventListener("input",e=>{const q=e.target.value.trim();const a=$("#lese");a.innerHTML=a.innerHTML.replace(/<\/?mark>/g,"");if(q.length<3)return;const re=new RegExp("("+q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")(?![^<]*>)","gi");a.innerHTML=a.innerHTML.replace(re,"<mark>$1</mark>");});
+</script>
