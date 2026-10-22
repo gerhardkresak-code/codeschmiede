@@ -38,9 +38,14 @@ const SCHRIFTEN = ["Barlow Semi Condensed", "Barlow", "system-ui"];
 const GERAETE = { pc: [1280, "PC", Monitor], tablet: [820, "Tablet", Tablet], handy: [390, "Handy", Smartphone] };
 
 const tief = (o) => JSON.parse(JSON.stringify(o));
-const mische = (b, w) => { const r = tief(b); const geh = (z, q) => { Object.entries(q || {}).forEach(([k, v]) => { if (v && typeof v === "object" && !Array.isArray(v) && z[k] && typeof z[k] === "object") geh(z[k], v); else z[k] = v; }); }; geh(r, w); return r; };
+// Nur Schlüssel aus BASIS mit passendem Typ übernehmen (Prüfung 2026-10-23: kein __proto__, kaputte Werte legen nichts lahm)
+const VERBOTEN = new Set(["__proto__", "constructor", "prototype"]);
+const mische = (b, w) => { const r = tief(b); const geh = (z, q) => { if (!q || typeof q !== "object" || Array.isArray(q)) return;
+  Object.keys(z).forEach((k) => { if (VERBOTEN.has(k) || !Object.prototype.hasOwnProperty.call(q, k)) return; const v = q[k];
+    if (z[k] && typeof z[k] === "object") geh(z[k], v);
+    else if (typeof v === typeof z[k] && (typeof z[k] !== "string" || !z[k].startsWith("#") || /^#[0-9a-f]{6}$/i.test(v))) z[k] = v; }); }; geh(r, w); return r; };
 const setze = (o, pfad, v) => { const r = tief(o); let z = r; pfad.slice(0, -1).forEach((k) => { z[k] = z[k] || {}; z = z[k]; }); z[pfad[pfad.length - 1]] = v; return r; };
-const flach = (o, p = "") => Object.entries(o || {}).flatMap(([k, v]) => (v && typeof v === "object" ? flach(v, p + k + ".") : [[p + k, v]]));
+const flach = (o, p = "") => Object.entries(o || {}).filter(([k]) => !VERBOTEN.has(k)).flatMap(([k, v]) => (v && typeof v === "object" ? flach(v, p + k + ".") : [[p + k, v]]));
 
 // Kontrast nach WCAG 2.1
 const lum = (hex) => { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return 0; const n = parseInt(m[1], 16);
@@ -96,7 +101,7 @@ export default function Designer({ d, ich, toast }) {
     const g = d.gruppen.find((x) => x.id === projekt?.design_gruppe_id);
     const r = d.rechte.find((x) => x.benutzer_id === ich.id && x.bereich_id === g?.bereich_id);
     const rolle = d.mitglieder.find((m) => m.projekt_id === d.projektId && m.benutzer_id === ich.id)?.rolle;
-    return !!(g && r?.auftraege && ["entwickler", "texter"].includes(rolle));
+    return !!(g && r?.auftraege && rolle === "entwickler");   // Texter geben nur Text-Aufträge
   }, [d, ich, projekt]);
 
   const holen = useCallback(async () => {
@@ -124,12 +129,12 @@ export default function Designer({ d, ich, toast }) {
     if (!bearbeitbar) return;
     setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(setze(werte, pfad, v)); setGeaendert(true);
   };
-  const zurueck = () => setVerlauf((h) => { if (!h.zurueck.length) return h; setWerte(h.zurueck[h.zurueck.length - 1]); setGeaendert(true); return { zurueck: h.zurueck.slice(0, -1), vor: [werte, ...h.vor] }; });
-  const vor = () => setVerlauf((h) => { if (!h.vor.length) return h; setWerte(h.vor[0]); setGeaendert(true); return { zurueck: [...h.zurueck, werte], vor: h.vor.slice(1) }; });
+  const zurueck = () => { const h = verlauf; if (!h.zurueck.length) return; setWerte(h.zurueck[h.zurueck.length - 1]); setVerlauf({ zurueck: h.zurueck.slice(0, -1), vor: [werte, ...h.vor] }); setGeaendert(true); };
+  const vor = () => { const h = verlauf; if (!h.vor.length) return; setWerte(h.vor[0]); setVerlauf({ zurueck: [...h.zurueck, werte], vor: h.vor.slice(1) }); setGeaendert(true); };
 
   const neu = async (name, von) => {
     setArbeit(true);
-    const { data, error } = await supabase.from("ws_design_entwuerfe").insert({ projekt_id: d.projektId, name, werte: von, erstellt_von: ich.id }).select().single();
+    const { data, error } = await supabase.from("ws_design_entwuerfe").insert({ projekt_id: d.projektId, name, werte: von }).select().single();
     setArbeit(false);
     if (error) return toast(fehler(error));
     await holen(); setAktivId(data.id); setWerte(mische(BASIS, data.werte)); setVerlauf({ zurueck: [], vor: [] }); setGeaendert(false); toast(`Entwurf „${name}“ angelegt`);
@@ -183,7 +188,7 @@ export default function Designer({ d, ich, toast }) {
             onClick={() => setDialog({ art: "senden" })}><Send className="w-4 h-4" />Als Auftrag senden</button>}
         </div>
       </div>
-      {!darf && <p className="text-sm text-slate-500">Nur ansehen: Gestalten darf, wer in der Design-Gruppe Aufträge geben darf.</p>}
+      {!darf && <p className="text-sm text-slate-500">Nur ansehen: Gestalten dürfen Entwickler mit dem Recht „Aufträge geben“ im Bereich der Design-Gruppe.</p>}
       {fest && <p className="text-sm text-slate-600 dark:text-slate-300">Dieser Entwurf ist {STAND_TXT[aktiv.stand].toLowerCase()} und damit fest{aktiv.auftrag_id ? ` (Auftrag #${aktiv.auftrag_id})` : ""}. Für Änderungen eine Kopie anlegen.</p>}
 
       {modus !== "grund" ? <Spaeter modus={modus} /> : (
@@ -384,7 +389,6 @@ function Versionen({ entwurf, onClose, onHolen }) {
   useEffect(() => { supabase.from("ws_design_versionen").select("*").eq("entwurf_id", entwurf.id).order("nr", { ascending: false }).then(({ data }) => setV(data || [])); }, [entwurf.id]);
   return <Hulle titel={`Versionen · ${entwurf.name}`} onClose={onClose}>{!v ? <Loader2 className="w-5 h-5 animate-spin" /> : (
     <ul className="divide-y divide-slate-200 dark:divide-slate-800">
-      <li className="py-2 text-sm text-slate-500">Version 1 · beim Anlegen</li>
       {v.map((x) => <li key={x.id} className="py-2 flex items-center gap-3 text-sm"><b>Version {x.nr}</b><span className="text-slate-500">{fmt(x.erstellt)}</span><button type="button" className={`${ghost} ml-auto`} onClick={() => onHolen(x.werte, x.nr)}>Zurückholen</button></li>)}
     </ul>)}<div className="flex justify-end mt-3"><button type="button" className={ghost} onClick={onClose}>Schließen</button></div></Hulle>;
 }

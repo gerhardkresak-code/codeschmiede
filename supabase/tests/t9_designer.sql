@@ -29,7 +29,7 @@ select ws_rechte_setzen('00000000-0000-0000-0000-0000000000d2','sport',true,fals
 
 \echo [1] D1 legt Entwurf an -> OK; D2 (kein Recht im Design-Bereich) -> FEHLER; B9 (anderes Projekt) -> FEHLER
 :D1
-insert into ws_design_entwuerfe(projekt_id,name,werte) values ('trainer-to-go','Hell & klar','{"farben":{"primaer":"#047857"}}');
+insert into ws_design_entwuerfe(projekt_id,name,werte) values ('trainer-to-go','Hell & klar','{"farben":{"hell":{"primaer":"#047857"}}}');
 :D2
 insert into ws_design_entwuerfe(projekt_id,name,werte) values ('trainer-to-go','D2','{}');
 :B9
@@ -50,7 +50,7 @@ select count(*) as b9_sieht from ws_design_entwuerfe;
 update ws_design_entwuerfe set stand='live';
 delete from ws_design_entwuerfe;
 \echo [3b] D1 speichert -> Version 2; D2 speichert fremden Entwurf -> FEHLER; Werte kein Objekt -> FEHLER
-select ws_design_speichern((select id from ws_design_entwuerfe where name='Hell & klar'),'{"farben":{"primaer":"#065f46"}}') as version;
+select ws_design_speichern((select id from ws_design_entwuerfe where name='Hell & klar'),'{"farben":{"hell":{"primaer":"#065f46"}}}') as version;
 select ws_design_speichern((select id from ws_design_entwuerfe where name='Hell & klar'),'[1,2]');
 :D2
 select ws_design_speichern((select id from ws_design_entwuerfe where name='Hell & klar'),'{}');
@@ -89,4 +89,45 @@ select ws_design_verwerfen((select id from ws_design_entwuerfe where name='Probe
 select stand as probe_verworfen from ws_design_entwuerfe where name='Probe';
 \echo [7] Trigger-Funktion direkt aufrufen -> FEHLER
 select ws_design_nach_auftrag();
+reset role;
+
+-- Nachprüfung 2026-10-23 (Befunde R1, R2, O3–O7)
+\set QUIET 1
+insert into auth.users values ('00000000-0000-0000-0000-0000000000c3','t3@x.at',now()) on conflict do nothing;
+set role authenticated;
+:ADM
+insert into ws_einladungen(email,rolle,eingeladen_von,projekt_id) values ('t3@x.at','texter',auth.uid(),'trainer-to-go');
+\set T3 'select set_config(''request.jwt.claim.sub'',''00000000-0000-0000-0000-0000000000c3'',false) \\g /dev/null'
+:T3
+select ws_einladung_annehmen('T3') \g /dev/null
+:ADM
+select ws_rechte_setzen('00000000-0000-0000-0000-0000000000c3','plattform',true,false,false) \g /dev/null
+\echo [R1] Texter legt Design-Entwurf an -> FEHLER
+:T3
+insert into ws_design_entwuerfe(projekt_id,name,werte) values ('trainer-to-go','T3','{}');
+\echo [R2] Unbekannte Schluessel / __proto__ / CSS-url / Zahl ausserhalb -> FEHLER (4x)
+:D1
+insert into ws_design_entwuerfe(projekt_id,name,werte) values ('trainer-to-go','P1','{"__proto__":{"x":1}}');
+insert into ws_design_entwuerfe(projekt_id,name,werte) values ('trainer-to-go','P2','{"farben":"kaputt"}');
+insert into ws_design_entwuerfe(projekt_id,name,werte) values ('trainer-to-go','P3','{"farben":{"hell":{"primaer":"url(https://fremd/x)"}}}');
+insert into ws_design_entwuerfe(projekt_id,name,werte) values ('trainer-to-go','P4','{"form":{"radius":999}}');
+\echo [R2b] Gueltige Werte -> OK; speichern mit kaputten Werten -> FEHLER
+insert into ws_design_entwuerfe(projekt_id,name,werte) values ('trainer-to-go','Gut','{"farben":{"dunkel":{"primaer":"#10B981"}},"menue":{"aufklappbar":false,"handy":"burger"},"schrift":{"basis":16,"gewicht":600}}');
+select ws_design_speichern((select id from ws_design_entwuerfe where name='Gut'),'{"logo":{"platz":"irgendwo"}}');
+\echo [O5] Version 1 liegt beim Anlegen vor -> 1
+select count(*) as v1 from ws_design_versionen where entwurf_id=(select id from ws_design_entwuerfe where name='Gut') and nr=1;
+\echo [O6] Id/Zeitstempel/Ersteller vorgeben -> FEHLER (2x)
+insert into ws_design_entwuerfe(id,projekt_id,name) values (1000,'trainer-to-go','X');
+insert into ws_design_entwuerfe(projekt_id,name,erstellt) values ('trainer-to-go','X','2000-01-01');
+\echo [O3] Werkstatt holt abgebrochenen Auftrag zurueck -> FEHLER
+:ADM
+update ws_auftraege set stand='abgebrochen' where titel='Grunddesign: Gut' or id=(select max(id) from ws_auftraege);
+:D1
+insert into ws_werkstatt_pcs(benutzer_id,name,an) values (auth.uid(),'PC-D1',true);
+update ws_auftraege set stand='laeuft' where id=(select max(id) from ws_auftraege);
+\echo [O4] Design-Auftrag erledigt -> Entwurf wieder entwurf
+select ws_design_senden((select id from ws_design_entwuerfe where name='Gut'),'Gut umsetzen bitte') > 0 as gesendet4;
+:ADM
+update ws_auftraege set stand='erledigt' where titel='Grunddesign: Gut';
+select stand as gut_nach_erledigt from ws_design_entwuerfe where name='Gut';
 reset role;
