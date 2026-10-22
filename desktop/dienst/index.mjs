@@ -23,7 +23,23 @@ import { werteAus, zweigName } from "./lib/ergebnis.mjs";
 import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
-const CLAUDE = process.platform === "win32" ? "claude.cmd" : "claude";
+// Claude Code finden. Windows: nativer Installer (claude.exe in %USERPROFILE%\.local\bin) oder npm (cli.js) – immer OHNE Shell
+// starten, weil Auftragstext und Einstellungen als Argumente übergeben werden (keine cmd.exe-Auswertung, keine Einschleusung).
+import { existsSync } from "node:fs";
+function findeClaude() {
+  if (process.platform !== "win32") return { befehl: "claude", vorne: [] };
+  const ordner = (process.env.PATH || "").split(";").filter(Boolean);
+  const home = process.env.USERPROFILE || os.homedir();
+  for (const o of [path.join(home, ".local", "bin"), ...ordner]) {
+    const exe = path.join(o, "claude.exe");
+    if (existsSync(exe)) return { befehl: exe, vorne: [] };
+  }
+  for (const o of [path.join(process.env.APPDATA || path.join(home, "AppData", "Roaming"), "npm"), ...ordner]) {
+    const cli = path.join(o, "node_modules", "@anthropic-ai", "claude-code", "cli.js");
+    if (existsSync(cli)) return { befehl: process.execPath, vorne: [cli] };
+  }
+  return null;
+}
 
 const sh = promisify(execFile);
 const melde = (typ, text, auftrag) => process.stdout.write(JSON.stringify({ typ, text, auftrag: auftrag ?? null, zeit: new Date().toISOString() }) + "\n");
@@ -228,7 +244,9 @@ async function fuehreAus(auftrag, { fortsetzen = false } = {}) {
 
     let ende = null; let kosten = 0; let ein = 0; let aus = 0; let sitzung = merk.sitzung;
     await new Promise((fertig, fehl) => {
-      const kind = spawn(CLAUDE, args, { cwd: ordner, env, shell: process.platform === "win32", windowsHide: true });
+      const claude = findeClaude();
+      if (!claude) throw new Error("Claude Code wurde auf diesem PC nicht gefunden (erwartet: %USERPROFILE%\\.local\\bin\\claude.exe). Bitte installieren und einmal „claude“ im Terminal starten.");
+      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: ordner, env, shell: false, windowsHide: true });
       laeuft.kind = kind;
       abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
       const rl = createInterface({ input: kind.stdout });
