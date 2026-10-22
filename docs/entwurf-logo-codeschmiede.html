@@ -1,0 +1,96 @@
+<title>Codeschmiede Logo-Vorschläge</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;600&display=swap">
+<style>
+/* Layout: drei Vorschläge als gleich gebaute Tafeln (hell, dunkel, App-Symbol in drei Größen) */
+:root{--bg:#f2f5f3;--fl:#ffffff;--fg:#13211a;--mut:#5b6c63;--rand:#d9e2dd;--gruen:#047857;--glut:#f59e0b;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;--text:"Barlow",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0a1310;--fl:#101b17;--fg:#e2eee8;--mut:#90a59a;--rand:#22332c;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0a1310;--fl:#101b17;--fg:#e2eee8;--mut:#90a59a;--rand:#22332c;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--text);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px}
+h1,h2{font-family:var(--display);margin:0;text-wrap:balance}
+.kopf{max-width:1200px;margin:0 auto 16px}.kopf h1{font-size:32px}.kopf p{color:var(--mut);margin:4px 0 0;max-width:70ch}
+.raster{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px}
+.tafel{background:var(--fl);border:1px solid var(--rand);border-radius:16px;overflow:hidden;display:flex;flex-direction:column}
+.tafel h2{font-size:22px;padding:14px 16px 0}.tafel p{margin:4px 16px 12px;color:var(--mut);font-size:14px}
+.flaeche{display:grid;place-items:center;padding:26px 16px;min-height:150px}
+.hell{background:#f7faf8}.dunkel{background:#0f2a22}
+.icons{display:flex;gap:16px;align-items:flex-end;justify-content:center;padding:16px;border-top:1px solid var(--rand)}
+.icons span{font-size:11px;color:var(--mut);display:block;text-align:center;margin-top:4px}
+.wahl{margin:auto 16px 16px;padding:8px 12px;border-radius:10px;border:1px solid var(--rand);background:var(--bg);font-weight:600;cursor:pointer;color:var(--fg)}
+.wahl[aria-pressed=true]{border-color:var(--gruen);background:#e7f6ef;color:#065f46}
+.hinweis{max-width:1200px;margin:16px auto 0;color:var(--mut);font-size:14px}
+</style>
+
+<div class="kopf">
+  <h1>Logo-Vorschläge für die Codeschmiede</h1>
+  <p>Drei Richtungen, alle eigene Entwürfe als Vektorgrafik. Jede in hell, dunkel und als App-Symbol (64, 32, 16 px). Im künftigen Logo-Designer lassen sie sich per Chat oder von Hand weiterbearbeiten.</p>
+</div>
+
+<div class="raster">
+  <section class="tafel">
+    <h2>A · Amboss mit Code-Funke</h2>
+    <p>Ein Amboss, aus dem eine Funke in Form von „&lt;/&gt;“ springt. Handwerk trifft Code; ruhig und gut lesbar.</p>
+    <div class="flaeche hell"><svg width="300" height="80" viewBox="0 0 300 80" role="img" aria-label="Codeschmiede Logo A hell">
+      <g transform="translate(4,8)"><rect x="0" y="0" width="64" height="64" rx="16" fill="#0f2a22"/>
+        <path d="M12 34h40l-6 8H34v8h8v6H22v-6h8v-8h-6z" fill="#34d399"/>
+        <path d="M24 22l-6 5 6 5M40 22l6 5-6 5M35 18l-6 18" stroke="#f59e0b" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,-6)"/></g>
+      <text x="84" y="50" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-weight="800" font-size="38" fill="#0f2a22">Code<tspan fill="#047857">schmiede</tspan></text></svg></div>
+    <div class="flaeche dunkel"><svg width="300" height="80" viewBox="0 0 300 80" role="img" aria-label="Codeschmiede Logo A dunkel">
+      <g transform="translate(4,8)"><rect x="0" y="0" width="64" height="64" rx="16" fill="#34d399"/>
+        <path d="M12 34h40l-6 8H34v8h8v6H22v-6h8v-8h-6z" fill="#0f2a22"/>
+        <path d="M24 22l-6 5 6 5M40 22l6 5-6 5M35 18l-6 18" stroke="#b45309" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,-6)"/></g>
+      <text x="84" y="50" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-weight="800" font-size="38" fill="#ffffff">Code<tspan fill="#34d399">schmiede</tspan></text></svg></div>
+    <div class="icons">
+      <div><svg width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#0f2a22"/><path d="M12 34h40l-6 8H34v8h8v6H22v-6h8v-8h-6z" fill="#34d399"/><path d="M24 16l-6 5 6 5M40 16l6 5-6 5M35 12l-6 18" stroke="#f59e0b" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>64</span></div>
+      <div><svg width="32" height="32" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#0f2a22"/><path d="M12 34h40l-6 8H34v8h8v6H22v-6h8v-8h-6z" fill="#34d399"/><path d="M24 16l-6 5 6 5M40 16l6 5-6 5" stroke="#f59e0b" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>32</span></div>
+      <div><svg width="16" height="16" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0f2a22"/><path d="M10 32h44l-8 10H38v14H26V42h-8z" fill="#34d399"/></svg><span>16</span></div>
+    </div>
+    <button class="wahl" type="button" aria-pressed="false">Diesen nehmen</button>
+  </section>
+
+  <section class="tafel">
+    <h2>B · Hammer als Klammer</h2>
+    <p>Ein Hammer, dessen Kopf eine geschweifte Klammer „{“ ist – schnell zu erkennen, auch ganz klein.</p>
+    <div class="flaeche hell"><svg width="300" height="80" viewBox="0 0 300 80" role="img" aria-label="Codeschmiede Logo B hell">
+      <g transform="translate(4,8)"><rect width="64" height="64" rx="32" fill="#047857"/>
+        <path d="M27 14c-6 0-8 3-8 8v4c0 3-2 5-5 6 3 1 5 3 5 6v4c0 5 2 8 8 8" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <path d="M27 32h24" stroke="#fff" stroke-width="6" stroke-linecap="round"/><path d="M44 26v12" stroke="#fbbf24" stroke-width="5" stroke-linecap="round"/></g>
+      <text x="84" y="50" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-weight="800" font-size="38" fill="#13211a">codeschmiede</text></svg></div>
+    <div class="flaeche dunkel"><svg width="300" height="80" viewBox="0 0 300 80" role="img" aria-label="Codeschmiede Logo B dunkel">
+      <g transform="translate(4,8)"><rect width="64" height="64" rx="32" fill="#34d399"/>
+        <path d="M27 14c-6 0-8 3-8 8v4c0 3-2 5-5 6 3 1 5 3 5 6v4c0 5 2 8 8 8" stroke="#0f2a22" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <path d="M27 32h24" stroke="#0f2a22" stroke-width="6" stroke-linecap="round"/><path d="M44 26v12" stroke="#b45309" stroke-width="5" stroke-linecap="round"/></g>
+      <text x="84" y="50" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-weight="800" font-size="38" fill="#ffffff">codeschmiede</text></svg></div>
+    <div class="icons">
+      <div><svg width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#047857"/><path d="M27 14c-6 0-8 3-8 8v4c0 3-2 5-5 6 3 1 5 3 5 6v4c0 5 2 8 8 8" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M27 32h24" stroke="#fff" stroke-width="6" stroke-linecap="round"/><path d="M44 26v12" stroke="#fbbf24" stroke-width="5" stroke-linecap="round"/></svg><span>64</span></div>
+      <div><svg width="32" height="32" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#047857"/><path d="M27 14c-6 0-8 3-8 8v4c0 3-2 5-5 6 3 1 5 3 5 6v4c0 5 2 8 8 8" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round"/><path d="M27 32h24" stroke="#fff" stroke-width="7" stroke-linecap="round"/></svg><span>32</span></div>
+      <div><svg width="16" height="16" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#047857"/><path d="M28 14c-7 0-9 4-9 9v18c0 5 2 9 9 9M28 32h22" stroke="#fff" stroke-width="9" fill="none" stroke-linecap="round"/></svg><span>16</span></div>
+    </div>
+    <button class="wahl" type="button" aria-pressed="false">Diesen nehmen</button>
+  </section>
+
+  <section class="tafel">
+    <h2>C · Glühendes „C“</h2>
+    <p>Ein kräftiges „C“ wie frisch geschmiedetes Eisen, mit glühender Kante und Cursor-Strich. Am eigenständigsten.</p>
+    <div class="flaeche hell"><svg width="300" height="80" viewBox="0 0 300 80" role="img" aria-label="Codeschmiede Logo C hell">
+      <defs><linearGradient id="glut" x1="0" x2="1"><stop offset="0" stop-color="#047857"/><stop offset=".7" stop-color="#047857"/><stop offset="1" stop-color="#f59e0b"/></linearGradient></defs>
+      <g transform="translate(4,8)"><path d="M54 18A26 26 0 1 0 54 46" stroke="url(#glut)" stroke-width="12" fill="none" stroke-linecap="round"/><rect x="40" y="24" width="5" height="16" rx="2.5" fill="#13211a"/></g>
+      <text x="80" y="50" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-weight="700" font-size="38" fill="#13211a" letter-spacing="1">CODESCHMIEDE</text></svg></div>
+    <div class="flaeche dunkel"><svg width="300" height="80" viewBox="0 0 300 80" role="img" aria-label="Codeschmiede Logo C dunkel">
+      <defs><linearGradient id="glut2" x1="0" x2="1"><stop offset="0" stop-color="#34d399"/><stop offset=".7" stop-color="#34d399"/><stop offset="1" stop-color="#fbbf24"/></linearGradient></defs>
+      <g transform="translate(4,8)"><path d="M54 18A26 26 0 1 0 54 46" stroke="url(#glut2)" stroke-width="12" fill="none" stroke-linecap="round"/><rect x="40" y="24" width="5" height="16" rx="2.5" fill="#ffffff"/></g>
+      <text x="80" y="50" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-weight="700" font-size="38" fill="#ffffff" letter-spacing="1">CODESCHMIEDE</text></svg></div>
+    <div class="icons">
+      <div><svg width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#0f2a22"/><path d="M48 20A18 18 0 1 0 48 44" stroke="url(#glut2)" stroke-width="9" fill="none" stroke-linecap="round"/><rect x="36" y="25" width="4" height="14" rx="2" fill="#fff"/></svg><span>64</span></div>
+      <div><svg width="32" height="32" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#0f2a22"/><path d="M48 20A18 18 0 1 0 48 44" stroke="#34d399" stroke-width="10" fill="none" stroke-linecap="round"/></svg><span>32</span></div>
+      <div><svg width="16" height="16" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0f2a22"/><path d="M47 20A17 17 0 1 0 47 44" stroke="#34d399" stroke-width="13" fill="none" stroke-linecap="round"/></svg><span>16</span></div>
+    </div>
+    <button class="wahl" type="button" aria-pressed="false">Diesen nehmen</button>
+  </section>
+</div>
+<p class="hinweis">Auswahl hier nur zum Ausprobieren – sag mir im Chat, welcher es werden soll oder was ich ändern soll (Farbe, Form, Schrift).</p>
+<script>
+document.querySelectorAll(".wahl").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".wahl").forEach(x=>{x.setAttribute("aria-pressed",x===b);x.textContent=x===b?"Ausgewählt ✓":"Diesen nehmen";});}));
+</script>

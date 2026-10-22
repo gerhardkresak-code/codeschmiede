@@ -118,6 +118,19 @@ select,input[type=text],input[type=number]{border:1px solid var(--rand2);border-
 .eingabe{border-top:1px solid var(--rand);padding:10px;display:flex;flex-direction:column;gap:6px}
 .eingabe textarea{border:1px solid var(--rand2);border-radius:10px;padding:8px 10px;background:var(--fl2);resize:none;min-height:56px}
 .eingabe .zeile{display:flex;gap:6px;align-items:center}
+.matrix{display:grid;gap:14px;width:100%}
+.matrix .zeile{display:grid;grid-template-columns:110px repeat(var(--sp),minmax(0,1fr));gap:10px;align-items:start}
+.matrix .kopfz{font:600 11px var(--mono);color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.matrix .lab{font-size:12px;font-weight:700;color:var(--mut);padding-top:8px}
+.b-kachel{background:var(--a-flaeche);border:1px solid var(--a-linie);border-radius:var(--a-rund);padding:12px;color:var(--a-text);font-family:var(--a-font);min-height:96px;display:flex;flex-direction:column;gap:2px;font-size:12px}
+.b-kachel .w{font:700 24px var(--a-titel);color:var(--a-text)}.b-kachel .d{font-weight:700;font-size:12px}
+.b-kachel .gut{color:#15803d}.b-kachel .schlecht{color:#b91c1c}
+.skel{background:linear-gradient(90deg,var(--a-linie),transparent,var(--a-linie));border-radius:6px;height:10px;margin:4px 0}
+.verw{background:var(--fl);border:1px solid var(--rand);border-radius:10px;padding:10px 12px;font-size:13px}
+.verw li{margin:2px 0}
+.neu{font-size:10px;font-weight:700;background:var(--info-h);color:var(--info);border-radius:999px;padding:0 6px;margin-left:auto}
+.doppelt{border:1px dashed var(--warn);background:var(--warn-h);border-radius:10px;padding:8px 10px;font-size:12px}
+.mail{background:#f4f6f5;padding:16px;border-radius:10px}.mail .karte{max-width:520px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;color:#13211a;font-family:Barlow,system-ui,sans-serif;font-size:13px}
 .erkl{max-width:1500px;margin:14px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
 .erkl div{background:var(--fl);border:1px solid var(--rand);border-radius:12px;padding:12px 14px}.erkl h3{font-size:18px;margin-bottom:4px}
 .erkl ul{margin:4px 0 0;padding-left:18px}
@@ -135,7 +148,8 @@ select,input[type=text],input[type=number]{border:1px solid var(--rand2);border-
   <nav class="cs" aria-label="Codeschmiede"><b>C</b><span>Zentr.</span><span class="akt">Design</span><span>Vorsch.</span><span>Prüf.</span><span>Wissen</span></nav>
   <div class="editor">
     <div class="leiste" role="toolbar" aria-label="Werkzeugleiste">
-      <div class="titel"><small>App-Designer · Trainer to go</small><b>Grunddesign</b></div>
+      <div class="titel"><small>App-Designer · Trainer to go</small><b id="modustitel">Grunddesign</b></div>
+      <div class="seg" role="group" aria-label="Bereich"><button type="button" aria-pressed="true" data-modus="grund">Grunddesign</button><button type="button" aria-pressed="false" data-modus="bib">Bausteine <small>118</small></button></div>
       <select id="entwurf" aria-label="Entwurf"></select>
       <button class="knopf" type="button" id="kopie">Entwurf kopieren</button>
       <span class="trenn"></span>
@@ -149,7 +163,7 @@ select,input[type=text],input[type=number]{border:1px solid var(--rand2);border-
       <button class="knopf voll" type="button" id="senden">Als Auftrag senden</button>
     </div>
     <div class="arbeit">
-      <aside class="links" aria-label="Struktur">
+      <aside class="links" aria-label="Struktur" id="links">
         <div class="kasten"><h4>Struktur</h4><ul class="baum" id="baum"></ul></div>
         <div class="kasten"><h4>Seiten-Vorlagen</h4><ul class="baum" id="vorlagen"></ul></div>
         <div class="kasten"><h4>Grundlagen</h4><ul class="baum" id="grundlagen"></ul></div>
@@ -186,6 +200,7 @@ select,input[type=text],input[type=number]{border:1px solid var(--rand2);border-
     <ul><li>Geräteklassen mit festen Umbruchpunkten (Handy &lt;600, Tablet 600–1023, PC ≥1024, breit ≥1440 px)</li><li>Navigation je Klasse: Leiste unten (max. 5) · schmale Leiste · Seitenleiste mit Gruppen (max. 2 Ebenen), einklappbar</li><li>Kopfband: Logo, Vereinswechsel, Suche (Strg+K), „+ Neu“, Benachrichtigungen, Hilfe, Profil</li><li>Seitenkopf, Inhaltsraster, Detail-Panel, Dialoge, Meldungen</li><li>Grundlagen: Farbrollen hell/dunkel, Schrift-Skala, Abstands-Skala, Rundungen, Schatten, Symbole, Bewegung</li><li>Zustände: Laden, leer, Fehler, offline</li><li>Barrierefreiheit: Kontrast ≥4,5:1, Ziele ≥24 px (Touch 44 px), Fokus sichtbar und nicht verdeckt</li></ul></div>
   <div><h3>So arbeitest du</h3><ul><li>Links einen Bereich wählen oder in der Mitte darauf klicken</li><li>Rechts einstellen oder im Chat mit Claude besprechen – Claude macht Vorschläge, die du übernimmst oder ablehnst</li><li>Ziehen im Gerüst (z. B. Navigation nach oben) – immer auch per Auswahlfeld möglich</li><li>Entwürfe kopieren, vergleichen; „Als Auftrag senden“ → Werkstatt baut → echte Testseite → Freigabe → Prüfungen → live</li></ul></div>
   <div><h3>Seiten-Vorlagen</h3>Übersicht, Liste mit Filter, Detail, Formular, Einstellungen. Jedes neue Feature baut auf einer Vorlage, dem Gerüst und den Grundwerten auf – ändert sich das Grunddesign, ändern sich alle Seiten mit. Bestehende Seiten werden einmalig je Bereich umgestellt (eigene Aufträge mit Prüfung).</div>
+  <div><h3>Bausteine</h3>Oben auf „Bausteine“ umschalten: Bibliothek aller Bausteine der App (aus dem Code), Varianten × Zustände als Matrix, „verwendet an N Stellen“, Aufräum-Vorschläge für Doppelte, App-E-Mails. Ändern per Regler oder Chat; wirkt nach dem Auftrag überall.</div>
   <div><h3>Abgrenzung</h3>Ein Grunddesign für die ganze App, nicht je Rolle. Vereine stellen im Design-Studio der App nur Vereinsfarbe und Logo ein; die Grundfarben kommen von hier.</div>
 </div>
 
@@ -357,6 +372,66 @@ $("#kopie").addEventListener("click",()=>{ENT.push({name:`${String.fromCharCode(
 $("#versionen").addEventListener("click",()=>{mitte="vergl";$$("[data-m]").forEach(x=>x.setAttribute("aria-selected",x.dataset.m==="vergl"));flaeche();});
 $("#senden").addEventListener("click",()=>{gesendet=true;const s=$("#status");s.textContent="Auftrag #21 · Werkstatt baut …";s.classList.add("bau");mitte="test";$$("[data-m]").forEach(x=>x.setAttribute("aria-selected",x.dataset.m==="test"));flaeche();
   setTimeout(()=>{s.textContent="Auftrag #21 · Testseite fertig → Freigabe";s.classList.remove("bau");flaeche();},3500);});
-function alles(){entwuerfe();geraete();baum();pruef();flaeche();eig();$("#undo").disabled=!hist.length;$("#redo").disabled=!zukunft.length;}
+// ---------------- Baustein-Bibliothek ----------------
+let modus="grund",baustein="kpi";
+const BIB=[["Grundbausteine",[["knopf","Knopf",34],["eingabe","Eingabe & Auswahl",61],["abzeichen","Abzeichen",48]]],
+  ["Zusammengesetzt",[["kpi","Kennzahl-Kachel",23],["tabelle","Tabelle",17],["leer","Leer-/Lade-/Fehlerzustand",40],["dialog","Dialog",29]]],
+  ["Diagramme",[["linie","Liniendiagramm",6],["balken","Balkendiagramm",9],["kurve","Kurve in der Kachel",11]]],
+  ["Fachbausteine",[["spieler","Spielerkarte",14],["training","Trainingskarte",8],["taktik","Taktiktafel",3,"neu"]]],
+  ["App-E-Mails",[["mail-einladung","Einladung",1],["mail-zusammen","Tageszusammenfassung",1]]]];
+const BW={kpi:{vergleich:"Vormonat",kurve:true,sentiment:"automatisch",dichte:"normal"},diagramm:{reihe:["#047857","#1d4ed8","#b45309","#7c3aed","#0e7490","#be123c"],raster:"waagrecht",beschriftung:"direkt",legende:"oben"},knopf:{form:"gerundet",gewicht:"fett"},mail:{kopf:"farbe",knopf:"akzent"}};
+const findB=id=>{for(const [g,l] of BIB){const x=l.find(b=>b[0]===id);if(x)return {g,id:x[0],name:x[1],n:x[2],neu:x[3]==="neu"};}};
+function bibBaum(){
+  $("#links").innerHTML=`<div class="kasten"><h4>Bausteine</h4><input type="text" id="bsuche" placeholder="Suchen …" style="width:100%;margin-bottom:6px"><ul class="baum">${BIB.map(([g,l])=>`<li><span style="font-size:11px;font-weight:700;color:var(--mut);display:block;padding:6px 6px 2px">${g}</span></li>${l.map(([id,n,z,neu])=>`<li><button type="button" class="e2" aria-current="${baustein===id}" data-b="${id}"><span class="punkt p"></span>${n}${neu?'<span class="neu">neu</span>':`<i>${z}×</i>`}</button></li>`).join("")}`).join("")}</ul></div>
+    <div class="kasten"><h4>Aufräumen</h4><div class="doppelt"><b>3 ähnliche Kacheln gefunden</b><br>StatCard, KpiTile, DashboardNumber → zu „Kennzahl-Kachel“ zusammenlegen?<div style="margin-top:6px;display:flex;gap:6px"><button class="knopf voll" type="button" id="zusammen">Zusammenlegen</button><button class="knopf" type="button" id="behalten">Getrennt lassen</button></div></div></div>
+    <div class="kasten"><h4>Prüfungen</h4><div class="pruef"><div><span class="ok">✓</span>Kontrast in allen Varianten</div><div><span class="ok">✓</span>Fokus sichtbar</div><div><span class="wn">!</span>„Taktiktafel“ nutzt 2 eigene Farben</div></div></div>`;
+  $$("[data-b]").forEach(b=>b.addEventListener("click",()=>{baustein=b.dataset.b;alles();}));
+  $("#zusammen")?.addEventListener("click",e=>{e.target.closest(".doppelt").innerHTML="✓ Vorschlag übernommen – geht mit dem nächsten Auftrag an die Werkstatt.";});
+  $("#behalten")?.addEventListener("click",e=>{e.target.closest(".doppelt").innerHTML="Getrennt gelassen.";});
+}
+const svgLinie=(farben,raster)=>{const daten=[[12,14,13,17,16,18],[9,10,12,11,13,14]];const X=i=>20+i*44,Y=v=>110-v*5;
+  return `<svg viewBox="0 0 260 130" width="100%" role="img" aria-label="Anwesenheit U11 und U12 steigt">${raster!=="keins"?[30,60,90].map(y=>`<line x1="20" x2="250" y1="${y}" y2="${y}" stroke="currentColor" stroke-opacity=".12"/>`).join(""):""}${daten.map((d,j)=>`<polyline fill="none" stroke="${farben[j]}" stroke-width="2.5" points="${d.map((v,i)=>X(i)+","+Y(v)).join(" ")}"/><circle cx="${X(5)}" cy="${Y(d[5])}" r="3.5" fill="${farben[j]}"/><text x="${X(5)-4}" y="${Y(d[5])-7}" font-size="10" fill="${farben[j]}" text-anchor="end">${["U11","U12"][j]}</text>`).join("")}${["Mai","Jun","Jul","Aug","Sep","Okt"].map((m,i)=>`<text x="${X(i)}" y="126" font-size="9" fill="currentColor" fill-opacity=".6" text-anchor="middle">${m}</text>`).join("")}</svg>`;};
+const svgBalken=(farben)=>`<svg viewBox="0 0 260 130" width="100%" role="img" aria-label="Tore je Mannschaft">${[["U9",14],["U10",9],["U11",17],["U12",12]].map(([t,v],i)=>`<rect x="${24+i*58}" y="${112-v*5}" width="34" height="${v*5}" rx="4" fill="${farben[0]}"/><text x="${41+i*58}" y="${106-v*5}" font-size="10" text-anchor="middle" fill="currentColor">${v}</text><text x="${41+i*58}" y="125" font-size="9" text-anchor="middle" fill="currentColor" fill-opacity=".6">${t}</text>`).join("")}</svg>`;
+const kurve=f=>`<svg viewBox="0 0 120 28" width="100%" height="28" aria-hidden="true"><polyline fill="none" stroke="${f}" stroke-width="2" points="0,22 20,18 40,20 60,12 80,14 100,8 120,6"/></svg>`;
+function kachel(variante,zustand){
+  const d=D(),f=d.farben[d.modus],k=BW.kpi;
+  if(zustand==="laden")return `<div class="b-kachel"><div class="skel" style="width:50%"></div><div class="skel" style="height:22px;width:70%"></div><div class="skel" style="width:40%"></div></div>`;
+  if(zustand==="leer")return `<div class="b-kachel">Zusagen Samstag<span style="opacity:.65;margin-top:6px">Noch keine Zusagen – die Einladung geht morgen raus.</span></div>`;
+  if(zustand==="fehler")return `<div class="b-kachel">Zusagen Samstag<span style="color:#b91c1c;margin-top:6px">Konnte nicht geladen werden.</span><span style="text-decoration:underline">Nochmal versuchen</span></div>`;
+  const gut=variante!=="absagen";
+  return `<div class="b-kachel">${variante==="absagen"?"Absagen Oktober":"Zusagen Samstag"}<span class="w">${variante==="absagen"?"4":"14 / 18"}</span>${variante!=="einfach"?`<span class="d ${gut?"gut":"gut"}">${variante==="absagen"?"▼ 3":"▲ 2"} <span style="font-weight:400;opacity:.7">vs. ${k.vergleich}</span></span>`:""}${k.kurve&&variante==="kurve"?kurve(f.akzent):""}${variante==="absagen"?'<span style="font-size:11px;opacity:.7">weniger ist gut → grün</span>':""}</div>`;
+}
+function bibFlaeche(){
+  const d=D(),b=findB(baustein),f=$("#flaeche");
+  let inner="";
+  if(baustein==="kpi"){const V=[["einfach","Kennzahl"],["trend","mit Veränderung"],["kurve","mit Kurve"],["absagen","weniger ist gut"]];const Z=[["normal","Normal"],["laden","Laden"],["leer","Keine Daten"],["fehler","Fehler"]];
+    inner=`<div class="matrix" style="--sp:${V.length}"><div class="zeile"><span></span>${V.map(v=>`<span class="kopfz">${v[1]}</span>`).join("")}</div>${Z.map(([z,zn])=>`<div class="zeile"><span class="lab">${zn}</span>${V.map(([v])=>kachel(v,z)).join("")}</div>`).join("")}</div>`;}
+  else if(["linie","balken","kurve"].includes(baustein)){const r=BW.diagramm.reihe;
+    inner=`<div class="matrix" style="--sp:2"><div class="zeile"><span class="lab">Hell</span><div class="b-kachel" style="color:#13211a;background:#fff"><b>Anwesenheit steigt in U11 und U12</b>${baustein==="balken"?svgBalken(r):svgLinie(r,BW.diagramm.raster)}</div><div class="b-kachel" style="background:#111d18;color:#e2eee8;border-color:#22332c"><b>Dunkel</b>${baustein==="balken"?svgBalken(["#34d399"]):svgLinie(["#34d399","#93c5fd"],BW.diagramm.raster)}</div></div><div class="zeile"><span class="lab">Farbreihe</span><div style="grid-column:span 2;display:flex;gap:6px">${r.map((c,i)=>`<span title="${i+1}" style="width:36px;height:22px;border-radius:6px;background:${c}"></span>`).join("")}<span style="font-size:12px;color:var(--mut)">feste Reihenfolge · nie nur Farbe (Beschriftung direkt)</span></div></div></div>`;}
+  else if(baustein.startsWith("mail")){const a=d.farben.hell.akzent;
+    inner=`<div class="mail" style="width:100%"><div class="karte"><div style="background:${BW.mail.kopf==="farbe"?d.farben.hell.kopf:"#fff"};color:${BW.mail.kopf==="farbe"?"#fff":"#13211a"};padding:14px 18px;font-weight:700;display:flex;gap:8px;align-items:center"><span style="width:26px;height:26px;border-radius:7px;background:${a};display:grid;place-items:center;color:#fff">T</span>Trainer to go</div><div style="padding:18px">${baustein==="mail-einladung"?"<b style='font-size:18px'>Du bist eingeladen</b><p>Der SV Musterdorf lädt dich zur Mannschaft U11 ein.</p>":"<b style='font-size:18px'>Deine Tageszusammenfassung</b><p>2 neue Nachrichten · 1 Training morgen 17:30 · 3 Zusagen</p>"}<span style="display:inline-block;background:${a};color:#fff;border-radius:${d.rund}px;padding:9px 16px;font-weight:700">${baustein==="mail-einladung"?"Einladung annehmen":"In der App öffnen"}</span><p style="font-size:11px;color:#5b6c63;margin-top:16px">Du bekommst diese Mail, weil … · Abmelden · Impressum</p></div></div></div>`;}
+  else {inner=`<div class="matrix" style="--sp:3"><div class="zeile"><span></span><span class="kopfz">Variante A</span><span class="kopfz">Variante B</span><span class="kopfz">deaktiviert</span></div><div class="zeile"><span class="lab">${b.name}</span>${["","",""].map((_,i)=>`<div class="b-kachel" style="opacity:${i===2?.5:1}">${b.name}<span class="w" style="font-size:16px">Beispiel</span></div>`).join("")}</div></div>`;}
+  f.innerHTML=`<div style="width:100%;display:flex;flex-direction:column;gap:12px"><div class="massband" style="text-align:left">${b.g} › ${b.name} · Vorschau mit Beispieldaten im Entwurf ${ENT[ai].name.split(" · ")[0]}</div><div style="${appVars(d,klasse)};color:var(--a-text)">${inner}</div>
+    <div class="verw"><b>Verwendet an ${b.n} Stelle${b.n===1?"":"n"}</b><ul>${["Start (Übersicht)","Mannschaft › Kader","Spiele › Saison","Verein › Finanzen"].slice(0,Math.min(4,b.n)).map(x=>`<li>${x} <a href="#" onclick="return false">Arbeitsplatz öffnen</a></li>`).join("")}${b.n>4?`<li>… und ${b.n-4} weitere</li>`:""}</ul>Eine Änderung hier gilt an allen diesen Stellen.</div></div>`;
+}
+function bibEig(){
+  const b=findB(baustein);let h=`<div><div class="pfad">Bausteine › ${b.g} › ${b.name}</div><h3>${b.name}</h3></div>`;
+  const ab=(t,inner)=>`<div class="abschnitt"><h4>${t}</h4><div class="feld">${inner}</div></div>`;
+  if(baustein==="kpi")h+=ab("Kennzahl-Kachel",feld("Vergleich mit",sel("bk-v",BW.kpi.vergleich,[["Vormonat","Vormonat"],["Vorwoche","Vorwoche"],["Ziel","Ziel"]]),"bk-v")+feld("Kurve zeigen",cb("bk-k",BW.kpi.kurve),"bk-k")+feld("Farbe",sel("bk-s",BW.kpi.sentiment,[["automatisch","nach gut/schlecht"],["neutral","immer neutral"]]),"bk-s"))+'<div class="hinweis">Nie eine Zahl allein: immer mit Vergleich. Grün/Rot richtet sich danach, ob die Veränderung gut ist – nicht nach rauf/runter.</div>';
+  else if(["linie","balken","kurve"].includes(baustein))h+=ab("Diagramme",feld("Gitterlinien",sel("bd-r",BW.diagramm.raster,[["waagrecht","waagrecht, dezent"],["keins","keine"]]),"bd-r")+feld("Beschriftung",sel("bd-b",BW.diagramm.beschriftung,[["direkt","direkt an den Linien"],["legende","Legende"]]),"bd-b")+'<span class="l">Titel</span><span>nennt die Aussage</span>')+'<div class="hinweis">Farbreihen gelten für alle Diagramme der App (kategorisch in fester Reihenfolge, Signalfarben fest).</div>';
+  else if(baustein.startsWith("mail"))h+=ab("App-E-Mail",feld("Kopf",sel("bm-k",BW.mail.kopf,[["farbe","Kopfband-Farbe"],["weiss","weiß mit Logo"]]),"bm-k")+'<span class="l">Fußzeile</span><span>Grund der Mail, Abmelden, Impressum (Pflicht)</span>')+'<div class="hinweis">Mails nutzen dieselben Grundwerte wie die App. PDF-Layouts stellst du in der App selbst ein.</div>';
+  else h+=ab("Eigenschaften",'<span class="l">Varianten</span><span>aus dem Code übernommen</span><span class="l">Zustände</span><span>normal, Fokus, deaktiviert, laden</span>')+(findB(baustein).neu?'<div class="hinweis">Neu von der Werkstatt angelegt (Auftrag #18) – bitte durchsehen. Nutzt 2 eigene Farben statt der Grundwerte.</div>':"");
+  h+=`<button class="knopf" type="button" id="frag">Mit Claude über „${b.name}“ sprechen</button>`;
+  $("#eig").innerHTML=h;
+  const setz={"bk-v":v=>BW.kpi.vergleich=v,"bk-k":v=>BW.kpi.kurve=v,"bk-s":v=>BW.kpi.sentiment=v,"bd-r":v=>BW.diagramm.raster=v,"bd-b":v=>BW.diagramm.beschriftung=v,"bm-k":v=>BW.mail.kopf=v};
+  $$("#eig select,#eig input").forEach(el=>el.addEventListener("change",()=>{const v=el.type==="checkbox"?el.checked:el.value;setz[el.id]?.(v);alles();}));
+  $("#frag").addEventListener("click",()=>{zeigeChat();$("#chattext").focus();});
+  $("#bezug").textContent=`Bezug: Baustein ${b.name}`;
+}
+const linksGrund=$("#links").innerHTML;
+$$("[data-modus]").forEach(b=>b.addEventListener("click",()=>{modus=b.dataset.modus;$$("[data-modus]").forEach(x=>x.setAttribute("aria-pressed",x===b));$("#modustitel").textContent=modus==="bib"?"Bausteine":"Grunddesign";if(modus==="grund")$("#links").innerHTML=linksGrund;alles();}));
+function alles(){entwuerfe();geraete();
+  if(modus==="bib"){bibBaum();bibFlaeche();bibEig();}else{baum();pruef();flaeche();eig();}
+  $("#undo").disabled=!hist.length;$("#redo").disabled=!zukunft.length;}
 alles();
 </script>

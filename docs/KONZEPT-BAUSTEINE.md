@@ -1,7 +1,7 @@
 # Konzept: Baustein-Bibliothek im App-Designer
 
 **Stand:** 2026-10-22 22:30 · Wer: Claude (Konzept), Anweisung Gerhard 22:16 („Kacheln, Diagramme und sonstiges, alles was die App
-oder du für die App erstellst, einbinden, ändern/umgestalten, mit Chat – erst Konzept, im Internet prüfen“) · **Status: ENTWURF, nicht freigegeben**
+oder du für die App erstellst, einbinden, ändern/umgestalten, mit Chat – erst Konzept, im Internet prüfen“) · **Status: ENTWURF, Entscheidungen 22:33 eingearbeitet, noch nicht freigegeben**
 
 ## Ziel
 Alles, was eine App sichtbar zusammensetzt, ist im App-Designer der Codeschmiede als **Baustein** sichtbar, mit allen Varianten und
@@ -24,7 +24,8 @@ Zuständen, und kann dort geändert werden – per Regler, per Chat mit Claude o
    Meldung, Leerzustand, Lade-Platzhalter, Fehlerzustand, Seitenkopf.
 3. **Diagramme:** Linie, Balken (gestapelt), Fläche, Donut (sparsam), Kurve in der Kachel, Fortschritt/Ring, Tabelle mit Balken.
 4. **Fachbausteine (je App):** z. B. Spielerkarte, Trainingskarte, Kalendereintrag, Spielfeld/Taktiktafel, Belastungskurve, Anwesenheitsraster.
-5. **Ausgaben:** PDF-Layouts (Trainingsplan, Spielbericht, Rechnung), E-Mail-Vorlagen – gleiche Grundwerte (optional, siehe Entscheidungen).
+5. **App-E-Mails:** Einladung, Passwort, Benachrichtigungen, Zusammenfassungen – gleiche Grundwerte, im Designer mit Vorschau änderbar.
+   (PDF-Layouts **nicht** hier: die stellt Gerhard in der App selbst ein – Entscheidung 22:33.)
 
 ## Steckbrief je Baustein (im Designer)
 Aufbau (Teile benannt) · Varianten · Zustände (normal, Zeiger darüber, Fokus, gedrückt, deaktiviert, laden, leer, Fehler) · Größen ·
@@ -41,15 +42,18 @@ Prüfungen (Kontrast, Zielgröße, Fokus) · Versionen.
 1. **Bestandsaufnahme:** Die Werkstatt liest den Code der App und erstellt das Baustein-Verzeichnis (`docs/BAUSTEINE.md` + maschinenlesbar),
    inkl. Fundstellen. Doppelte/ähnliche Bausteine werden als Zusammenlegungs-Vorschlag gemeldet.
 2. **Galerie in der App:** Eine Seite `/bausteine`, nur auf Testseiten (*.pages.dev) erreichbar, zeigt jeden Baustein mit Varianten und Beispieldaten.
-   Die Live-Vorschau der Codeschmiede lädt diese Seite; Regler senden Werte über den Vorschau-Helfer, damit man **vor** dem Auftrag sieht,
-   wie es wirkt (nur Darstellung, nichts gespeichert).
+   Die Live-Vorschau der Codeschmiede lädt diese Seite **nach** dem Bau des Auftrags (keine Sofortwirkung der Regler – Entscheidung 22:33);
+   im Designer zeigt die Matrix den Entwurf schematisch.
 3. **Zentrale Bausteine:** Jeder Baustein existiert genau einmal im Code und nutzt nur Grundwerte. Regel für die Werkstatt: erst vorhandene
    Bausteine verwenden, neue nur über die Bibliothek; Feature-Prüfung meldet eigene Farben/Abstände oder Doppelbausteine als rot.
 4. **Neue Bausteine:** Baut die Werkstatt (oder Claude im Chat) einen neuen Baustein, wird er automatisch ins Verzeichnis und in die Galerie
    aufgenommen und in der Bibliothek als „neu“ markiert.
 
-## Offene Entscheidungen
-siehe Rückfragen im Chat (22:30).
+## Entscheidungen Gerhard (22:33)
+- PDF-Layouts bleiben in der App (selbst einstellen); App-E-Mails kommen in die Bibliothek.
+- Regler wirken erst nach dem Auftrag (Testseite), nicht sofort.
+- Bestand: Bestandsaufnahme + Aufräumen (Zusammenlegungs-Vorschläge, Gerhard entscheidet je Vorschlag).
+- Bibliothek wird in Entwurf 0.9 des App-Designers eingebaut und zusammen freigegeben.
 
 ## Quellen
 Storybook Controls (storybook.js.org/docs/essentials/controls) · IBM/Carbon Datenvisualisierung (ibm.com/design/language/data-visualization,
