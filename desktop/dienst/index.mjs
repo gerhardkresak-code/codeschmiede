@@ -41,7 +41,7 @@ const ERLAUBT = [
   // feste Lese-Befehle statt Freigabe nach Anfang (git log/diff --output= schreibt Dateien – Prüfung 2026-10-22)
   "Bash(git status)", "Bash(git status --short)", "Bash(git diff)", "Bash(git diff --stat)", "Bash(git diff --cached)",
   "Bash(git log --oneline -20)", "Bash(git log -5)", "Bash(git add -A)", "Bash(git add .)", "Bash(git add -- *)", "Bash(git commit -m *)", "Bash(git fetch origin)",
-  "Bash(git checkout -b feature/cs-*)", "Bash(git switch -c feature/cs-*)", "Bash(git push -u origin feature/cs-*)", "Bash(git push origin feature/cs-*)",
+  "Bash(git checkout -b feature/cs-*)", "Bash(git switch -c feature/cs-*)", "Bash(git push -u origin HEAD)", "Bash(git push origin HEAD)",
   "Bash(gh pr create *)", "Bash(gh pr view*)", "Bash(gh pr checks*)", "Bash(ls*)",
   // Bewusst NICHT frei: node (auch --check: --require lädt Code), npm test / npm run build / python3 tools/* / cat – führen Code bzw. Dateien aus, die die Werkstatt selbst
   // ändern kann (Prüfung 2026-10-22, Befund ROT). Diese Befehle laufen über eine Erlaubnis-Anfrage im Programm.
@@ -53,9 +53,10 @@ const VERBOTEN = [
   "Bash(git *--output*)", "Bash(git commit *-F*)", "Bash(git commit *--file*)", "Bash(git commit *--template*)", "Bash(git commit *-t *)",
   "Bash(git add *--pa*)", "Bash(git commit *--pa*)", "Bash(gh pr create *--body-file*)", "Bash(gh pr create *-F*)", "Bash(git config*)",
   // Push nur auf den eigenen Zweig – nie main, kein Umbenennen per Ziel (x:main), kein Löschen/Erzwingen
-  "Bash(git push *:*)", "Bash(git push *main*)", "Bash(git push *+*)", "Bash(git push *-f*)", "Bash(git push *--force*)",
-  "Bash(git push *--delete*)", "Bash(git push *-d *)", "Bash(git push *--mirror*)", "Bash(git push *--all*)", "Bash(git push *--tags*)",
-  "Bash(git push *--receive-pack*)", "Bash(git push *--exec*)", "Bash(git push *--no-verify*)",
+  // (mit Leerzeichen vor der Option, damit Zweignamen wie „…-formular“ oder „…-domain“ nicht getroffen werden)
+  "Bash(git push *:*)", "Bash(git push * main*)", "Bash(git push *+*)", "Bash(git push * -f*)", "Bash(git push * --force*)",
+  "Bash(git push * --delete*)", "Bash(git push * -d *)", "Bash(git push * --mirror*)", "Bash(git push * --all*)", "Bash(git push * --tags*)",
+  "Bash(git push * --receive-pack*)", "Bash(git push * --exec*)", "Bash(git push * --no-verify*)",
   // nichts außerhalb des Arbeitsordners und nichts in Git-Interna / Hook-Ordnern schreiben
   "Edit(../**)", "Write(../**)", "Edit(**/.git/**)", "Write(**/.git/**)", "Edit(**/.husky/**)", "Write(**/.husky/**)",
   // Einstellungen, Hooks und Abläufe darf die Werkstatt nicht selbst ändern (sonst Umgehung der Erlaubnis-Brücke)
@@ -181,7 +182,7 @@ function auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, neu
     `- Du arbeitest im aktuellen Ordner auf dem Zweig ${zweig}. Niemals direkt auf main. Keine Personendaten Dritter, keine Geheimnisse in Dateien.`,
     "- Bei sichtbaren Neuerungen Handbuch/Doku mitziehen; jede Änderung in docs/CHANGELOG.md (neue Zeile oben).",
     "- Brauchst du eine Entscheidung von Gerhard: beende deine Antwort mit einer Zeile, die mit „RÜCKFRAGE:“ beginnt (mit Empfehlung).",
-    `- Wenn fertig: Prüfungen ausführen, committen, \`git push -u origin ${zweig}\`, Pull Request mit \`gh pr create --base main --fill\` öffnen,`,
+    `- Wenn fertig: Prüfungen ausführen, committen, \`git push -u origin HEAD\`, Pull Request mit \`gh pr create --base main --fill\` öffnen,`,
     "  dann als letzte Zeile genau: „ERGEBNIS-PR: #<Nummer> <Zweig>“ und davor eine kurze Liste, was du gemacht hast.",
   ].filter(Boolean).join("\n");
 }
