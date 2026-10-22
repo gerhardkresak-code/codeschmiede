@@ -113,6 +113,14 @@ async function pcAnmelden() {
     const { data } = await db.from("ws_werkstatt_pcs").update({ an: true, zuletzt: new Date().toISOString() }).eq("id", pcId).select().maybeSingle();
     if (data) return;
   }
+  // gleicher PC nach Neuinstallation: vorhandenen Eintrag (gleiche Person, gleicher Name) weiterverwenden
+  const { data: alt } = await db.from("ws_werkstatt_pcs").select("id").eq("benutzer_id", cfg.user_id).eq("name", cfg.pc_name || os.hostname()).order("zuletzt", { ascending: false }).limit(1);
+  if (alt?.[0]) {
+    pcId = alt[0].id;
+    await db.from("ws_werkstatt_pcs").update({ an: true, zuletzt: new Date().toISOString() }).eq("id", pcId);
+    await writeFile(datei, JSON.stringify({ id: pcId }));
+    return;
+  }
   const { data, error } = await db.from("ws_werkstatt_pcs").insert({ benutzer_id: cfg.user_id, name: cfg.pc_name || os.hostname(), an: true, admin_pc: !!cfg.admin }).select().single();
   if (error) throw new Error("Werkstatt-PC konnte nicht angemeldet werden: " + error.message);
   pcId = data.id;
@@ -302,7 +310,10 @@ async function fuehreAus(auftrag, { fortsetzen = false } = {}) {
 async function naechsterAuftrag() {
   if (laeuft || stopp) return;
   // 1. Fortsetzen: eigene Rückfragen, auf die geantwortet wurde
-  const { data: fragen } = await db.from("ws_auftraege").select("*").eq("werkstatt_pc", pcId).eq("stand", "frage").order("id");
+  // (auch von früheren Werkstatt-PC-Einträgen derselben Person, z. B. nach Neuinstallation)
+  const { data: meinePcs } = await db.from("ws_werkstatt_pcs").select("id").eq("benutzer_id", cfg.user_id);
+  const pcIds = [...new Set([pcId, ...(meinePcs || []).map((p) => p.id)])];
+  const { data: fragen } = await db.from("ws_auftraege").select("*").in("werkstatt_pc", pcIds).eq("stand", "frage").order("id");
   for (const a of fragen || []) {
     const { data: n } = await db.from("ws_nachrichten").select("von, art, id").eq("auftrag_id", a.id).order("id", { ascending: false }).limit(1);
     if (n?.[0]?.von) {
