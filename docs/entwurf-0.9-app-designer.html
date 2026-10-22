@@ -1,0 +1,488 @@
+<title>Codeschmiede App-Designer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: Profi-Editor in vier Zonen – Struktur | Arbeitsfläche (Gerüst / Testseite / Vergleich) | Eigenschaften + Chat; Werkzeugleiste oben */
+:root{
+  --bg:#eef2f0; --fl:#ffffff; --fl2:#f7f9f8; --fg:#13211a; --mut:#5b6c63; --rand:#d9e2dd; --rand2:#c7d3cc;
+  --gruen:#047857; --gruen-h:#e7f6ef; --leiste:#0f2a22; --leiste-fg:#cfeee0; --sel:#f97316; --sel-h:rgba(249,115,22,.10); --info:#1d4ed8; --info-h:#eaf0ff; --warn:#b45309; --warn-h:#fff7e6;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif; --text:"Barlow",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --r:10px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0a1310;--fl:#101b17;--fl2:#0d1714;--fg:#e2eee8;--mut:#90a59a;--rand:#203029;--rand2:#2b3d35;--gruen:#34d399;--gruen-h:#0e2b20;--info:#93c5fd;--info-h:#121f38;--warn:#fbbf24;--warn-h:#2a2110;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0a1310;--fl:#101b17;--fl2:#0d1714;--fg:#e2eee8;--mut:#90a59a;--rand:#203029;--rand2:#2b3d35;--gruen:#34d399;--gruen-h:#0e2b20;--info:#93c5fd;--info-h:#121f38;--warn:#fbbf24;--warn-h:#2a2110;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--text);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px}
+h1,h2,h3,h4{font-family:var(--display);margin:0;letter-spacing:.01em;text-wrap:balance}
+button,input,select,textarea{font:inherit;color:inherit}
+.kopf{max-width:1500px;margin:0 auto 12px;display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;justify-content:space-between}
+.kopf h1{font-size:28px}.kopf p{margin:0;color:var(--mut);max-width:80ch}
+.rahmen{max-width:1500px;margin:0 auto;border:1px solid var(--rand);border-radius:14px;overflow:hidden;background:var(--fl);display:grid;grid-template-columns:56px minmax(0,1fr)}
+.cs{background:var(--leiste);display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 0;color:var(--leiste-fg)}
+.cs b{width:34px;height:34px;border-radius:9px;background:#10b981;color:#05271b;display:grid;place-items:center;font-family:var(--display);font-size:18px}
+.cs span{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font-size:11px;opacity:.75}.cs span.akt{background:rgba(255,255,255,.14);opacity:1}
+.editor{min-width:0;display:grid;grid-template-rows:auto minmax(0,1fr)}
+/* Werkzeugleiste */
+.leiste{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--rand);background:var(--fl)}
+.titel{display:flex;flex-direction:column;line-height:1.15;margin-right:6px}.titel small{color:var(--mut);font-size:12px}.titel b{font-family:var(--display);font-size:18px}
+.seg{display:inline-flex;border:1px solid var(--rand2);border-radius:9px;overflow:hidden;background:var(--fl2)}
+.seg button{border:0;background:none;padding:5px 10px;font-weight:600;font-size:13px;cursor:pointer;color:var(--mut);display:flex;gap:6px;align-items:center}
+.seg button[aria-pressed=true]{background:var(--fl);color:var(--fg);box-shadow:inset 0 -2px 0 var(--gruen)}
+.seg button small{font:11px var(--mono);color:var(--mut)}
+.knopf{border:1px solid var(--rand2);background:var(--fl);border-radius:9px;padding:5px 11px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.knopf.voll{background:var(--gruen);border-color:var(--gruen);color:#fff}:root:not([data-theme="light"]) .knopf.voll{color:#04241a}
+.knopf:disabled{opacity:.45;cursor:default}
+.knopf:focus-visible,.seg button:focus-visible,.baum button:focus-visible{outline:3px solid var(--gruen);outline-offset:2px}
+select,input[type=text],input[type=number]{border:1px solid var(--rand2);border-radius:8px;padding:4px 8px;background:var(--fl2);min-width:0}
+.trenn{width:1px;height:24px;background:var(--rand)}
+.status{font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;background:var(--gruen-h);color:var(--gruen)}
+.status.bau{background:var(--warn-h);color:var(--warn)}
+/* Arbeitsbereich */
+.arbeit{display:grid;grid-template-columns:250px minmax(0,1fr) 330px;min-height:680px}
+.links,.rechts{background:var(--fl);display:flex;flex-direction:column;min-width:0;min-height:0}
+.links{border-right:1px solid var(--rand)}.rechts{border-left:1px solid var(--rand)}
+.kasten{padding:10px 12px;border-bottom:1px solid var(--rand)}
+.kasten h4{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:6px;font-family:var(--text);font-weight:700}
+.baum{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.baum button{width:100%;text-align:left;border:0;background:none;padding:4px 6px;border-radius:7px;cursor:pointer;display:flex;gap:6px;align-items:center;font-size:13px}
+.baum button:hover{background:var(--fl2)}.baum button[aria-current=true]{background:var(--sel-h);color:var(--fg);box-shadow:inset 2px 0 0 var(--sel)}
+.baum .e2{padding-left:22px}.baum .e3{padding-left:38px}
+.baum i{font-style:normal;color:var(--mut);font-size:11px;margin-left:auto;font-family:var(--mono)}
+.punkt{width:8px;height:8px;border-radius:2px;background:var(--rand2);flex:none}.punkt.p{background:var(--gruen)}
+.pruef{display:flex;flex-direction:column;gap:4px;font-size:12px}.pruef div{display:flex;gap:6px;align-items:center}
+.ok{color:var(--gruen);font-weight:700}.wn{color:var(--warn);font-weight:700}
+/* Mitte */
+.mitte{min-width:0;display:flex;flex-direction:column;background:var(--bg)}
+.reiter{display:flex;gap:2px;padding:6px 10px 0;border-bottom:1px solid var(--rand);background:var(--fl2)}
+.reiter button{border:1px solid transparent;border-bottom:0;background:none;padding:6px 12px;border-radius:9px 9px 0 0;font-weight:600;color:var(--mut);cursor:pointer}
+.reiter button[aria-selected=true]{background:var(--bg);border-color:var(--rand);color:var(--fg)}
+.flaeche{flex:1;overflow:auto;padding:18px;display:flex;justify-content:center;align-items:flex-start;position:relative}
+.massband{font:11px var(--mono);color:var(--mut);text-align:center;margin-bottom:6px}
+.geraet{transition:width .25s;max-width:100%}
+.rahmenapp{border-radius:12px;overflow:hidden;box-shadow:0 10px 30px rgba(15,42,34,.16);background:var(--a-bg);color:var(--a-text);font-family:var(--a-font);display:grid;position:relative}
+.zone{position:relative;outline:1px dashed transparent;transition:outline-color .1s}
+.gitter .zone{outline-color:rgba(249,115,22,.35)}
+.zone.gew{outline:2px solid var(--sel)!important;z-index:2}
+.zone .marke{position:absolute;top:-1px;left:-1px;transform:translateY(-100%);background:var(--sel);color:#fff;font:600 10px var(--mono);padding:1px 6px;border-radius:5px 5px 0 0;display:none}
+.zone.gew .marke{display:block}
+.a-kopf{display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--a-kopf);color:var(--a-kopftext);height:var(--a-kopfh)}
+.a-logo{display:flex;align-items:center;gap:8px;font-weight:700}.a-logo i{width:28px;height:28px;border-radius:8px;background:var(--a-akzent);color:#fff;display:grid;place-items:center;font-style:normal;font-family:var(--display)}
+.a-such{height:30px;border-radius:999px;background:rgba(127,127,127,.18);flex:1;max-width:280px;display:flex;align-items:center;padding:0 12px;font-size:12px;opacity:.8}
+.a-ic{width:30px;height:30px;border-radius:999px;background:rgba(127,127,127,.18);display:grid;place-items:center;font-size:11px}
+.a-neu{background:var(--a-akzent);color:#fff;border-radius:var(--a-rund);padding:5px 10px;font-size:12px;font-weight:600}
+.a-nav{background:var(--a-nav);padding:10px 8px;display:flex;flex-direction:column;gap:2px;font-size:13px;border-right:1px solid var(--a-linie)}
+.a-nav .gr{font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.55;padding:8px 8px 2px}
+.a-nav span{padding:6px 8px;border-radius:var(--a-rund);display:flex;gap:8px;align-items:center;white-space:nowrap;overflow:hidden}
+.a-nav span b{width:16px;height:16px;border-radius:4px;border:1.5px solid currentColor;flex:none;opacity:.7}
+.a-nav span.akt{background:var(--a-akzent-h);color:var(--a-akzent);font-weight:600}
+.a-haupt{display:flex;flex-direction:column;min-width:0}
+.a-seitenkopf{padding:var(--a-rand) var(--a-rand) 0;display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;max-width:var(--a-maxb);width:100%;margin:0 auto}
+.a-seitenkopf small{display:block;font-size:11px;opacity:.6}.a-seitenkopf h3{font-size:22px;font-family:var(--a-titel)}
+.a-inhalt{padding:var(--a-rand);display:grid;grid-template-columns:repeat(var(--a-spalten),minmax(0,1fr));gap:var(--a-abstand);max-width:var(--a-maxb);width:100%;margin:0 auto;align-content:start}
+.a-karte{background:var(--a-flaeche);border:1px solid var(--a-linie);border-radius:var(--a-rund);padding:12px;font-size:12px;box-shadow:var(--a-schatten)}
+.a-karte b{display:block;font-size:20px;color:var(--a-akzent);font-family:var(--a-titel)}
+.a-panel{position:absolute;top:var(--a-kopfh);right:0;bottom:0;width:min(320px,100%);background:var(--a-flaeche);border-left:1px solid var(--a-linie);box-shadow:-8px 0 24px rgba(0,0,0,.12);padding:14px;font-size:12px}
+.a-unten{display:flex;justify-content:space-around;background:var(--a-nav);border-top:1px solid var(--a-linie);padding:6px 4px 8px;font-size:11px}
+.a-unten span{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:52px;padding:2px 4px;border-radius:10px}
+.a-unten span b{width:20px;height:20px;border-radius:6px;border:1.5px solid currentColor;opacity:.7}
+.a-unten span.akt{color:var(--a-akzent);font-weight:600}
+.a-toast{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;background:#13211a;color:#fff;border-radius:10px;padding:6px 12px;font-size:12px}
+.testseite{width:100%;display:flex;flex-direction:column;align-items:center;gap:8px}
+.adr{font:12px var(--mono);color:var(--mut);background:var(--fl);border:1px solid var(--rand);border-radius:8px;padding:5px 10px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bauhinweis{position:absolute;inset:0;display:grid;place-items:center;background:rgba(238,242,240,.72);font-weight:700;color:#13211a;border-radius:12px;z-index:5}
+.vergleich{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%}
+.vergleich h4{font-size:15px;margin-bottom:4px}
+.diff{grid-column:1/-1;background:var(--fl);border:1px solid var(--rand);border-radius:10px;padding:10px 12px;font-size:13px}
+.diff li{margin:2px 0}
+/* Rechts: Eigenschaften / Chat */
+.rreiter{display:flex;border-bottom:1px solid var(--rand)}.rreiter button{flex:1;border:0;background:none;padding:9px;font-weight:700;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent;display:flex;gap:6px;justify-content:center;align-items:center}
+.rreiter button[aria-selected=true]{color:var(--fg);border-bottom-color:var(--gruen)}
+.zahl{background:var(--sel);color:#fff;border-radius:999px;font-size:11px;padding:0 6px}
+.eig{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
+.eig h3{font-size:20px}.eig .pfad{font:11px var(--mono);color:var(--mut)}
+.feld{display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px 10px;align-items:center;font-size:13px}
+.feld label,.feld span.l{color:var(--mut)}
+.abschnitt{border:1px solid var(--rand);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.abschnitt h4{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-family:var(--text);font-weight:700}
+.swatches{display:flex;gap:5px;flex-wrap:wrap}.sw{width:24px;height:24px;border-radius:7px;border:2px solid var(--rand2);cursor:pointer;padding:0}
+.sw[aria-pressed=true]{outline:3px solid var(--sel);outline-offset:1px}
+.hinweis{font-size:12px;color:var(--mut);background:var(--fl2);border-radius:8px;padding:8px}
+.skala{display:flex;gap:4px;align-items:flex-end}.skala span{background:var(--gruen-h);border:1px solid var(--gruen);border-radius:3px}
+.chat{flex:1;display:flex;flex-direction:column;min-height:0}
+.verlauf{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.m{max-width:94%;border-radius:12px;padding:8px 11px;font-size:13px;background:var(--fl2);border:1px solid var(--rand)}
+.m.ich{align-self:flex-end;background:var(--gruen-h);border-color:transparent}
+.m .wer{font-size:11px;font-weight:700;color:var(--mut);margin-bottom:2px}
+.vorschlag{margin-top:6px;border:1px dashed var(--sel);border-radius:9px;padding:7px 9px;background:var(--sel-h)}
+.vorschlag ul{margin:4px 0 6px;padding-left:18px}
+.eingabe{border-top:1px solid var(--rand);padding:10px;display:flex;flex-direction:column;gap:6px}
+.eingabe textarea{border:1px solid var(--rand2);border-radius:10px;padding:8px 10px;background:var(--fl2);resize:none;min-height:56px}
+.eingabe .zeile{display:flex;gap:6px;align-items:center}
+.matrix{display:grid;gap:14px;width:100%}
+.matrix .zeile{display:grid;grid-template-columns:110px repeat(var(--sp),minmax(0,1fr));gap:10px;align-items:start}
+.matrix .kopfz{font:600 11px var(--mono);color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.matrix .lab{font-size:12px;font-weight:700;color:var(--mut);padding-top:8px}
+.b-kachel{background:var(--a-flaeche);border:1px solid var(--a-linie);border-radius:var(--a-rund);padding:12px;color:var(--a-text);font-family:var(--a-font);min-height:96px;display:flex;flex-direction:column;gap:2px;font-size:12px}
+.b-kachel .w{font:700 24px var(--a-titel);color:var(--a-text)}.b-kachel .d{font-weight:700;font-size:12px}
+.b-kachel .gut{color:#15803d}.b-kachel .schlecht{color:#b91c1c}
+.skel{background:linear-gradient(90deg,var(--a-linie),transparent,var(--a-linie));border-radius:6px;height:10px;margin:4px 0}
+.verw{background:var(--fl);border:1px solid var(--rand);border-radius:10px;padding:10px 12px;font-size:13px}
+.verw li{margin:2px 0}
+.neu{font-size:10px;font-weight:700;background:var(--info-h);color:var(--info);border-radius:999px;padding:0 6px;margin-left:auto}
+.doppelt{border:1px dashed var(--warn);background:var(--warn-h);border-radius:10px;padding:8px 10px;font-size:12px}
+.mail{background:#f4f6f5;padding:16px;border-radius:10px}.mail .karte{max-width:520px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;color:#13211a;font-family:Barlow,system-ui,sans-serif;font-size:13px}
+.erkl{max-width:1500px;margin:14px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.erkl div{background:var(--fl);border:1px solid var(--rand);border-radius:12px;padding:12px 14px}.erkl h3{font-size:18px;margin-bottom:4px}
+.erkl ul{margin:4px 0 0;padding-left:18px}
+@media (max-width:1180px){.arbeit{grid-template-columns:220px minmax(0,1fr)}.rechts{grid-column:1/-1;border-left:0;border-top:1px solid var(--rand);min-height:420px}}
+@media (max-width:760px){.rahmen{grid-template-columns:1fr}.cs{display:none}.arbeit{grid-template-columns:1fr}.links{border-right:0;border-bottom:1px solid var(--rand)}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="kopf">
+  <h1>Entwurf 0.9 · App-Designer</h1>
+  <p>Stand 22.10.2026 22:30 (mit Seiten-Vorlagen) · Grunddesign einer App (hier: Trainer to go). Links die Struktur des Gerüsts, Mitte Gerüst, echte Testseite oder Vergleich, rechts Eigenschaften und der Chat mit Claude. Beispielwerte; im Programm kommen sie aus dem Code der App.</p>
+</div>
+
+<div class="rahmen">
+  <nav class="cs" aria-label="Codeschmiede"><b>C</b><span>Zentr.</span><span class="akt">Design</span><span>Vorsch.</span><span>Prüf.</span><span>Wissen</span></nav>
+  <div class="editor">
+    <div class="leiste" role="toolbar" aria-label="Werkzeugleiste">
+      <div class="titel"><small>App-Designer · Trainer to go</small><b id="modustitel">Grunddesign</b></div>
+      <div class="seg" role="group" aria-label="Bereich"><button type="button" aria-pressed="true" data-modus="grund">Grunddesign</button><button type="button" aria-pressed="false" data-modus="bib">Bausteine <small>118</small></button><button type="button" aria-pressed="false" data-modus="marke">Marke</button></div>
+      <select id="entwurf" aria-label="Entwurf"></select>
+      <button class="knopf" type="button" id="kopie">Entwurf kopieren</button>
+      <span class="trenn"></span>
+      <div class="seg" role="group" aria-label="Geräteklasse" id="geraete"></div>
+      <span class="trenn"></span>
+      <button class="knopf" type="button" id="undo" title="Rückgängig (Strg+Z)">↶</button><button class="knopf" type="button" id="redo" title="Wiederholen (Strg+Y)">↷</button>
+      <button class="knopf" type="button" id="gitter" aria-pressed="false">Raster</button>
+      <span style="flex:1"></span>
+      <span class="status" id="status">Entwurf · nicht gesendet</span>
+      <button class="knopf" type="button" id="versionen">Versionen</button>
+      <button class="knopf voll" type="button" id="senden">Als Auftrag senden</button>
+    </div>
+    <div class="arbeit">
+      <aside class="links" aria-label="Struktur" id="links">
+        <div class="kasten"><h4>Struktur</h4><ul class="baum" id="baum"></ul></div>
+        <div class="kasten"><h4>Seiten-Vorlagen</h4><ul class="baum" id="vorlagen"></ul></div>
+        <div class="kasten"><h4>Grundlagen</h4><ul class="baum" id="grundlagen"></ul></div>
+        <div class="kasten"><h4>Prüfungen</h4><div class="pruef" id="pruef"></div></div>
+      </aside>
+      <section class="mitte" aria-label="Arbeitsfläche">
+        <div class="reiter" role="tablist">
+          <button role="tab" aria-selected="true" data-m="geruest" type="button">Gerüst</button>
+          <button role="tab" aria-selected="false" data-m="test" type="button">Testseite (live)</button>
+          <button role="tab" aria-selected="false" data-m="vergl" type="button">Vergleich</button>
+        </div>
+        <div class="flaeche" id="flaeche"></div>
+      </section>
+      <aside class="rechts" aria-label="Eigenschaften und Chat">
+        <div class="rreiter" role="tablist">
+          <button role="tab" aria-selected="true" data-r="eig" type="button">Eigenschaften</button>
+          <button role="tab" aria-selected="false" data-r="chat" type="button">Chat mit Claude <span class="zahl" id="chatzahl">1</span></button>
+        </div>
+        <div class="eig" id="eig"></div>
+        <div class="chat" id="chat" hidden>
+          <div class="verlauf" id="verlauf"></div>
+          <form class="eingabe" id="chatform">
+            <textarea id="chattext" placeholder="Was soll am Grunddesign anders sein? Du kannst auch auf einen Bereich zeigen und dann schreiben."></textarea>
+            <div class="zeile"><span style="font-size:12px;color:var(--mut)" id="bezug">Bezug: Navigation · PC</span><span style="flex:1"></span><button class="knopf voll" type="submit">Senden</button></div>
+          </form>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<div class="erkl">
+  <div><h3>Was zum Grunddesign gehört</h3>Aus Material Design, Apple HIG, Carbon und WCAG 2.2 zusammengetragen:
+    <ul><li>Geräteklassen mit festen Umbruchpunkten (Handy &lt;600, Tablet 600–1023, PC ≥1024, breit ≥1440 px)</li><li>Navigation je Klasse: Leiste unten (max. 5) · schmale Leiste · Seitenleiste mit Gruppen (max. 2 Ebenen), einklappbar</li><li>Kopfband: Logo, Vereinswechsel, Suche (Strg+K), „+ Neu“, Benachrichtigungen, Hilfe, Profil</li><li>Seitenkopf, Inhaltsraster, Detail-Panel, Dialoge, Meldungen</li><li>Grundlagen: Farbrollen hell/dunkel, Schrift-Skala, Abstands-Skala, Rundungen, Schatten, Symbole, Bewegung</li><li>Zustände: Laden, leer, Fehler, offline</li><li>Barrierefreiheit: Kontrast ≥4,5:1, Ziele ≥24 px (Touch 44 px), Fokus sichtbar und nicht verdeckt</li></ul></div>
+  <div><h3>So arbeitest du</h3><ul><li>Links einen Bereich wählen oder in der Mitte darauf klicken</li><li>Rechts einstellen oder im Chat mit Claude besprechen – Claude macht Vorschläge, die du übernimmst oder ablehnst</li><li>Ziehen im Gerüst (z. B. Navigation nach oben) – immer auch per Auswahlfeld möglich</li><li>Entwürfe kopieren, vergleichen; „Als Auftrag senden“ → Werkstatt baut → echte Testseite → Freigabe → Prüfungen → live</li></ul></div>
+  <div><h3>Seiten-Vorlagen</h3>Übersicht, Liste mit Filter, Detail, Formular, Einstellungen. Jedes neue Feature baut auf einer Vorlage, dem Gerüst und den Grundwerten auf – ändert sich das Grunddesign, ändern sich alle Seiten mit. Bestehende Seiten werden einmalig je Bereich umgestellt (eigene Aufträge mit Prüfung).</div>
+  <div><h3>Bausteine</h3>Oben auf „Bausteine“ umschalten: Bibliothek aller Bausteine der App (aus dem Code), Varianten × Zustände als Matrix, „verwendet an N Stellen“, Aufräum-Vorschläge für Doppelte, App-E-Mails. Ändern per Regler oder Chat; wirkt nach dem Auftrag überall.</div>
+  <div><h3>Marke · Logo-Designer</h3>Logo per Chat entwerfen lassen (3 Vorschläge), von Hand bearbeiten (Ebenen ziehen, Form, Farbe, Schriftzug) oder beides. Automatische Prüfung in hell/dunkel und als App-Symbol 64/32/16 px; daraus App-Symbol, Favicon, Mail-Kopf und das Logo in der Projektliste der Codeschmiede.</div>
+  <div><h3>Abgrenzung</h3>Ein Grunddesign für die ganze App, nicht je Rolle. Vereine stellen im Design-Studio der App nur Vereinsfarbe und Logo ein; die Grundfarben kommen von hier.</div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
+const KLASSEN=[["handy","Handy","<600"],["tablet","Tablet","600–1023"],["pc","PC","≥1024"],["breit","Breit","≥1440"]];
+const BREITE={handy:390,tablet:820,pc:1180,breit:1440};
+const basis=()=>({
+  farben:{hell:{bg:"#f4f6f5",flaeche:"#ffffff",nav:"#ffffff",kopf:"#0f2a22",kopftext:"#ffffff",text:"#13211a",linie:"#e2e8e4",akzent:"#047857"},dunkel:{bg:"#0b1411",flaeche:"#111d18",nav:"#0e1814",kopf:"#08110e",kopftext:"#e2eee8",text:"#e2eee8",linie:"#22332c",akzent:"#34d399"}},
+  modus:"hell",schrift:{text:"Barlow",titel:"Barlow Condensed",basis:15,skala:1.2},abstand:8,rund:10,schatten:"leicht",symbole:{satz:"Lucide",strich:1.75},bewegung:"sparsam",
+  kopf:{hoehe:56,logo:"links",suche:true,neu:true,glocke:true,hilfe:true,verein:true,fest:true},
+  nav:{handy:{art:"unten",punkte:5},tablet:{art:"leiste",breite:72,ausklapp:true},pc:{art:"seite",breite:240,einklapp:true,gruppen:true},breit:{art:"seite",breite:260,einklapp:true,gruppen:true}},
+  seitenkopf:{bruch:true,aktion:true,reiter:true},
+  inhalt:{handy:{spalten:1,rand:12,maxb:600},tablet:{spalten:2,rand:20,maxb:960},pc:{spalten:3,rand:24,maxb:1200},breit:{spalten:4,rand:32,maxb:1400}},
+  panel:{pc:"rechts",handy:"vollbild",breite:400},meldung:"unten",laden:"platzhalter",
+  vorlagen:{uebersicht:{kacheln:4,hinweis:true},liste:{filter:"oben",ansicht:"tabelle",suche:true,mehrfach:true},detail:{art:"panel",reiter:true,kopfbild:false},formular:{spalten:1,speichern:"fest",schritte:false},einstellungen:{reiter:"links"}}});
+const ENT=[{name:"A · Seitenleiste links (live v1.31.0)",d:basis()},{name:"B · Kopfband dunkel, Navigation oben (PC)",d:(()=>{const d=basis();d.nav.pc={art:"oben",breite:0,einklapp:false,gruppen:true};d.nav.breit={...d.nav.pc};d.kopf.logo="mitte";d.farben.hell.akzent="#1d4ed8";return d;})()}];
+let ai=0,klasse="pc",auswahl="nav",mitte="geruest",gitter=false,gesendet=false,vorlage="uebersicht";
+const hist=[],zukunft=[];
+const D=()=>ENT[ai].d;
+function aendern(f){hist.push(JSON.stringify(D()));zukunft.length=0;f(D());alles();}
+const STRUKTUR=[["rahmen","App-Rahmen",1],["kopf","Kopfband",2],["logo","Logo & Name",3],["suche","Suche (Strg+K)",3],["aktionen","Neu · Glocke · Hilfe · Profil",3],["nav","Navigation",2],["seitenkopf","Seitenkopf",2],["inhalt","Inhaltsbereich & Raster",2],["panel","Detail-Panel",2],["meldung","Meldungen & Zustände",2]];
+const VORLAGEN=[["uebersicht","Übersicht / Startseite"],["liste","Liste mit Filter"],["detail","Detail"],["formular","Formular"],["einstellungen","Einstellungen"]];
+const GRUNDLAGEN=[["farben","Farbrollen (hell/dunkel)"],["schrift","Schrift & Größen"],["abstand","Abstände & Raster"],["form","Rundungen & Schatten"],["symbole","Symbole"],["bewegung","Bewegung"],["zugang","Barrierefreiheit"]];
+
+function lum(h){const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255).map(v=>v<=.03928?v/12.92:((v+.055)/1.055)**2.4);return .2126*c[0]+.7152*c[1]+.0722*c[2];}
+function kontrast(a,b){const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);}
+
+function baum(){
+  $("#baum").innerHTML=STRUKTUR.map(([id,n,e])=>`<li><button type="button" class="e${e}" aria-current="${auswahl===id}" data-a="${id}"><span class="punkt ${["kopf","nav","inhalt","panel"].includes(id)?"p":""}"></span>${n}${id==="nav"?`<i>${navArt()}</i>`:""}</button></li>`).join("");
+  $("#grundlagen").innerHTML=GRUNDLAGEN.map(([id,n])=>`<li><button type="button" aria-current="${auswahl===id}" data-a="${id}"><span class="punkt p"></span>${n}</button></li>`).join("");
+  $("#vorlagen").innerHTML=VORLAGEN.map(([id,n])=>`<li><button type="button" aria-current="${auswahl==="v-"+id}" data-a="v-${id}"><span class="punkt p"></span>${n}${vorlage===id?"<i>gezeigt</i>":""}</button></li>`).join("");
+  $$("[data-a]").forEach(b=>b.addEventListener("click",()=>{auswahl=b.dataset.a;if(auswahl.startsWith("v-"))vorlage=auswahl.slice(2);alles();}));
+}
+const navArt=()=>({unten:"unten",leiste:"Leiste",seite:"Seite",oben:"oben"})[D().nav[klasse].art];
+function pruef(){
+  const f=D().farben[D().modus];const k1=kontrast(f.text,f.bg),k2=kontrast("#ffffff",f.akzent),k3=kontrast(f.kopftext,f.kopf);
+  const z=(ok,t)=>`<div><span class="${ok?"ok":"wn"}">${ok?"✓":"!"}</span>${t}</div>`;
+  $("#pruef").innerHTML=z(k1>=4.5,`Text/Hintergrund ${k1.toFixed(1)} : 1`)+z(k2>=4.5,`Knopftext/Akzent ${k2.toFixed(1)} : 1`)+z(k3>=4.5,`Kopfband ${k3.toFixed(1)} : 1`)+z(D().nav.handy.punkte<=5,`Handy-Leiste ${D().nav.handy.punkte} Punkte (max. 5)`)+z(true,"Ziele ≥ 44 px am Handy")+z(D().kopf.fest,"Fokus nicht vom Kopfband verdeckt");
+}
+function geraete(){
+  $("#geraete").innerHTML=KLASSEN.map(([k,n,b])=>`<button type="button" aria-pressed="${klasse===k}" data-k="${k}">${n} <small>${b}</small></button>`).join("");
+  $$("[data-k]").forEach(b=>b.addEventListener("click",()=>{klasse=b.dataset.k;alles();}));
+}
+function appVars(d,k){
+  const f=d.farben[d.modus];const i=d.inhalt[k];
+  return `--a-bg:${f.bg};--a-flaeche:${f.flaeche};--a-nav:${f.nav};--a-kopf:${f.kopf};--a-kopftext:${f.kopftext};--a-text:${f.text};--a-linie:${f.linie};--a-akzent:${f.akzent};--a-akzent-h:${f.akzent}1f;--a-kopfh:${d.kopf.hoehe}px;--a-rund:${d.rund}px;--a-spalten:${i.spalten};--a-rand:${i.rand}px;--a-maxb:${i.maxb}px;--a-abstand:${d.abstand*1.5}px;--a-font:${d.schrift.text},system-ui,sans-serif;--a-titel:"${d.schrift.titel}",${d.schrift.text},sans-serif;--a-schatten:${d.schatten==="keiner"?"none":d.schatten==="leicht"?"0 1px 2px rgba(0,0,0,.06)":"0 6px 18px rgba(0,0,0,.10)"}`;
+}
+function app(d,k,interaktiv){
+  const n=d.nav[k];const kk=d.kopf;
+  const z=(id,inner,stil="")=>`<div class="zone ${interaktiv&&auswahl===id?"gew":""}" data-z="${id}" style="${stil}"><span class="marke">${(STRUKTUR.find(s=>s[0]===id)||[])[1]||id}</span>${inner}</div>`;
+  const menue=[["Start",1],["Kalender",1],["Mannschaft",2],["Training",2],["Spiele",2],["Kommunikation",3],["Verein",3]];
+  const logo=`<span class="a-logo"><i>T</i>${k==="handy"?"":"Trainer to go"}</span>`;
+  const kopfInhalt=`${(n.art==="leiste"||n.art==="seite")&&(n.einklapp||n.ausklapp)?'<span class="a-ic">☰</span>':""}${kk.logo==="links"?logo:""}${kk.verein&&k!=="handy"?'<span class="a-ic" title="Verein wechseln">SV</span>':""}<span style="flex:1"></span>${kk.logo==="mitte"?logo+'<span style="flex:1"></span>':""}${kk.suche?(k==="handy"?'<span class="a-ic">⌕</span>':'<span class="a-such">Suchen … Strg+K</span>'):""}${kk.neu&&k!=="handy"?'<span class="a-neu">+ Neu</span>':""}${kk.glocke?'<span class="a-ic">🔔︎</span>':""}${kk.hilfe&&k!=="handy"?'<span class="a-ic">?</span>':""}<span class="a-ic">GK</span>`;
+  const navLinks=(n.art==="seite"||n.art==="leiste")?z("nav",`<div class="a-nav" style="width:${n.breite}px;height:100%">${n.art==="seite"&&n.gruppen?menue.map(([m,g],i)=>`${i===0||menue[i-1][1]!==g?`<span class="gr">${["","Übersicht","Sport","Verein"][g]}</span>`:""}<span class="${i===0?"akt":""}"><b></b>${m}</span>`).join(""):menue.map(([m],i)=>`<span class="${i===0?"akt":""}" title="${m}"><b></b>${n.art==="leiste"?"":m}</span>`).join("")}</div>`,"height:100%"):"";
+  const navOben=n.art==="oben"?z("nav",`<div class="a-nav" style="flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--a-linie);padding:6px 10px">${menue.map(([m],i)=>`<span class="${i===0?"akt":""}">${m}</span>`).join("")}</div>`):"";
+  const navUnten=n.art==="unten"?z("nav",`<div class="a-unten">${["Start","Kalender","Mannschaft","Chat","Mehr"].slice(0,n.punkte).map((m,i)=>`<span class="${i===0?"akt":""}"><b></b>${m}</span>`).join("")}</div>`):"";
+  const sk=d.seitenkopf;const V=d.vorlagen;const vl=interaktiv?vorlage:"uebersicht";
+  const kopfText={uebersicht:["Start › Übersicht","Guten Abend, Gerhard","Training planen"],liste:["Mannschaft › Kader","Kader U11","+ Spieler"],detail:["Mannschaft › Kader › Lena M.","Lena M.","Bearbeiten"],formular:["Training › Neu","Training planen","Speichern"],einstellungen:["Verein › Einstellungen","Einstellungen",""]}[vl];
+  const zeilen=[["Lena M.","2014","Sturm","✓"],["Jonas K.","2014","Tor","✓"],["Mia S.","2015","Abwehr","–"],["Ben R.","2014","Mittelfeld","✓"]];
+  const filterLeiste=`<div class="a-karte" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;${V.liste.filter==="links"?"flex-direction:column;align-items:stretch;min-width:150px":""}">${V.liste.suche?'<span class="a-such" style="max-width:none;flex:1">Suchen …</span>':""}<span class="a-ic" style="width:auto;padding:0 10px;border-radius:999px">Jahrgang ▾</span><span class="a-ic" style="width:auto;padding:0 10px;border-radius:999px">Position ▾</span></div>`;
+  const liste=V.liste.ansicht==="tabelle"&&k!=="handy"?`<div class="a-karte" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:12px">${zeilen.map(r=>`<tr style="border-top:1px solid var(--a-linie)">${V.liste.mehrfach?'<td style="padding:7px 8px">☐</td>':""}${r.map(c=>`<td style="padding:7px 8px">${c}</td>`).join("")}</tr>`).join("")}</table></div>`:`<div style="display:grid;gap:8px">${zeilen.map(r=>`<div class="a-karte"><b style="font-size:15px">${r[0]}</b>${r[1]} · ${r[2]}</div>`).join("")}</div>`;
+  const inhalte={
+    uebersicht:`<div class="a-inhalt">${[["Nächstes Training","Fr 17:30","U11 · Platz 2"],["Zusagen Samstag","14 / 18","Heimspiel"],["Offene Beiträge","3","Oktober"],["Neue Nachrichten","5","Kommunikation"],["Spieler","18","Kader U11"],["Übungen","42","Bibliothek"]].slice(0,V.uebersicht.kacheln).map(([t,b,u])=>`<div class="a-karte">${t}<b>${b}</b>${u}</div>`).join("")}${V.uebersicht.hinweis?'<div class="a-karte" style="grid-column:1/-1;border-color:var(--a-akzent)">Hinweis: 2 Eltern haben noch nicht zugesagt.</div>':""}</div>`,
+    liste:`<div class="a-inhalt" style="grid-template-columns:${V.liste.filter==="links"&&k!=="handy"?"auto 1fr":"1fr"}">${filterLeiste}${liste}</div>`,
+    detail:`<div class="a-inhalt" style="grid-template-columns:1fr">${V.detail.kopfbild?'<div class="a-karte" style="height:70px;background:var(--a-akzent-h)"></div>':""}${V.detail.reiter?'<div style="display:flex;gap:14px;font-size:12px;border-bottom:1px solid var(--a-linie);padding-bottom:6px"><b style="color:var(--a-akzent)">Profil</b><span>Anwesenheit</span><span>Leistung</span><span>Notfallkontakt</span></div>':""}<div class="a-karte">Jahrgang 2014 · Sturm · Rückennummer 9<br>Eltern: verbunden ✓</div><div class="a-karte">Anwesenheit Oktober<b>92 %</b></div><div style="font-size:11px;opacity:.6">${V.detail.art==="panel"?"Am PC als Panel rechts neben der Liste, am Handy als eigene Seite":"Immer als eigene Seite"}</div></div>`,
+    formular:`<div class="a-inhalt" style="grid-template-columns:repeat(${k==="handy"?1:V.formular.spalten},minmax(0,1fr))">${V.formular.schritte?'<div style="grid-column:1/-1;display:flex;gap:6px;font-size:11px"><b style="color:var(--a-akzent)">1 Grunddaten</b> › 2 Übungen › 3 Teilnehmer</div>':""}${["Datum","Uhrzeit","Platz","Mannschaft","Schwerpunkt","Notiz"].map(f=>`<div style="font-size:11px">${f}<div class="a-karte" style="padding:8px;margin-top:2px"></div></div>`).join("")}<div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:6px;${V.formular.speichern==="fest"?"position:sticky;bottom:0;background:var(--a-bg);padding:8px 0;border-top:1px solid var(--a-linie)":""}"><span class="a-ic" style="width:auto;padding:0 12px;border-radius:var(--a-rund)">Abbrechen</span><span class="a-neu">Speichern</span></div></div>`,
+    einstellungen:`<div class="a-inhalt" style="grid-template-columns:${V.einstellungen.reiter==="links"&&k!=="handy"?"170px 1fr":"1fr"}"><div style="display:flex;${V.einstellungen.reiter==="links"&&k!=="handy"?"flex-direction:column":"flex-wrap:wrap"};gap:2px;font-size:12px">${["Verein","Mannschaften","Module","Rechte","Benachrichtigungen"].map((t,i)=>`<span style="padding:6px 8px;border-radius:var(--a-rund);${i===0?"background:var(--a-akzent-h);color:var(--a-akzent);font-weight:600":""}">${t}</span>`).join("")}</div><div class="a-karte">Vereinsname, Logo, Vereinsfarbe<br><span style="opacity:.6">Speichert sofort, Meldung „Gespeichert“</span></div></div>`};
+  const inhalt=`<div class="a-haupt">${z("seitenkopf",`<div class="a-seitenkopf"><div style="flex:1;min-width:0">${sk.bruch&&k!=="handy"?`<small>${kopfText[0]}</small>`:""}<h3>${kopfText[1]}</h3></div>${sk.aktion&&kopfText[2]?`<span class="a-neu">${kopfText[2]}</span>`:""}</div>`)}
+    ${z("inhalt",inhalte[vl])}</div>`;
+  const panel=auswahl==="panel"&&interaktiv?z("panel",`<div class="a-panel"><b>Detail-Panel</b><br>${d.panel[k==="handy"?"handy":"pc"]==="vollbild"&&k==="handy"?"Am Handy als Vollbild":"Rechts, "+d.panel.breite+" px"} – Details erst per Klick.</div>`):"";
+  const toast=auswahl==="meldung"&&interaktiv?'<div class="a-toast">Gespeichert ✓ · Meldung '+d.meldung+'</div>':"";
+  const rows=`auto ${n.art==="oben"?"auto ":""}minmax(${k==="handy"?380:440}px,1fr) ${n.art==="unten"?"auto":""}`;
+  return `<div class="rahmenapp" style="${appVars(d,k)};grid-template-rows:${rows}">
+    ${z("kopf",`<div class="a-kopf">${kopfInhalt}</div>`)}${navOben}
+    <div style="display:flex;min-height:0">${navLinks}${inhalt}</div>${navUnten}${panel}${toast}</div>`;
+}
+function flaeche(){
+  const f=$("#flaeche");
+  if(mitte==="geruest"){
+    f.innerHTML=`<div class="geraet ${gitter?"gitter":""}" style="width:${BREITE[klasse]}px"><div class="massband">${KLASSEN.find(x=>x[0]===klasse)[1]} · ${BREITE[klasse]} px · Vorlage „${VORLAGEN.find(v=>v[0]===vorlage)[1]}“ · Entwurf ${ENT[ai].name.split(" · ")[0]}</div>${app(D(),klasse,true)}</div>`;
+    $$("#flaeche .zone").forEach(z=>z.addEventListener("click",e=>{e.stopPropagation();auswahl=z.dataset.z;alles();}));
+  } else if(mitte==="test"){
+    f.innerHTML=`<div class="testseite"><span class="adr">${gesendet?"feature-cs-21-grunddesign.trainer-to-go.pages.dev/home · Auftrag #21":"trainer-to-go.pages.dev/home · live v1.31.0"}</span><div style="position:relative;width:${BREITE[klasse]}px;max-width:100%">${app(gesendet?D():ENT[0].d,klasse,false)}${gesendet&&$("#status").classList.contains("bau")?'<div class="bauhinweis">Werkstatt baut Auftrag #21 … Testseite in 1–3 Min.</div>':""}</div><span style="font-size:12px;color:var(--mut)">${gesendet?"Echte Testseite des Entwurfs (hier nachgebildet). „Zeigen &amp; kommentieren“ wie im Arbeitsplatz.":"Noch nicht gesendet – zu sehen ist der Live-Stand. „Als Auftrag senden“ baut den Entwurf."}</span></div>`;
+  } else {
+    const a=ENT[0].d,b=ENT[ai===0?1:ai].d;const unter=[];
+    const vgl=(p,x,y)=>{if(JSON.stringify(x)!==JSON.stringify(y))unter.push(`<li><b>${p}:</b> ${typeof x==="object"?JSON.stringify(x).replace(/[{}"]/g,"").replace(/,/g,", "):x} → ${typeof y==="object"?JSON.stringify(y).replace(/[{}"]/g,"").replace(/,/g,", "):y}</li>`);};
+    vgl(`Navigation ${klasse}`,a.nav[klasse],b.nav[klasse]);vgl("Logo",a.kopf.logo,b.kopf.logo);vgl("Akzent",a.farben.hell.akzent,b.farben.hell.akzent);vgl("Rundungen",a.rund,b.rund);vgl("Inhalt",a.inhalt[klasse],b.inhalt[klasse]);
+    f.innerHTML=`<div class="vergleich"><div><h4>${ENT[0].name}</h4>${app(a,klasse,false)}</div><div><h4>${ENT[ai===0?1:ai].name}</h4>${app(b,klasse,false)}</div><div class="diff"><b>Unterschiede (${KLASSEN.find(x=>x[0]===klasse)[1]})</b><ul>${unter.join("")||"<li>keine</li>"}</ul></div></div>`;
+  }
+}
+function feld(l,inner,id){return `<label for="${id}">${l}</label>${inner}`;}
+function sel(id,wert,opts){return `<select id="${id}">${opts.map(([v,t])=>`<option value="${v}" ${String(v)===String(wert)?"selected":""}>${t}</option>`).join("")}</select>`;}
+function cb(id,wert){return `<input type="checkbox" id="${id}" ${wert?"checked":""}>`;}
+function zahl(id,wert,min,max,schritt=1){return `<input type="number" id="${id}" value="${wert}" min="${min}" max="${max}" step="${schritt}">`;}
+function eig(){
+  const d=D(),k=klasse,n=d.nav[k],i=d.inhalt[k],f=d.farben[d.modus];
+  const titel=(STRUKTUR.find(s=>s[0]===auswahl)||GRUNDLAGEN.find(s=>s[0]===auswahl)||VORLAGEN.map(([a,b])=>["v-"+a,b]).find(s=>s[0]===auswahl)||[0,auswahl])[1];
+  const proGeraet=["nav","inhalt"].includes(auswahl)?` · <b>${KLASSEN.find(x=>x[0]===k)[1]}</b>`:"";
+  const vRegel='<div class="hinweis">Jedes neue Feature beginnt auf einer dieser Vorlagen und nutzt nur die Standard-Bausteine und Grundwerte. Die Feature-Prüfung meldet Abweichungen (z. B. eigene Farben) als rot.</div>';
+  let h=`<div><div class="pfad">Trainer to go › Grunddesign › ${titel}</div><h3>${titel}${proGeraet}</h3></div>`;
+  const ab=(t,inner)=>`<div class="abschnitt"><h4>${t}</h4><div class="feld">${inner}</div></div>`;
+  const map={
+    nav:()=>ab("Art",feld("Navigation",sel("n-art",n.art,k==="handy"?[["unten","Leiste unten"],["seite","Menü zum Ausklappen"]]:[["seite","Seitenleiste"],["leiste","Schmale Leiste (Symbole)"],["oben","Leiste oben"]]),"n-art"))
+      +(n.art==="unten"?ab("Leiste unten",feld("Punkte",zahl("n-punkte",n.punkte,3,5),"n-punkte")+'<span class="l">Weitere</span><span>über „Mehr“</span>'):"")
+      +(n.art==="seite"||n.art==="leiste"?ab("Breite & Verhalten",feld("Breite (px)",zahl("n-breite",n.breite,56,320,4),"n-breite")+feld(n.art==="leiste"?"Ausklappbar":"Einklappbar",cb("n-klapp",n.einklapp??n.ausklapp),"n-klapp")+(n.art==="seite"?feld("Gruppen",cb("n-gruppen",n.gruppen),"n-gruppen"):"")):"")
+      +'<div class="hinweis">Richtwerte: Handy max. 5 Punkte unten; Tablet schmale Leiste; PC Seitenleiste mit höchstens 2 Ebenen, einklappbar, nicht standardmäßig versteckt.</div>',
+    kopf:()=>ab("Kopfband",feld("Höhe (px)",zahl("k-h",d.kopf.hoehe,44,80,4),"k-h")+feld("Beim Scrollen",sel("k-fest",d.kopf.fest?"1":"0",[["1","bleibt stehen"],["0","scrollt weg"]]),"k-fest"))+ab("Farbe",'<span class="l">Hintergrund</span><span class="swatches">'+["#0f2a22","#ffffff","#13211a","#047857"].map(c=>`<button type="button" class="sw" aria-pressed="${f.kopf===c}" style="background:${c}" data-sw="kopf" data-c="${c}" aria-label="${c}"></button>`).join("")+"</span>"),
+    logo:()=>ab("Logo & Name",feld("Platz",sel("k-logo",d.kopf.logo,[["links","links"],["mitte","Mitte"]]),"k-logo")+'<span class="l">Handy</span><span>nur Zeichen, ohne Name</span><span class="l">Einladung</span><span>Vereinslogo statt App-Logo</span>'),
+    suche:()=>ab("Suche",feld("Anzeigen",cb("k-suche",d.kopf.suche),"k-suche")+'<span class="l">Kürzel</span><span>Strg+K / ⌘K (Befehlsfeld)</span><span class="l">Handy</span><span>als Symbol, öffnet Vollbild</span>'),
+    aktionen:()=>ab("Aktionen im Kopfband",feld("„+ Neu“",cb("k-neu",d.kopf.neu),"k-neu")+feld("Benachricht.",cb("k-glocke",d.kopf.glocke),"k-glocke")+feld("Hilfe (?)",cb("k-hilfe",d.kopf.hilfe),"k-hilfe")+feld("Vereinswechsel",cb("k-verein",d.kopf.verein),"k-verein")+'<span class="l">Profil</span><span>immer rechts außen</span>'),
+    seitenkopf:()=>ab("Seitenkopf",feld("Brotkrumen",cb("s-bruch",d.seitenkopf.bruch),"s-bruch")+feld("Hauptaktion",cb("s-akt",d.seitenkopf.aktion),"s-akt")+feld("Reiter",cb("s-reiter",d.seitenkopf.reiter),"s-reiter"))+'<div class="hinweis">Einheitlich auf allen Seiten: Titel, Unterzeile, ein Hauptknopf; weitere Aktionen im Menü „…“.</div>',
+    inhalt:()=>ab("Raster",feld("Spalten",sel("i-sp",i.spalten,[[1,"1"],[2,"2"],[3,"3"],[4,"4"]]),"i-sp")+feld("Rand (px)",zahl("i-rand",i.rand,8,48,4),"i-rand")+feld("Max. Breite",zahl("i-maxb",i.maxb,480,1920,40),"i-maxb")),
+    panel:()=>ab("Detail-Panel",feld("PC/Tablet",sel("p-pc",d.panel.pc,[["rechts","rechts einblenden"],["mitte","als Dialog"]]),"p-pc")+feld("Handy",sel("p-h",d.panel.handy,[["vollbild","Vollbild"],["blatt","Blatt von unten"]]),"p-h")+feld("Breite (px)",zahl("p-b",d.panel.breite,320,640,20),"p-b")),
+    meldung:()=>ab("Meldungen",feld("Erfolg/Info",sel("m-pos",d.meldung,[["unten","unten Mitte"],["oben","oben rechts"]]),"m-pos")+feld("Laden",sel("m-laden",d.laden,[["platzhalter","Platzhalter-Karten"],["kreis","Ladekreis"]]),"m-laden")+'<span class="l">Leer</span><span>Symbol, Satz, ein Knopf</span><span class="l">Fehler</span><span>verständlich + „Nochmal“</span><span class="l">Offline</span><span>Hinweisband oben</span>'),
+    "v-uebersicht":()=>ab("Übersicht / Startseite",feld("Kacheln",sel("v-kach",d.vorlagen.uebersicht.kacheln,[[2,"2"],[4,"4"],[6,"6"]]),"v-kach")+feld("Hinweis-Band",cb("v-hinw",d.vorlagen.uebersicht.hinweis),"v-hinw"))+vRegel,
+    "v-liste":()=>ab("Liste mit Filter",feld("Filter",sel("v-filter",d.vorlagen.liste.filter,[["oben","oben"],["links","links"]]),"v-filter")+feld("Ansicht",sel("v-ans",d.vorlagen.liste.ansicht,[["tabelle","Tabelle (am Handy Karten)"],["karten","Karten"]]),"v-ans")+feld("Suche",cb("v-suche",d.vorlagen.liste.suche),"v-suche")+feld("Mehrfachauswahl",cb("v-mehr",d.vorlagen.liste.mehrfach),"v-mehr"))+vRegel,
+    "v-detail":()=>ab("Detail",feld("Öffnet als",sel("v-dart",d.vorlagen.detail.art,[["panel","Panel neben der Liste"],["seite","eigene Seite"]]),"v-dart")+feld("Reiter",cb("v-reiter",d.vorlagen.detail.reiter),"v-reiter")+feld("Kopfbild",cb("v-bild",d.vorlagen.detail.kopfbild),"v-bild"))+vRegel,
+    "v-formular":()=>ab("Formular",feld("Spalten",sel("v-fsp",d.vorlagen.formular.spalten,[[1,"1"],[2,"2"]]),"v-fsp")+feld("Speichern",sel("v-speich",d.vorlagen.formular.speichern,[["fest","Leiste unten, bleibt stehen"],["ende","am Ende des Formulars"]]),"v-speich")+feld("Schritte",cb("v-schr",d.vorlagen.formular.schritte),"v-schr")+'<span class="l">Fehler</span><span>direkt am Feld, verständlich</span>')+vRegel,
+    "v-einstellungen":()=>ab("Einstellungen",feld("Bereiche",sel("v-ereit",d.vorlagen.einstellungen.reiter,[["links","Liste links"],["oben","Reiter oben"]]),"v-ereit")+'<span class="l">Speichern</span><span>sofort, mit Meldung</span>')+vRegel,
+    rahmen:()=>ab("App-Rahmen",'<span class="l">Umbruchpunkte</span><span>600 · 1024 · 1440 px</span><span class="l">Systemränder</span><span>Handy-Ränder (Notch) frei</span><span class="l">Hell/Dunkel</span><span>'+d.modus+'</span>')+'<div class="hinweis">Wähle links einen Bereich oder klicke im Gerüst darauf.</div>',
+    farben:()=>ab("Modus",feld("Bearbeiten",sel("f-modus",d.modus,[["hell","Hell"],["dunkel","Dunkel"]]),"f-modus"))+ab("Rollen",[["bg","Hintergrund"],["flaeche","Flächen"],["nav","Navigation"],["text","Text"],["linie","Linien"],["akzent","Akzent"]].map(([r,t])=>`<span class="l">${t}</span><span class="swatches">${({bg:["#f4f6f5","#f8fafc","#fbf8f2","#0b1411"],flaeche:["#ffffff","#f8fafc","#111d18"],nav:["#ffffff","#f4f6f5","#0f2a22","#0e1814"],text:["#13211a","#0f172a","#e2eee8"],linie:["#e2e8e4","#e5e7eb","#22332c"],akzent:["#047857","#1d4ed8","#b45309","#be123c","#34d399"]})[r].map(c=>`<button type="button" class="sw" aria-pressed="${f[r]===c}" style="background:${c}" data-sw="${r}" data-c="${c}" aria-label="${t} ${c}"></button>`).join("")}</span>`).join(""))+'<div class="hinweis">Farben nach Zweck benannt (Hintergrund, Fläche, Text …), nicht nach Aussehen. Erfolg/Warnung/Fehler sind feste Signalfarben. Vereine überschreiben nur den Akzent.</div>',
+    schrift:()=>ab("Schriften",feld("Text",sel("t-text",d.schrift.text,[["Barlow","Barlow"],["Source Sans 3","Source Sans 3"],["Inter","Inter"]]),"t-text")+feld("Überschriften",sel("t-titel",d.schrift.titel,[["Barlow Condensed","Barlow Condensed"],["Barlow","Barlow"]]),"t-titel")+feld("Grundgröße",zahl("t-basis",d.schrift.basis,14,18),"t-basis"))+ab("Skala",'<span class="l">Stufen</span><span class="skala">'+[0,1,2,3,4].map(s=>`<span style="width:10px;height:${Math.round(d.schrift.basis*d.schrift.skala**s)}px"></span>`).join("")+`</span>`+feld("Faktor",sel("t-skala",d.schrift.skala,[[1.125,"1,125 (ruhig)"],[1.2,"1,2"],[1.25,"1,25 (kräftig)"]]),"t-skala")),
+    abstand:()=>ab("Abstände",feld("Grundeinheit",sel("a-ein",d.abstand,[[4,"4 px"],[8,"8 px"]]),"a-ein")+'<span class="l">Skala</span><span class="skala">'+[1,2,3,4,6,8].map(x=>`<span style="width:${Math.min(40,x*d.abstand/2)}px;height:10px"></span>`).join("")+"</span>"),
+    form:()=>ab("Form",feld("Rundungen",`<input type="range" id="r-rund" min="0" max="20" value="${d.rund}"> ${d.rund} px`,"r-rund")+feld("Schatten",sel("r-schatten",d.schatten,[["keiner","keine"],["leicht","leicht"],["deutlich","deutlich"]]),"r-schatten")),
+    symbole:()=>ab("Symbole",'<span class="l">Satz</span><span>Lucide (einheitlich), eigene Fußball-Symbole im selben Stil</span>'+feld("Strichstärke",sel("y-strich",d.symbole.strich,[[1.5,"1,5"],[1.75,"1,75"],[2,"2"]]),"y-strich")+'<span class="l">Emojis</span><span>keine</span>'),
+    bewegung:()=>ab("Bewegung",feld("Stärke",sel("b-st",d.bewegung,[["keine","keine"],["sparsam","sparsam (150–250 ms)"],["lebendig","lebendig"]]),"b-st")+'<span class="l">Reduziert</span><span>folgt der Systemeinstellung</span>'),
+    zugang:()=>ab("Barrierefreiheit (WCAG 2.2 AA)",'<span class="l">Kontrast</span><span>Text ≥ 4,5 : 1, große Schrift ≥ 3 : 1</span><span class="l">Ziele</span><span>mind. 24 px, am Handy 44 px</span><span class="l">Fokus</span><span>sichtbar, nicht vom Kopfband verdeckt</span><span class="l">Ziehen</span><span>immer auch per Auswahl möglich</span><span class="l">Schrift</span><span>bis 200 % vergrößerbar</span>')
+  };
+  $("#eig").innerHTML=h+(map[auswahl]||map.rahmen)()+`<button class="knopf" type="button" id="frag">Mit Claude über „${titel}“ sprechen</button>`;
+  const setz={"n-art":v=>{d.nav[k].art=v;if(v==="leiste"){d.nav[k].breite=72;}if(v==="seite"&&!d.nav[k].breite)d.nav[k].breite=240;},"n-punkte":v=>d.nav[k].punkte=+v,"n-breite":v=>d.nav[k].breite=+v,"n-klapp":v=>{d.nav[k].einklapp=v;d.nav[k].ausklapp=v;},"n-gruppen":v=>d.nav[k].gruppen=v,
+    "k-h":v=>d.kopf.hoehe=+v,"k-fest":v=>d.kopf.fest=v==="1","k-logo":v=>d.kopf.logo=v,"k-suche":v=>d.kopf.suche=v,"k-neu":v=>d.kopf.neu=v,"k-glocke":v=>d.kopf.glocke=v,"k-hilfe":v=>d.kopf.hilfe=v,"k-verein":v=>d.kopf.verein=v,
+    "s-bruch":v=>d.seitenkopf.bruch=v,"s-akt":v=>d.seitenkopf.aktion=v,"s-reiter":v=>d.seitenkopf.reiter=v,"i-sp":v=>d.inhalt[k].spalten=+v,"i-rand":v=>d.inhalt[k].rand=+v,"i-maxb":v=>d.inhalt[k].maxb=+v,
+    "p-pc":v=>d.panel.pc=v,"p-h":v=>d.panel.handy=v,"p-b":v=>d.panel.breite=+v,"m-pos":v=>d.meldung=v,"m-laden":v=>d.laden=v,"f-modus":v=>d.modus=v,
+    "t-text":v=>d.schrift.text=v,"t-titel":v=>d.schrift.titel=v,"t-basis":v=>d.schrift.basis=+v,"t-skala":v=>d.schrift.skala=+v,"a-ein":v=>d.abstand=+v,"r-rund":v=>d.rund=+v,"r-schatten":v=>d.schatten=v,"y-strich":v=>d.symbole.strich=+v,"b-st":v=>d.bewegung=v,
+    "v-kach":v=>d.vorlagen.uebersicht.kacheln=+v,"v-hinw":v=>d.vorlagen.uebersicht.hinweis=v,"v-filter":v=>d.vorlagen.liste.filter=v,"v-ans":v=>d.vorlagen.liste.ansicht=v,"v-suche":v=>d.vorlagen.liste.suche=v,"v-mehr":v=>d.vorlagen.liste.mehrfach=v,
+    "v-dart":v=>d.vorlagen.detail.art=v,"v-reiter":v=>d.vorlagen.detail.reiter=v,"v-bild":v=>d.vorlagen.detail.kopfbild=v,"v-fsp":v=>d.vorlagen.formular.spalten=+v,"v-speich":v=>d.vorlagen.formular.speichern=v,"v-schr":v=>d.vorlagen.formular.schritte=v,"v-ereit":v=>d.vorlagen.einstellungen.reiter=v};
+  $$("#eig select,#eig input").forEach(el=>el.addEventListener(el.type==="range"?"input":"change",()=>{const v=el.type==="checkbox"?el.checked:el.value;if(setz[el.id])aendern(()=>setz[el.id](v));}));
+  $$("#eig [data-sw]").forEach(b=>b.addEventListener("click",()=>aendern(dd=>{dd.farben[dd.modus][b.dataset.sw]=b.dataset.c;})));
+  $("#frag").addEventListener("click",()=>{zeigeChat();$("#chattext").focus();});
+  $("#bezug").textContent=`Bezug: ${titel}${["nav","inhalt"].includes(auswahl)?" · "+KLASSEN.find(x=>x[0]===k)[1]:""}`;
+}
+// Chat mit Claude (im Entwurf vorbereitet; im Programm antwortet die Werkstatt / Claude)
+const VERLAUF=[{wer:"Claude",t:"Ich habe das aktuelle Gerüst von Trainer to go aus dem Code gelesen (Stand v1.31.0). Auffällig: Am Tablet ist die Seitenleiste 240 px breit und nimmt viel Platz – üblich ist dort eine schmale Leiste mit Symbolen, die sich ausklappen lässt.",vorschlag:{titel:"Vorschlag: Tablet",punkte:["Navigation Tablet: schmale Leiste (72 px), ausklappbar","Inhalt Tablet: 2 Spalten, Rand 20 px"],tun:d=>{d.nav.tablet={art:"leiste",breite:72,ausklapp:true};d.inhalt.tablet.spalten=2;d.inhalt.tablet.rand=20;}}}];
+function chat(){
+  $("#verlauf").innerHTML=VERLAUF.map((m,i)=>`<div class="m ${m.wer==="Du"?"ich":""}"><div class="wer">${m.wer}</div>${m.t}${m.vorschlag?`<div class="vorschlag"><b>${m.vorschlag.titel}</b><ul>${m.vorschlag.punkte.map(p=>`<li>${p}</li>`).join("")}</ul>${m.erledigt?`<span class="ok">${m.erledigt}</span>`:`<button class="knopf voll" type="button" data-ja="${i}">Übernehmen</button> <button class="knopf" type="button" data-nein="${i}">Ablehnen</button>`}</div>`:""}</div>`).join("");
+  $$("[data-ja]").forEach(b=>b.addEventListener("click",()=>{const m=VERLAUF[+b.dataset.ja];aendern(m.vorschlag.tun);m.erledigt="✓ übernommen in "+ENT[ai].name.split(" · ")[0];chat();}));
+  $$("[data-nein]").forEach(b=>b.addEventListener("click",()=>{VERLAUF[+b.dataset.nein].erledigt="abgelehnt";chat();}));
+  $("#verlauf").scrollTop=1e6;
+}
+function zeigeChat(){$$("[data-r]").forEach(x=>x.setAttribute("aria-selected",x.dataset.r==="chat"));$("#eig").hidden=true;$("#chat").hidden=false;$("#chatzahl").hidden=true;chat();}
+$("#chatform").addEventListener("submit",e=>{e.preventDefault();const t=$("#chattext").value.trim();if(!t)return;
+  VERLAUF.push({wer:"Du",t:t.replace(/</g,"&lt;")});$("#chattext").value="";chat();
+  setTimeout(()=>{const v={wer:"Claude",t:"Verstanden. So würde ich es im Entwurf umsetzen – passt das?"};
+    if(modus==="marke")v.vorschlag={titel:"Vorschlag: Logo",punkte:["Glut kräftiger (#ea580c)","Schriftzug extra fett, Sperrung 2"],tun:()=>{LOGO.bogen.glut="#ea580c";LOGO.name.gewicht=800;LOGO.name.abstand=2;}};
+    else if(/oben/i.test(t))v.vorschlag={titel:"Vorschlag: Navigation oben",punkte:[`Navigation ${KLASSEN.find(x=>x[0]===klasse)[1]}: Leiste oben`,"Gruppen bleiben als Ausklapp-Menüs"],tun:d=>{d.nav[klasse]={art:"oben",breite:0,einklapp:false,gruppen:true};}};
+    else if(/logo/i.test(t)&&/mitte/i.test(t))v.vorschlag={titel:"Vorschlag: Logo",punkte:["Logo & Name in die Mitte des Kopfbands","Suche und Aktionen rechts"],tun:d=>{d.kopf.logo="mitte";}};
+    else if(/dunkel|farbe|hintergrund/i.test(t))v.vorschlag={titel:"Vorschlag: Grundfarben",punkte:["Hintergrund #f8fafc, Flächen weiß","Kopfband #13211a, Akzent #047857 (Kontrast 5,5 : 1)"],tun:d=>{d.farben.hell.bg="#f8fafc";d.farben.hell.kopf="#13211a";}};
+    else v.vorschlag={titel:"Vorschlag",punkte:[`Bezug: ${$("#bezug").textContent.replace("Bezug: ","")}`,"Ich formuliere es als Auftrag, sobald du „Als Auftrag senden“ klickst"],tun:()=>{}};
+    VERLAUF.push(v);chat();},500);});
+$$("[data-r]").forEach(b=>b.addEventListener("click",()=>{if(b.dataset.r==="chat")zeigeChat();else{$$("[data-r]").forEach(x=>x.setAttribute("aria-selected",x===b));$("#eig").hidden=false;$("#chat").hidden=true;}}));
+$$("[data-m]").forEach(b=>b.addEventListener("click",()=>{mitte=b.dataset.m;$$("[data-m]").forEach(x=>x.setAttribute("aria-selected",x===b));flaeche();}));
+$("#gitter").addEventListener("click",()=>{gitter=!gitter;$("#gitter").setAttribute("aria-pressed",gitter);flaeche();});
+$("#undo").addEventListener("click",()=>{if(!hist.length)return;zukunft.push(JSON.stringify(D()));ENT[ai].d=JSON.parse(hist.pop());alles();});
+$("#redo").addEventListener("click",()=>{if(!zukunft.length)return;hist.push(JSON.stringify(D()));ENT[ai].d=JSON.parse(zukunft.pop());alles();});
+document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="z"){e.preventDefault();$("#undo").click();}if((e.ctrlKey||e.metaKey)&&e.key==="y"){e.preventDefault();$("#redo").click();}});
+function entwuerfe(){$("#entwurf").innerHTML=ENT.map((x,i)=>`<option value="${i}" ${i===ai?"selected":""}>${x.name}</option>`).join("");}
+$("#entwurf").addEventListener("change",e=>{ai=+e.target.value;hist.length=0;zukunft.length=0;alles();});
+$("#kopie").addEventListener("click",()=>{ENT.push({name:`${String.fromCharCode(65+ENT.length)} · Kopie von ${ENT[ai].name.split(" · ")[0]}`,d:JSON.parse(JSON.stringify(D()))});ai=ENT.length-1;alles();});
+$("#versionen").addEventListener("click",()=>{mitte="vergl";$$("[data-m]").forEach(x=>x.setAttribute("aria-selected",x.dataset.m==="vergl"));flaeche();});
+$("#senden").addEventListener("click",()=>{gesendet=true;const s=$("#status");s.textContent="Auftrag #21 · Werkstatt baut …";s.classList.add("bau");mitte="test";$$("[data-m]").forEach(x=>x.setAttribute("aria-selected",x.dataset.m==="test"));flaeche();
+  setTimeout(()=>{s.textContent="Auftrag #21 · Testseite fertig → Freigabe";s.classList.remove("bau");flaeche();},3500);});
+// ---------------- Marke / Logo-Designer ----------------
+const LOGO={bogen:{farbe:"#047857",glut:"#f59e0b",staerke:12,x:0,y:0,s:1},cursor:{farbe:"#13211a",x:0,y:0,an:true},name:{text:"CODESCHMIEDE",farbe:"#13211a",gewicht:700,abstand:1,x:0,y:0,an:true}};
+let ebene="bogen";
+function logoSvg(hell=true,mitName=true,groesse=null){
+  const L=LOGO;const cur=hell?L.cursor.farbe:"#ffffff";const nam=hell?L.name.farbe:"#ffffff";const id="g"+Math.random().toString(36).slice(2,7);
+  const zeichen=`<defs><linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="${hell?L.bogen.farbe:"#34d399"}"/><stop offset=".7" stop-color="${hell?L.bogen.farbe:"#34d399"}"/><stop offset="1" stop-color="${L.bogen.glut}"/></linearGradient></defs>
+    <g data-e="bogen" transform="translate(${4+L.bogen.x},${8+L.bogen.y}) scale(${L.bogen.s})"><path d="M54 18A26 26 0 1 0 54 46" stroke="url(#${id})" stroke-width="${L.bogen.staerke}" fill="none" stroke-linecap="round"/></g>
+    ${L.cursor.an?`<g data-e="cursor" transform="translate(${4+L.cursor.x},${8+L.cursor.y})"><rect x="40" y="24" width="5" height="16" rx="2.5" fill="${cur}"/></g>`:""}`;
+  if(!mitName)return `<svg viewBox="0 0 72 80" width="${groesse}" height="${groesse}" aria-hidden="true">${zeichen}</svg>`;
+  return `<svg viewBox="0 0 320 80" width="100%" style="max-width:520px" role="img" aria-label="Logo">${zeichen}${L.name.an?`<g data-e="name" transform="translate(${L.name.x},${L.name.y})"><text x="80" y="50" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-weight="${L.name.gewicht}" font-size="38" fill="${nam}" letter-spacing="${L.name.abstand}">${L.name.text}</text></g>`:""}</svg>`;
+}
+function markeLinks(){
+  $("#links").innerHTML=`<div class="kasten"><h4>Logo · Ebenen</h4><ul class="baum">${[["bogen","Zeichen „C“ (Bogen)"],["cursor","Cursor-Strich"],["name","Schriftzug"]].map(([id,n])=>`<li><button type="button" aria-current="${ebene===id}" data-e2="${id}"><span class="punkt p"></span>${n}</button></li>`).join("")}</ul></div>
+    <div class="kasten"><h4>Projekt</h4><div class="pruef"><div>Codeschmiede (gewählt: C)</div><div style="color:var(--mut)">Trainer to go · eigenes Logo</div></div></div>
+    <div class="kasten"><h4>Prüfungen</h4><div class="pruef"><div><span class="ok">✓</span>lesbar bei 16 px</div><div><span class="ok">✓</span>hell und dunkel</div><div><span class="ok">✓</span>nur Grundfarben</div></div></div>`;
+  $$("[data-e2]").forEach(b=>b.addEventListener("click",()=>{ebene=b.dataset.e2;alles();}));
+}
+function markeFlaeche(){
+  $("#flaeche").innerHTML=`<div style="width:100%;display:flex;flex-direction:column;gap:14px">
+    <div class="massband" style="text-align:left">Marke › Logo · Ebene ziehen oder rechts genau einstellen</div>
+    <div id="logobuehne" style="background:#f7faf8;border:1px solid var(--rand);border-radius:12px;padding:30px;display:grid;place-items:center;background-image:linear-gradient(rgba(0,0,0,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.04) 1px,transparent 1px);background-size:16px 16px">${logoSvg(true)}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      <div class="verw" style="background:#0f2a22;color:#fff;display:grid;place-items:center">${logoSvg(false)}</div>
+      <div class="verw" style="display:flex;gap:14px;align-items:flex-end;justify-content:center">${[64,32,16].map(g=>`<div style="text-align:center"><div style="background:#0f2a22;border-radius:${g/4}px;display:inline-grid;place-items:center;width:${g}px;height:${g}px">${logoSvg(false,false,g*0.9)}</div><div style="font-size:11px;color:var(--mut)">${g}</div></div>`).join("")}</div>
+      <div class="verw" style="font-size:12px"><b>Wird verwendet in</b><br>Kopfband · App-Symbol & Favicon · Mail-Kopf · Projektliste der Codeschmiede</div></div></div>`;
+  // Ziehen der gewählten Ebene (zusätzlich immer per Zahlenfeld möglich)
+  const svg=$("#logobuehne svg");const g=svg?.querySelector(`[data-e="${ebene}"]`);if(!g)return;g.style.cursor="move";g.style.outline="none";
+  g.setAttribute("filter","drop-shadow(0 0 2px #f97316)");
+  let start=null;g.addEventListener("pointerdown",e=>{start={x:e.clientX,y:e.clientY,ox:LOGO[ebene].x,oy:LOGO[ebene].y};g.setPointerCapture(e.pointerId);});
+  g.addEventListener("pointermove",e=>{if(!start)return;const k=320/svg.getBoundingClientRect().width;LOGO[ebene].x=Math.round(start.ox+(e.clientX-start.x)*k);LOGO[ebene].y=Math.round(start.oy+(e.clientY-start.y)*k);g.setAttribute("transform",g.getAttribute("transform").replace(/translate\([^)]*\)/,`translate(${(ebene==="name"?0:4)+LOGO[ebene].x},${(ebene==="name"?0:8)+LOGO[ebene].y})`));});
+  g.addEventListener("pointerup",()=>{if(start){start=null;alles();}});
+}
+function markeEig(){
+  const L=LOGO[ebene];const ab=(t,inner)=>`<div class="abschnitt"><h4>${t}</h4><div class="feld">${inner}</div></div>`;
+  const farbwahl=(id,wert,opts)=>`<span class="swatches">${opts.map(c=>`<button type="button" class="sw" aria-pressed="${wert===c}" style="background:${c}" data-lf="${id}" data-c="${c}" aria-label="${c}"></button>`).join("")}</span>`;
+  let h=`<div><div class="pfad">Marke › Logo › ${ebene}</div><h3>${{bogen:"Zeichen „C“",cursor:"Cursor-Strich",name:"Schriftzug"}[ebene]}</h3></div>`;
+  const pos=feld("X",zahl("l-x",L.x,-60,60),"l-x")+feld("Y",zahl("l-y",L.y,-40,40),"l-y");
+  if(ebene==="bogen")h+=ab("Form",feld("Strichstärke",`<input type="range" id="l-st" min="6" max="16" value="${L.staerke}">`,"l-st")+feld("Größe",`<input type="range" id="l-s" min="0.7" max="1.2" step="0.05" value="${L.s}">`,"l-s")+pos)+ab("Farbe",'<span class="l">Eisen</span>'+farbwahl("farbe",L.farbe,["#047857","#0f2a22","#1d4ed8"])+'<span class="l">Glut</span>'+farbwahl("glut",L.glut,["#f59e0b","#ea580c","#facc15"]));
+  if(ebene==="cursor")h+=ab("Cursor",feld("Anzeigen",cb("l-an",L.an),"l-an")+pos+'<span class="l">Farbe</span>'+farbwahl("farbe",L.farbe,["#13211a","#047857"]));
+  if(ebene==="name")h+=ab("Schriftzug",feld("Text",`<input type="text" id="l-t" value="${L.text}">`,"l-t")+feld("Gewicht",sel("l-g",L.gewicht,[[600,"halbfett"],[700,"fett"],[800,"extra fett"]]),"l-g")+feld("Sperrung",zahl("l-ab",L.abstand,0,6),"l-ab")+feld("Anzeigen",cb("l-an",L.an),"l-an")+pos);
+  h+='<div class="hinweis">Vorschläge aus dem Chat landen als neue Ebenen-Werte; alles bleibt danach von Hand änderbar. Farben nur aus dem Grunddesign.</div><button class="knopf" type="button" id="frag">Mit Claude über das Logo sprechen</button>';
+  $("#eig").innerHTML=h;
+  const setz={"l-x":v=>L.x=+v,"l-y":v=>L.y=+v,"l-st":v=>L.staerke=+v,"l-s":v=>L.s=+v,"l-an":v=>L.an=v,"l-t":v=>L.text=v.toUpperCase().slice(0,20),"l-g":v=>L.gewicht=+v,"l-ab":v=>L.abstand=+v};
+  $$("#eig select,#eig input").forEach(el=>el.addEventListener(el.type==="range"?"input":"change",()=>{setz[el.id]?.(el.type==="checkbox"?el.checked:el.value);markeFlaeche();if(el.type!=="range")markeEig();}));
+  $$("#eig [data-lf]").forEach(b=>b.addEventListener("click",()=>{L[b.dataset.lf]=b.dataset.c;alles();}));
+  $("#frag").addEventListener("click",()=>{zeigeChat();$("#chattext").focus();});
+  $("#bezug").textContent="Bezug: Logo · "+ebene;
+}
+
+// ---------------- Baustein-Bibliothek ----------------
+let modus="grund",baustein="kpi";
+const BIB=[["Grundbausteine",[["knopf","Knopf",34],["eingabe","Eingabe & Auswahl",61],["abzeichen","Abzeichen",48]]],
+  ["Zusammengesetzt",[["kpi","Kennzahl-Kachel",23],["tabelle","Tabelle",17],["leer","Leer-/Lade-/Fehlerzustand",40],["dialog","Dialog",29]]],
+  ["Diagramme",[["linie","Liniendiagramm",6],["balken","Balkendiagramm",9],["kurve","Kurve in der Kachel",11]]],
+  ["Fachbausteine",[["spieler","Spielerkarte",14],["training","Trainingskarte",8],["taktik","Taktiktafel",3,"neu"]]],
+  ["App-E-Mails",[["mail-einladung","Einladung",1],["mail-zusammen","Tageszusammenfassung",1]]]];
+const BW={kpi:{vergleich:"Vormonat",kurve:true,sentiment:"automatisch",dichte:"normal"},diagramm:{reihe:["#047857","#1d4ed8","#b45309","#7c3aed","#0e7490","#be123c"],raster:"waagrecht",beschriftung:"direkt",legende:"oben"},knopf:{form:"gerundet",gewicht:"fett"},mail:{kopf:"farbe",knopf:"akzent"}};
+const findB=id=>{for(const [g,l] of BIB){const x=l.find(b=>b[0]===id);if(x)return {g,id:x[0],name:x[1],n:x[2],neu:x[3]==="neu"};}};
+function bibBaum(){
+  $("#links").innerHTML=`<div class="kasten"><h4>Bausteine</h4><input type="text" id="bsuche" placeholder="Suchen …" style="width:100%;margin-bottom:6px"><ul class="baum">${BIB.map(([g,l])=>`<li><span style="font-size:11px;font-weight:700;color:var(--mut);display:block;padding:6px 6px 2px">${g}</span></li>${l.map(([id,n,z,neu])=>`<li><button type="button" class="e2" aria-current="${baustein===id}" data-b="${id}"><span class="punkt p"></span>${n}${neu?'<span class="neu">neu</span>':`<i>${z}×</i>`}</button></li>`).join("")}`).join("")}</ul></div>
+    <div class="kasten"><h4>Aufräumen</h4><div class="doppelt"><b>3 ähnliche Kacheln gefunden</b><br>StatCard, KpiTile, DashboardNumber → zu „Kennzahl-Kachel“ zusammenlegen?<div style="margin-top:6px;display:flex;gap:6px"><button class="knopf voll" type="button" id="zusammen">Zusammenlegen</button><button class="knopf" type="button" id="behalten">Getrennt lassen</button></div></div></div>
+    <div class="kasten"><h4>Prüfungen</h4><div class="pruef"><div><span class="ok">✓</span>Kontrast in allen Varianten</div><div><span class="ok">✓</span>Fokus sichtbar</div><div><span class="wn">!</span>„Taktiktafel“ nutzt 2 eigene Farben</div></div></div>`;
+  $$("[data-b]").forEach(b=>b.addEventListener("click",()=>{baustein=b.dataset.b;alles();}));
+  $("#zusammen")?.addEventListener("click",e=>{e.target.closest(".doppelt").innerHTML="✓ Vorschlag übernommen – geht mit dem nächsten Auftrag an die Werkstatt.";});
+  $("#behalten")?.addEventListener("click",e=>{e.target.closest(".doppelt").innerHTML="Getrennt gelassen.";});
+}
+const svgLinie=(farben,raster)=>{const daten=[[12,14,13,17,16,18],[9,10,12,11,13,14]];const X=i=>20+i*44,Y=v=>110-v*5;
+  return `<svg viewBox="0 0 260 130" width="100%" role="img" aria-label="Anwesenheit U11 und U12 steigt">${raster!=="keins"?[30,60,90].map(y=>`<line x1="20" x2="250" y1="${y}" y2="${y}" stroke="currentColor" stroke-opacity=".12"/>`).join(""):""}${daten.map((d,j)=>`<polyline fill="none" stroke="${farben[j]}" stroke-width="2.5" points="${d.map((v,i)=>X(i)+","+Y(v)).join(" ")}"/><circle cx="${X(5)}" cy="${Y(d[5])}" r="3.5" fill="${farben[j]}"/><text x="${X(5)-4}" y="${Y(d[5])-7}" font-size="10" fill="${farben[j]}" text-anchor="end">${["U11","U12"][j]}</text>`).join("")}${["Mai","Jun","Jul","Aug","Sep","Okt"].map((m,i)=>`<text x="${X(i)}" y="126" font-size="9" fill="currentColor" fill-opacity=".6" text-anchor="middle">${m}</text>`).join("")}</svg>`;};
+const svgBalken=(farben)=>`<svg viewBox="0 0 260 130" width="100%" role="img" aria-label="Tore je Mannschaft">${[["U9",14],["U10",9],["U11",17],["U12",12]].map(([t,v],i)=>`<rect x="${24+i*58}" y="${112-v*5}" width="34" height="${v*5}" rx="4" fill="${farben[0]}"/><text x="${41+i*58}" y="${106-v*5}" font-size="10" text-anchor="middle" fill="currentColor">${v}</text><text x="${41+i*58}" y="125" font-size="9" text-anchor="middle" fill="currentColor" fill-opacity=".6">${t}</text>`).join("")}</svg>`;
+const kurve=f=>`<svg viewBox="0 0 120 28" width="100%" height="28" aria-hidden="true"><polyline fill="none" stroke="${f}" stroke-width="2" points="0,22 20,18 40,20 60,12 80,14 100,8 120,6"/></svg>`;
+function kachel(variante,zustand){
+  const d=D(),f=d.farben[d.modus],k=BW.kpi;
+  if(zustand==="laden")return `<div class="b-kachel"><div class="skel" style="width:50%"></div><div class="skel" style="height:22px;width:70%"></div><div class="skel" style="width:40%"></div></div>`;
+  if(zustand==="leer")return `<div class="b-kachel">Zusagen Samstag<span style="opacity:.65;margin-top:6px">Noch keine Zusagen – die Einladung geht morgen raus.</span></div>`;
+  if(zustand==="fehler")return `<div class="b-kachel">Zusagen Samstag<span style="color:#b91c1c;margin-top:6px">Konnte nicht geladen werden.</span><span style="text-decoration:underline">Nochmal versuchen</span></div>`;
+  const gut=variante!=="absagen";
+  return `<div class="b-kachel">${variante==="absagen"?"Absagen Oktober":"Zusagen Samstag"}<span class="w">${variante==="absagen"?"4":"14 / 18"}</span>${variante!=="einfach"?`<span class="d ${gut?"gut":"gut"}">${variante==="absagen"?"▼ 3":"▲ 2"} <span style="font-weight:400;opacity:.7">vs. ${k.vergleich}</span></span>`:""}${k.kurve&&variante==="kurve"?kurve(f.akzent):""}${variante==="absagen"?'<span style="font-size:11px;opacity:.7">weniger ist gut → grün</span>':""}</div>`;
+}
+function bibFlaeche(){
+  const d=D(),b=findB(baustein),f=$("#flaeche");
+  let inner="";
+  if(baustein==="kpi"){const V=[["einfach","Kennzahl"],["trend","mit Veränderung"],["kurve","mit Kurve"],["absagen","weniger ist gut"]];const Z=[["normal","Normal"],["laden","Laden"],["leer","Keine Daten"],["fehler","Fehler"]];
+    inner=`<div class="matrix" style="--sp:${V.length}"><div class="zeile"><span></span>${V.map(v=>`<span class="kopfz">${v[1]}</span>`).join("")}</div>${Z.map(([z,zn])=>`<div class="zeile"><span class="lab">${zn}</span>${V.map(([v])=>kachel(v,z)).join("")}</div>`).join("")}</div>`;}
+  else if(["linie","balken","kurve"].includes(baustein)){const r=BW.diagramm.reihe;
+    inner=`<div class="matrix" style="--sp:2"><div class="zeile"><span class="lab">Hell</span><div class="b-kachel" style="color:#13211a;background:#fff"><b>Anwesenheit steigt in U11 und U12</b>${baustein==="balken"?svgBalken(r):svgLinie(r,BW.diagramm.raster)}</div><div class="b-kachel" style="background:#111d18;color:#e2eee8;border-color:#22332c"><b>Dunkel</b>${baustein==="balken"?svgBalken(["#34d399"]):svgLinie(["#34d399","#93c5fd"],BW.diagramm.raster)}</div></div><div class="zeile"><span class="lab">Farbreihe</span><div style="grid-column:span 2;display:flex;gap:6px">${r.map((c,i)=>`<span title="${i+1}" style="width:36px;height:22px;border-radius:6px;background:${c}"></span>`).join("")}<span style="font-size:12px;color:var(--mut)">feste Reihenfolge · nie nur Farbe (Beschriftung direkt)</span></div></div></div>`;}
+  else if(baustein.startsWith("mail")){const a=d.farben.hell.akzent;
+    inner=`<div class="mail" style="width:100%"><div class="karte"><div style="background:${BW.mail.kopf==="farbe"?d.farben.hell.kopf:"#fff"};color:${BW.mail.kopf==="farbe"?"#fff":"#13211a"};padding:14px 18px;font-weight:700;display:flex;gap:8px;align-items:center"><span style="width:26px;height:26px;border-radius:7px;background:${a};display:grid;place-items:center;color:#fff">T</span>Trainer to go</div><div style="padding:18px">${baustein==="mail-einladung"?"<b style='font-size:18px'>Du bist eingeladen</b><p>Der SV Musterdorf lädt dich zur Mannschaft U11 ein.</p>":"<b style='font-size:18px'>Deine Tageszusammenfassung</b><p>2 neue Nachrichten · 1 Training morgen 17:30 · 3 Zusagen</p>"}<span style="display:inline-block;background:${a};color:#fff;border-radius:${d.rund}px;padding:9px 16px;font-weight:700">${baustein==="mail-einladung"?"Einladung annehmen":"In der App öffnen"}</span><p style="font-size:11px;color:#5b6c63;margin-top:16px">Du bekommst diese Mail, weil … · Abmelden · Impressum</p></div></div></div>`;}
+  else {inner=`<div class="matrix" style="--sp:3"><div class="zeile"><span></span><span class="kopfz">Variante A</span><span class="kopfz">Variante B</span><span class="kopfz">deaktiviert</span></div><div class="zeile"><span class="lab">${b.name}</span>${["","",""].map((_,i)=>`<div class="b-kachel" style="opacity:${i===2?.5:1}">${b.name}<span class="w" style="font-size:16px">Beispiel</span></div>`).join("")}</div></div>`;}
+  f.innerHTML=`<div style="width:100%;display:flex;flex-direction:column;gap:12px"><div class="massband" style="text-align:left">${b.g} › ${b.name} · Vorschau mit Beispieldaten im Entwurf ${ENT[ai].name.split(" · ")[0]}</div><div style="${appVars(d,klasse)};color:var(--a-text)">${inner}</div>
+    <div class="verw"><b>Verwendet an ${b.n} Stelle${b.n===1?"":"n"}</b><ul>${["Start (Übersicht)","Mannschaft › Kader","Spiele › Saison","Verein › Finanzen"].slice(0,Math.min(4,b.n)).map(x=>`<li>${x} <a href="#" onclick="return false">Arbeitsplatz öffnen</a></li>`).join("")}${b.n>4?`<li>… und ${b.n-4} weitere</li>`:""}</ul>Eine Änderung hier gilt an allen diesen Stellen.</div></div>`;
+}
+function bibEig(){
+  const b=findB(baustein);let h=`<div><div class="pfad">Bausteine › ${b.g} › ${b.name}</div><h3>${b.name}</h3></div>`;
+  const ab=(t,inner)=>`<div class="abschnitt"><h4>${t}</h4><div class="feld">${inner}</div></div>`;
+  if(baustein==="kpi")h+=ab("Kennzahl-Kachel",feld("Vergleich mit",sel("bk-v",BW.kpi.vergleich,[["Vormonat","Vormonat"],["Vorwoche","Vorwoche"],["Ziel","Ziel"]]),"bk-v")+feld("Kurve zeigen",cb("bk-k",BW.kpi.kurve),"bk-k")+feld("Farbe",sel("bk-s",BW.kpi.sentiment,[["automatisch","nach gut/schlecht"],["neutral","immer neutral"]]),"bk-s"))+'<div class="hinweis">Nie eine Zahl allein: immer mit Vergleich. Grün/Rot richtet sich danach, ob die Veränderung gut ist – nicht nach rauf/runter.</div>';
+  else if(["linie","balken","kurve"].includes(baustein))h+=ab("Diagramme",feld("Gitterlinien",sel("bd-r",BW.diagramm.raster,[["waagrecht","waagrecht, dezent"],["keins","keine"]]),"bd-r")+feld("Beschriftung",sel("bd-b",BW.diagramm.beschriftung,[["direkt","direkt an den Linien"],["legende","Legende"]]),"bd-b")+'<span class="l">Titel</span><span>nennt die Aussage</span>')+'<div class="hinweis">Farbreihen gelten für alle Diagramme der App (kategorisch in fester Reihenfolge, Signalfarben fest).</div>';
+  else if(baustein.startsWith("mail"))h+=ab("App-E-Mail",feld("Kopf",sel("bm-k",BW.mail.kopf,[["farbe","Kopfband-Farbe"],["weiss","weiß mit Logo"]]),"bm-k")+'<span class="l">Fußzeile</span><span>Grund der Mail, Abmelden, Impressum (Pflicht)</span>')+'<div class="hinweis">Mails nutzen dieselben Grundwerte wie die App. PDF-Layouts stellst du in der App selbst ein.</div>';
+  else h+=ab("Eigenschaften",'<span class="l">Varianten</span><span>aus dem Code übernommen</span><span class="l">Zustände</span><span>normal, Fokus, deaktiviert, laden</span>')+(findB(baustein).neu?'<div class="hinweis">Neu von der Werkstatt angelegt (Auftrag #18) – bitte durchsehen. Nutzt 2 eigene Farben statt der Grundwerte.</div>':"");
+  h+=`<button class="knopf" type="button" id="frag">Mit Claude über „${b.name}“ sprechen</button>`;
+  $("#eig").innerHTML=h;
+  const setz={"bk-v":v=>BW.kpi.vergleich=v,"bk-k":v=>BW.kpi.kurve=v,"bk-s":v=>BW.kpi.sentiment=v,"bd-r":v=>BW.diagramm.raster=v,"bd-b":v=>BW.diagramm.beschriftung=v,"bm-k":v=>BW.mail.kopf=v};
+  $$("#eig select,#eig input").forEach(el=>el.addEventListener("change",()=>{const v=el.type==="checkbox"?el.checked:el.value;setz[el.id]?.(v);alles();}));
+  $("#frag").addEventListener("click",()=>{zeigeChat();$("#chattext").focus();});
+  $("#bezug").textContent=`Bezug: Baustein ${b.name}`;
+}
+const linksGrund=$("#links").innerHTML;
+$$("[data-modus]").forEach(b=>b.addEventListener("click",()=>{modus=b.dataset.modus;$$("[data-modus]").forEach(x=>x.setAttribute("aria-pressed",x===b));$("#modustitel").textContent=modus==="bib"?"Bausteine":modus==="marke"?"Marke":"Grunddesign";if(modus==="grund")$("#links").innerHTML=linksGrund;alles();}));
+function alles(){entwuerfe();geraete();
+  if(modus==="bib"){bibBaum();bibFlaeche();bibEig();}else if(modus==="marke"){markeLinks();markeFlaeche();markeEig();}else{baum();pruef();flaeche();eig();}
+  $("#undo").disabled=!hist.length;$("#redo").disabled=!zukunft.length;}
+alles();
+</script>
