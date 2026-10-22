@@ -3,7 +3,7 @@
   "identifier": "codeschmiede-web",
   "description": "Die Oberfläche der Codeschmiede darf im Programm genau diese Befehle nutzen: Werkstatt starten/stoppen, Status lesen, Voraussetzungen prüfen, Statuszeile für Abo-Limits einrichten, Links öffnen.",
   "windows": ["main"],
-  "remote": { "urls": ["https://codeschmiede.pages.dev/*", "https://*.codeschmiede.pages.dev/*"] },
+  "remote": { "urls": ["https://codeschmiede.pages.dev/*"] },
   "permissions": [
     "allow-ws-check", "allow-ws-statuszeile",
     "allow-ws-start", "allow-ws-token", "allow-ws-stop", "allow-ws-status",

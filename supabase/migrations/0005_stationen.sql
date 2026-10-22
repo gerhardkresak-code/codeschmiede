@@ -16,6 +16,9 @@ alter table public.ws_auftraege add constraint ws_auftraege_stand_check
 alter table public.ws_auftraege add column if not exists pruefung jsonb not null default '{}'::jsonb;
 alter table public.ws_auftraege add column if not exists letzter_commit text;   -- zuletzt hochgeladener Stand (für die Live-Vorschau)
 alter table public.ws_auftraege add column if not exists live_commit text;      -- Stand, mit dem der Auftrag live gegangen ist
+-- Zweignamen nur in der Form der Werkstatt (verhindert Git-Optionen wie „--upload-pack=…“ als Zweigname)
+alter table public.ws_auftraege drop constraint if exists ws_auftraege_zweig_check;
+alter table public.ws_auftraege add constraint ws_auftraege_zweig_check check (zweig is null or zweig ~ '^feature/cs-[0-9]+-[a-z0-9-]{1,40}$');
 
 -- Vorschau je Projekt: Testseiten der Zweige (Cloudflare Pages) und die echte App
 alter table public.ws_projekte add column if not exists vorschau_domain text
@@ -53,6 +56,10 @@ begin
     if (old.stand in ('sicherheit','zusammen','feature','wissen') or new.stand in ('sicherheit','zusammen','feature','wissen'))
        and new.stand is distinct from old.stand
     then raise exception 'Dieser Stand wird nur auf dem Admin-PC gesetzt'; end if;
+    -- Nach der Freigabe sind Zweig, Pull Request und Stand fest (Prüfung 2026-10-22, R1)
+    if old.stand in ('sicherheit','zusammen','feature','wissen')
+       and (new.zweig, new.pr_nummer, new.letzter_commit) is distinct from (old.zweig, old.pr_nummer, old.letzter_commit)
+    then raise exception 'Zweig und Pull Request sind nach der Freigabe fest'; end if;
     -- „lokal“ (Bauen & Tests auf dem Werkstatt-PC vor der Freigabe) darf jede Werkstatt schreiben, die Stationen nur der Admin-PC
     if (new.pruefung - 'lokal', new.live_commit) is distinct from (old.pruefung - 'lokal', old.live_commit)
     then raise exception 'Prüfergebnisse schreibt nur der Admin-PC'; end if;

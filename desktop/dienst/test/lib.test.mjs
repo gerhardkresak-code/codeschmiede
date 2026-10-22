@@ -91,6 +91,9 @@ test("Antworten, Feature-Zeile, Prüfergebnisse, Testseiten-Adresse", () => {
   assert.deepEqual(pruefErgebnis("Alles sauber.\nPRÜFUNG: GRÜN"), { ergebnis: "gruen", befund: "Alles sauber." });
   assert.equal(pruefErgebnis("1. Schlüssel im Code\nPRUEFUNG: ROT").ergebnis, "rot");
   assert.equal(pruefErgebnis("PRÜFUNG: GRÜN\nnachgedacht\nPRÜFUNG: ROT").ergebnis, "rot");
+  assert.equal(pruefErgebnis("Befund\nPRÜFUNG: GRÜN, aber eigentlich nicht").ergebnis, "rot");
+  assert.equal(pruefErgebnis("PRÜFUNG: GRÜN\nNoch ein Satz danach.").ergebnis, "rot");
+  assert.equal(pruefErgebnis("ok\n**PRÜFUNG: GRÜN**\n").ergebnis, "gruen");
   assert.equal(pruefErgebnis("keine Zeile").ergebnis, "rot");
   assert.equal(cfAlias("feature/cs-4-das-geho-rt-in-die-einstellung"), "feature-cs-4-das-geho-rt-in");
   assert.equal(cfAlias("feature/cs-3-testanfrage"), "feature-cs-3-testanfrage");
