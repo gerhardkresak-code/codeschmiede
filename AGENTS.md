@@ -43,3 +43,8 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - **2026-10-22 16:25 – Automatische Updates:** Jede neue Version des Programms wird automatisch eingespielt (im Hintergrund laden,
   beim nächsten Start aktiv, Knopf „Jetzt neu starten“, nie mitten in einem Auftrag). Jede Programmänderung in `main` erhöht die Version
   in `desktop/src-tauri/tauri.conf.json`, `Cargo.toml` und `desktop/dienst/package.json`; der Ablauf „Programm bauen“ veröffentlicht sie signiert.
+- **2026-10-22 20:39 – Weg bis live:** Freigabe → Sicherheitsprüfung → Zusammenführen → Prüfung des ganzen Features in einer Testfassung → erst dann live.
+  Rot an einer Prüfung = Nacharbeit, nichts geht live.
+- **2026-10-22 16:45 – Alles landet beim Feature:** Was Gerhard im Gruppen-Chat oder im Claude-Chat zu einem Feature sagt, erscheint beim Feature
+  in der Codeschmiede (Herkunft „aus Gruppe“ / „aus Claude-Chat“). Claude trägt Anweisungen aus dem Claude-Chat als Nachricht
+  (`kanal = 'claude-chat'`) beim passenden Auftrag bzw. als neuen Auftrag ein und meldet dort, was gebaut wurde.
