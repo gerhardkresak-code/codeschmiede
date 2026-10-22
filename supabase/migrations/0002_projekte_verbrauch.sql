@@ -1,5 +1,5 @@
 -- Codeschmiede · Datenbank v2: mehrere Projekte (Apps), Mitglieder je Projekt, Verbrauch und Limits
--- Baut auf 0001_grundlage.sql auf. Mehrfach ausführbar. Keine Vereins- oder Kinderdaten.
+-- Baut auf 0001_grundlage.sql auf. Mehrfach ausführbar. Reihenfolge immer 0001 → 0002 (0001 danach nicht allein wiederholen). Keine Vereins- oder Kinderdaten.
 -- Vorerst im Supabase-Testprojekt von Trainer to go (Entscheidung Gerhard 2026-10-22 13:3x), Umzug in eine eigene Datenbank später.
 
 begin;
@@ -31,11 +31,16 @@ create table if not exists public.ws_projekt_mitglieder (
 alter table public.ws_bereiche add column if not exists projekt_id text references public.ws_projekte(id);
 update public.ws_bereiche set projekt_id = 'trainer-to-go' where projekt_id is null;
 alter table public.ws_bereiche alter column projekt_id set not null;
+alter table public.ws_bereiche alter column projekt_id set default 'trainer-to-go'; -- nur damit 0001 (Grunddaten Trainer to go) wiederholbar bleibt
 
 -- Einladungen gelten für ein Projekt
 alter table public.ws_einladungen add column if not exists projekt_id text references public.ws_projekte(id);
 update public.ws_einladungen set projekt_id = 'trainer-to-go' where projekt_id is null;
 alter table public.ws_einladungen alter column projekt_id set not null;
+alter table public.ws_einladungen alter column projekt_id set default 'trainer-to-go';
+-- Eine Adresse kann für mehrere Projekte eingeladen werden; nur eine offene Einladung je Adresse
+drop index if exists public.ws_einladungen_email_ci;
+create unique index if not exists ws_einladungen_email_offen on public.ws_einladungen (lower(email)) where angenommen is null;
 
 -- Bestehende Nicht-Admins werden Mitglied von Trainer to go mit ihrer bisherigen Rolle
 insert into public.ws_projekt_mitglieder (projekt_id, benutzer_id, rolle)
@@ -209,11 +214,54 @@ language sql stable security definer set search_path = public as $$
   from public.ws_verbrauch where erstellt >= date_trunc('month', now())
 $$;
 
+-- Mitglieder und Werkstatt-PCs nur sehen, wenn man ein Projekt teilt (unabhängige Prüfung R1)
+create or replace function public.ws_teilt_projekt(p_benutzer uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.ws_ist_admin() or p_benutzer = auth.uid() or exists (
+    select 1 from public.ws_projekt_mitglieder m1 join public.ws_projekt_mitglieder m2 on m1.projekt_id = m2.projekt_id
+    where m1.benutzer_id = auth.uid() and m2.benutzer_id = p_benutzer and public.ws_sieht_projekt(m1.projekt_id))
+$$;
+
+-- Werkstatt: Entwickler in mindestens einem Projekt (Rolle je Projekt statt Grundrolle; Prüfung O1)
+create or replace function public.ws_ist_werkstatt() returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.ws_ist_admin() or exists (select 1 from public.ws_projekt_mitglieder m join public.ws_benutzer b on b.id = m.benutzer_id
+    where m.benutzer_id = auth.uid() and b.aktiv and m.rolle = 'entwickler')
+$$;
+
+-- Feature und Gruppe eines Auftrags müssen zum selben Projekt gehören (Prüfung O2)
+create or replace function public.ws_projekt_von_feature(p_feature text) returns text
+language sql stable security definer set search_path = public as $$
+  select public.ws_projekt_von_gruppe(gruppe_id) from public.ws_features where id = p_feature
+$$;
+
+create or replace function public.ws_auftraege_schutz() returns trigger language plpgsql set search_path = public as $$
+begin
+  if current_user = 'authenticated' and not public.ws_ist_admin() and
+     (new.gruppe_id, new.feature_id, new.erstellt_von, new.erstellt, new.art, new.baustein)
+       is distinct from (old.gruppe_id, old.feature_id, old.erstellt_von, old.erstellt, old.art, old.baustein)
+  then raise exception 'Dieses Feld ist nicht änderbar'; end if;
+  if new.feature_id is not null and new.feature_id is distinct from old.feature_id
+     and public.ws_projekt_von_feature(new.feature_id) is distinct from public.ws_projekt_von_gruppe(new.gruppe_id)
+  then raise exception 'Feature gehört zu einem anderen Projekt'; end if;
+  if current_user = 'authenticated' and not public.ws_ist_admin() and
+     (old.stand in ('zusammen','sicherheit','wissen') or new.stand in ('sicherheit','wissen'))
+  then raise exception 'Dieser Stand wird nur auf dem Admin-PC gesetzt'; end if;
+  if new.stand = 'freigabe' and new.stand is distinct from old.stand and (new.pr_nummer is null or new.zweig is null)
+  then raise exception 'Zur Freigabe braucht es einen Pull Request'; end if;
+  return new;
+end $$;
+
 -- ---------- RLS v2 ----------
 alter table public.ws_projekte          enable row level security;
 alter table public.ws_projekt_mitglieder enable row level security;
 alter table public.ws_einstellungen     enable row level security;
 alter table public.ws_verbrauch         enable row level security;
+
+drop policy if exists ws_benutzer_lesen on public.ws_benutzer;
+create policy ws_benutzer_lesen on public.ws_benutzer for select to authenticated using (public.ws_ist_mitglied() and public.ws_teilt_projekt(id));
+drop policy if exists ws_werkstatt_pcs_lesen on public.ws_werkstatt_pcs;
+create policy ws_werkstatt_pcs_lesen on public.ws_werkstatt_pcs for select to authenticated using (public.ws_ist_mitglied() and public.ws_teilt_projekt(benutzer_id));
 
 -- Lesen nur innerhalb der eigenen Projekte
 drop policy if exists ws_projekte_lesen on public.ws_projekte;
@@ -232,7 +280,8 @@ create policy ws_verbrauch_lesen on public.ws_verbrauch for select to authentica
 drop policy if exists ws_verbrauch_neu on public.ws_verbrauch;
 create policy ws_verbrauch_neu on public.ws_verbrauch for insert to authenticated
   with check (exists (select 1 from public.ws_auftraege a where a.id = auftrag_id and public.ws_ist_werkstatt_fuer(a.gruppe_id)
-                      and public.ws_projekt_von_gruppe(a.gruppe_id) = projekt_id));
+                      and public.ws_projekt_von_gruppe(a.gruppe_id) = projekt_id)
+              and (werkstatt_pc is null or werkstatt_pc in (select id from public.ws_werkstatt_pcs where benutzer_id = auth.uid())));
 
 -- Bestehende Lese-Policies auf Projekte einschränken
 drop policy if exists ws_bereiche_lesen on public.ws_bereiche;
@@ -263,7 +312,9 @@ drop policy if exists ws_auftraege_neu on public.ws_auftraege;
 create policy ws_auftraege_neu on public.ws_auftraege for insert to authenticated
   with check (public.ws_darf(public.ws_bereich_von_gruppe(gruppe_id), 'auftraege') and erstellt_von = auth.uid()
               and stand = 'wartet' and (public.ws_rolle_fuer_gruppe(gruppe_id) <> 'texter' or art = 'text')
-              and zweig is null and pr_nummer is null and version is null and werkstatt_pc is null and modell is null);
+              and zweig is null and pr_nummer is null and version is null and werkstatt_pc is null and modell is null
+              and (ws_auftraege.feature_id is null
+                   or public.ws_projekt_von_feature(ws_auftraege.feature_id) = public.ws_projekt_von_gruppe(ws_auftraege.gruppe_id)));
 
 -- Einladungen: Admin, nur mit Projekt
 drop policy if exists ws_einladungen_admin on public.ws_einladungen;
@@ -277,17 +328,17 @@ create policy ws_einladungen_admin on public.ws_einladungen for all to authentic
 revoke all on public.ws_projekte, public.ws_projekt_mitglieder, public.ws_einstellungen, public.ws_verbrauch from anon;
 grant select on public.ws_projekte, public.ws_projekt_mitglieder, public.ws_einstellungen, public.ws_verbrauch to authenticated;
 grant update (name, beschreibung, repo, symbol, archiviert) on public.ws_projekte to authenticated;
-grant insert on public.ws_verbrauch to authenticated;
+grant insert (auftrag_id, projekt_id, modell, kosten_usd, tokens_ein, tokens_aus, werkstatt_pc) on public.ws_verbrauch to authenticated;
 grant usage on sequence public.ws_verbrauch_id_seq to authenticated;
 -- Modell setzt die Werkstatt (Spaltenrecht über die bestehende Update-Policy der Werkstatt)
 revoke execute on function public.ws_projekt_von_bereich(text), public.ws_projekt_von_gruppe(text), public.ws_rolle_im_projekt(text),
   public.ws_sieht_projekt(text), public.ws_rolle_fuer_gruppe(text), public.ws_projekt_anlegen(text,text,text,text,text),
   public.ws_mitglied_setzen(text,uuid,text), public.ws_limit_setzen(numeric,int,boolean), public.ws_verbrauch_monat(),
-  public.ws_verbrauch_gesamt_monat() from public, anon;
+  public.ws_verbrauch_gesamt_monat(), public.ws_teilt_projekt(uuid), public.ws_projekt_von_feature(text) from public, anon;
 grant execute on function public.ws_projekt_von_bereich(text), public.ws_projekt_von_gruppe(text), public.ws_rolle_im_projekt(text),
   public.ws_sieht_projekt(text), public.ws_rolle_fuer_gruppe(text), public.ws_projekt_anlegen(text,text,text,text,text),
   public.ws_mitglied_setzen(text,uuid,text), public.ws_limit_setzen(numeric,int,boolean), public.ws_verbrauch_monat(),
-  public.ws_verbrauch_gesamt_monat() to authenticated;
+  public.ws_verbrauch_gesamt_monat(), public.ws_teilt_projekt(uuid), public.ws_projekt_von_feature(text) to authenticated;
 
 -- ---------- Live-Abgleich ----------
 do $$ declare t text; begin
