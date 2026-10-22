@@ -1,0 +1,14 @@
+{
+  "name": "ttg-werkstatt-dienst",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Werkstatt-Dienst der Trainer-to-go Programmierumgebung: holt Aufträge, arbeitet sie mit Claude (Agent SDK, API-Schlüssel) ab und meldet Live-Log, Rückfragen und Erlaubnis-Anfragen.",
+  "type": "module",
+  "main": "index.mjs",
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test test/" },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.0",
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

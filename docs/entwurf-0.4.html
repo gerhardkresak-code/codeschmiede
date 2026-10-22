@@ -1,0 +1,795 @@
+<title>Trainer-to-go Programmierumgebung</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: Programmfenster – Menü links (Handy: Leiste oben), Kopfleiste mit Werkstatt-Schalter, darunter die gewählte Ansicht */
+:root{
+  --bg:#f5f7f6;--panel:#ffffff;--fg:#14211c;--muted:#5b6b64;--line:#dfe6e2;
+  --accent:#047857;--accent-soft:#e3f3ec;--on-accent:#ffffff;--side:#0f2a22;--side-fg:#d7e7e0;--side-muted:#8fb0a3;
+  --green:#16a34a;--green-soft:#e6f6ec;--amber:#d97706;--amber-soft:#fdf1e0;--red:#dc2626;--red-soft:#fdeaea;--blue:#2563eb;--blue-soft:#e7eefc;--off:#cbd3cf;
+  --me:#e3f3ec;--bot:#f5f7f6;--stage:#e9eeec;
+  --display:"Barlow Semi Condensed","Barlow",system-ui,sans-serif;--body:"Barlow",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1513;--panel:#16201d;--fg:#e6efeb;--muted:#93a49d;--line:#26332e;--accent:#34d399;--accent-soft:#12302a;--on-accent:#0e1513;--side:#0a110f;--side-fg:#d7e7e0;--side-muted:#7f998e;--green:#22c55e;--green-soft:#11291b;--amber:#f59e0b;--amber-soft:#2e2310;--red:#f87171;--red-soft:#321617;--blue:#60a5fa;--blue-soft:#14223a;--off:#33413c;--me:#12302a;--bot:#1b2622;--stage:#111a17;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0e1513;--panel:#16201d;--fg:#e6efeb;--muted:#93a49d;--line:#26332e;--accent:#34d399;--accent-soft:#12302a;--on-accent:#0e1513;--side:#0a110f;--side-fg:#d7e7e0;--side-muted:#7f998e;--green:#22c55e;--green-soft:#11291b;--amber:#f59e0b;--amber-soft:#2e2310;--red:#f87171;--red-soft:#321617;--blue:#60a5fa;--blue-soft:#14223a;--off:#33413c;--me:#12302a;--bot:#1b2622;--stage:#111a17;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5}
+svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Programmrahmen */
+.app{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100vh}
+.side{background:var(--side);color:var(--side-fg);display:flex;flex-direction:column;gap:4px;padding-block:18px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:12px;position:sticky;top:0;height:100vh;overflow-y:auto}
+.brand{display:flex;align-items:center;gap:10px;padding:0 8px 16px}
+.logo{width:34px;height:34px;border-radius:9px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;flex:none}
+.brand b{font-family:var(--display);font-size:17px;line-height:1.1;display:block}
+.brand small{font-size:12px;color:var(--side-muted)}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:0;border-radius:8px;background:none;color:var(--side-fg);font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.nav button:hover{background:rgba(255,255,255,.06)}
+.nav button[aria-current="true"]{background:rgba(52,211,153,.16);color:#fff;font-weight:600}
+.nav .badge-n{margin-left:auto;font-size:11px;font-weight:700;background:var(--amber);color:#1b1305;border-radius:999px;padding:0 7px}
+.nav .grp{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--side-muted);padding:12px 10px 4px}
+.me{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;background:rgba(255,255,255,.05);font-size:13px}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-weight:700;font-size:12px;flex:none}
+.me small{display:block;color:var(--side-muted)}
+.main{min-width:0;padding-block:0 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 0;border-bottom:1px solid var(--line);margin-bottom:18px}
+.topbar h1{font-family:var(--display);font-weight:700;font-size:26px;margin:0;line-height:1.1}
+.sync{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--green)}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.switch{display:inline-flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 12px 5px 6px;font:inherit;font-size:13px;color:var(--fg);cursor:pointer}
+.switch .knob{width:36px;height:20px;border-radius:999px;background:var(--off);position:relative;transition:background .15s}
+.switch .knob::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--panel);transition:left .15s}
+.switch[aria-checked="true"] .knob{background:var(--green)}
+.switch[aria-checked="true"] .knob::after{left:18px}
+.switch small{color:var(--muted)}
+@media (max-width:860px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{position:static;height:auto;flex-direction:row;align-items:center;overflow-x:auto;padding-block:10px;padding-right:max(12px,env(safe-area-inset-right,0px))}
+  .brand{padding:0 8px 0 0}.brand div,.me,.nav .grp{display:none}
+  .nav{flex-direction:row}
+  .nav button{white-space:nowrap}
+}
+
+.draft{display:flex;gap:10px;align-items:flex-start;background:var(--amber-soft);color:var(--fg);border:1px solid var(--amber);border-radius:10px;padding:8px 12px;font-size:14px;margin-bottom:16px}
+.draft svg{color:var(--amber);margin-top:2px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.sec{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);padding:12px 16px 6px;display:flex;align-items:center;gap:8px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border:0;border-radius:10px;background:var(--accent);color:var(--on-accent);font:inherit;font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.3px;cursor:pointer;white-space:nowrap}
+.btn.ghost{background:none;color:var(--fg);border:1px solid var(--line);font-weight:600}
+.btn.sm{font-size:14px;padding:6px 12px}
+.btn.danger{background:var(--red);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.empty{padding:40px 18px;color:var(--muted);text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:40;max-width:calc(100% - 32px)}
+
+/* Zentrale */
+.tally{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.tbtn{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font:inherit;color:var(--fg);cursor:pointer}
+.tbtn[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.tbtn b{font-family:var(--display);font-size:20px;font-variant-numeric:tabular-nums}
+.tbtn span{font-size:13px;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--off)}
+.dot.frage{background:var(--amber)}.dot.laeuft{background:var(--blue)}.dot.wartet{background:var(--off)}.dot.freigabe{background:var(--green)}
+.flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));margin-bottom:18px}
+@media (max-width:760px){.flow{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.st{padding:10px 14px;border-left:1px solid var(--line);display:flex;flex-direction:column;gap:2px;min-width:0}
+.st:first-child{border-left:0}
+.st .k{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.st b{font-family:var(--display);font-size:22px;font-variant-numeric:tabular-nums}
+.st .who{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.st.on b{color:var(--blue)}
+.grid{display:grid;grid-template-columns:240px minmax(0,1fr) minmax(0,400px);gap:18px;align-items:start}
+@media (max-width:1280px){.grid{grid-template-columns:220px minmax(0,1fr)}.chat{grid-column:1/-1}}
+@media (max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}}
+.tree button{display:flex;align-items:center;gap:10px;width:100%;padding:9px 16px;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.tree button:hover{background:var(--accent-soft)}
+.tree button[aria-current="true"]{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent);font-weight:600}
+.tree .cnt{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tree .q{margin-left:auto;font-size:11px;font-weight:600;background:var(--amber-soft);color:var(--amber);border-radius:999px;padding:1px 7px}
+.tree .q+.cnt{margin-left:6px}
+.tree .work{margin-left:auto}.tree .work+.q,.tree .work+.cnt{margin-left:6px}
+.area{border-top:1px solid var(--line);padding-bottom:6px}.area:first-child{border-top:0}
+.ghead{padding:18px 18px 14px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--line)}
+.ghead h2{font-family:var(--display);font-weight:700;font-size:24px;margin:0;line-height:1.15}
+.crumb{font-size:13px;color:var(--muted);margin-bottom:2px}
+.owner{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
+.owner code{font-family:var(--mono);font-size:12px}
+.feats{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;padding:16px 18px 18px}
+.feat{display:flex;flex-direction:column;gap:8px;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font:inherit;color:inherit;cursor:pointer;min-width:0}
+.feat:hover{border-color:var(--accent)}
+.feat[aria-current="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:var(--accent-soft)}
+.feat.working{border-color:var(--blue);box-shadow:inset 0 3px 0 var(--blue)}
+.feat.aus{opacity:.55}
+.feat .top{display:flex;align-items:flex-start;gap:8px;justify-content:space-between}
+.feat h3{font-family:var(--display);font-weight:600;font-size:17px;margin:0;line-height:1.2}
+.feat p{margin:0;font-size:13px;color:var(--muted)}
+.feat .foot{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-top:auto;padding-top:4px}
+.bw{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.badge{font-size:11px;font-weight:600;letter-spacing:.3px;padding:2px 8px;border-radius:5px;white-space:nowrap}
+.badge.live{background:var(--green-soft);color:var(--green)}
+.badge.arbeit{background:var(--blue-soft);color:var(--blue)}
+.badge.entwurf{background:var(--amber-soft);color:var(--amber)}
+.badge.geplant{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.badge.neu{background:var(--accent);color:var(--on-accent)}
+.badge.aus{background:var(--bg);color:var(--muted);border:1px dashed var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;padding:0 18px 16px;font-size:12px;color:var(--muted);align-items:center}
+.work{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--blue);white-space:nowrap}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--blue);flex:none}
+@media (prefers-reduced-motion:no-preference){.pulse{animation:pl 1.6s ease-out infinite}@keyframes pl{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--blue) 60%,transparent)}100%{box-shadow:0 0 0 7px transparent}}}
+
+.chat{display:flex;flex-direction:column;position:sticky;top:12px;max-height:calc(100vh - 24px)}
+.chead{padding:14px 16px;border-bottom:1px solid var(--line)}
+.chead .t{display:flex;align-items:center;gap:8px;font-family:var(--display);font-weight:700;font-size:19px}
+.chead .s{font-size:13px;color:var(--muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chead .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.scope{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.thread{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-height:220px}
+.msg{max-width:88%;padding:9px 12px;border-radius:12px;font-size:14px;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--me);border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:var(--bot);border:1px solid var(--line);border-bottom-left-radius:4px}
+.msg .who{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.msg.frage{border-color:var(--amber);background:var(--amber-soft)}
+.msg.ergebnis{border-color:var(--green)}
+.msg ul{margin:6px 0 0;padding-left:18px}
+.ctx{display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:12px;background:var(--panel);border:1px dashed var(--accent);border-radius:6px;padding:6px 8px;color:var(--muted)}
+.ctx code{font-family:var(--mono);font-size:11px;overflow-wrap:anywhere}
+.pr{display:flex;align-items:center;gap:8px;margin-top:8px;font-family:var(--mono);font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.confirm{margin-top:8px;padding:10px;border:1px solid var(--accent);border-radius:8px;background:var(--panel);display:flex;flex-direction:column;gap:8px;font-size:13px}
+.confirm code{font-family:var(--mono);font-size:12px}
+.sys{align-self:center;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;text-align:center}
+.pipe{display:flex;gap:4px;align-self:stretch;flex-wrap:wrap}
+.pipe span{flex:1;min-width:70px;font-size:10px;font-weight:600;letter-spacing:.2px;text-align:center;padding:3px 4px;border-radius:5px;background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.pipe span.done{background:var(--green-soft);color:var(--green);border-color:transparent}
+.pipe span.now{background:var(--blue);color:var(--panel);border-color:transparent}
+.queue{border-top:1px solid var(--line);padding:10px 16px;font-size:13px}
+.queue .row{display:flex;align-items:center;gap:8px;padding:4px 0;color:var(--muted)}
+.queue .row b{color:var(--fg);font-weight:500;min-width:0;overflow-wrap:anywhere}
+.compose{border-top:1px solid var(--line);padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.compose textarea,.pop textarea{width:100%;min-height:72px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-size:14px;background:var(--bg);color:var(--fg)}
+.compose .row{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.hint{font-size:12px;color:var(--muted)}
+.close{display:none;margin-left:auto;background:none;border:1px solid var(--line);border-radius:8px;padding:4px 8px;color:var(--fg);cursor:pointer;font:inherit;font-size:13px}
+@media (max-width:760px){
+  .chat{position:fixed;inset:auto 0 0 0;max-height:85vh;border-radius:16px 16px 0 0;z-index:15;box-shadow:0 -8px 30px rgba(0,0,0,.25);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+  .chat.zu{display:none}.close{display:inline-flex}
+}
+@media (prefers-reduced-motion:no-preference){.msg{animation:in .18s ease-out}@keyframes in{from{transform:translateY(4px);opacity:.6}to{transform:none;opacity:1}}}
+
+/* Live mitsehen & Erlauben */
+.livelog{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px;min-height:240px;font-size:13px}
+.lg{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:8px;align-items:start}
+.lg time{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+.lg .i{width:16px;height:16px;color:var(--muted)}
+.lg.ok .i{color:var(--green)}.lg.no .i{color:var(--red)}.lg.wait .i{color:var(--amber)}
+.diff{grid-column:1/-1;margin:0 0 4px;font-family:var(--mono);font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;overflow-x:auto;white-space:pre;line-height:1.45}
+.diff .a{color:var(--green)}.diff .d{color:var(--red)}
+.cursor{display:inline-block;width:7px;height:14px;background:var(--blue);vertical-align:-2px;margin-left:4px}
+@media (prefers-reduced-motion:no-preference){.cursor{animation:bl 1s steps(2) infinite}@keyframes bl{50%{opacity:0}}}
+.perm{border:1px solid var(--red);background:var(--red-soft);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;font-size:14px;align-self:stretch}
+.perm .ph1{display:flex;align-items:center;gap:8px;font-weight:600}
+.perm code{font-family:var(--mono);font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 7px;display:block;overflow-wrap:anywhere}
+.perm .acts{display:flex;gap:6px;flex-wrap:wrap}
+.dot.erlauben{background:var(--red)}
+.tree .addg{color:var(--accent);font-weight:600;border-top:1px solid var(--line)}
+.dlg textarea{width:100%;min-height:70px;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;background:var(--bg);color:var(--fg);resize:vertical}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:14px}.chk input{margin-top:3px;accent-color:var(--accent)}
+
+/* Dialog */
+.overlay{position:fixed;inset:0;background:rgba(10,20,16,.45);display:grid;place-items:center;z-index:30;padding:16px}
+.dlg{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:520px;width:100%;padding:20px;display:flex;flex-direction:column;gap:14px;max-height:90vh;overflow-y:auto}
+.dlg h3{font-family:var(--display);font-size:22px;margin:0}
+.opt{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer}
+.opt:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.opt input{margin-top:4px;accent-color:var(--accent)}
+.opt b{display:block}.opt span{font-size:13px;color:var(--muted)}
+.dlg input[type=text],.dlg input[type=email],.dlg select{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;background:var(--bg);color:var(--fg)}
+.dlg label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.dlg .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+
+/* Vorschau */
+.pvbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.pvbar select{border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:14px;background:var(--bg);color:var(--fg);max-width:100%}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:7px 11px;font:inherit;font-size:13px;color:var(--fg);cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.point{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--accent);border-radius:10px;padding:7px 12px;font:inherit;font-size:14px;font-weight:600;background:none;color:var(--accent);cursor:pointer}
+.point[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.pvinfo{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);padding:8px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.stage{background:var(--stage);padding:20px;position:relative;overflow-x:auto;min-height:420px}
+.device{margin:0 auto;background:#fff;color:#14211c;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);overflow:hidden;transition:width .25s;max-width:100%;font-family:var(--body);font-size:14px}
+.device.handy{border-radius:26px;border:8px solid #1b2622}
+/* Mock-App: feste helle App-Farben, weil sie die App in ihrem Standard zeigt */
+.m-head{background:#047857;color:#fff;display:flex;align-items:center;gap:10px;padding:10px 14px}
+.m-crest{width:28px;height:28px;border-radius:7px;background:#fff;color:#047857;display:grid;place-items:center;font-weight:700;font-size:12px}
+.m-head b{font-family:var(--display);font-size:16px}
+.m-head small{opacity:.8;font-size:12px;display:block}
+.m-body{display:grid;grid-template-columns:52px minmax(0,1fr)}
+.device.handy .m-body{grid-template-columns:minmax(0,1fr)}
+.m-nav{background:#f1f5f3;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 0;border-right:1px solid #dfe6e2}
+.device.handy .m-nav{flex-direction:row;justify-content:space-around;border-right:0;border-top:1px solid #dfe6e2;order:2;padding:8px 0}
+.m-nav span{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:#5b6b64}
+.m-nav span.on{background:#e3f3ec;color:#047857}
+.m-main{padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.m-ph{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.m-ph h4{margin:0;font-family:var(--display);font-size:22px}
+.m-ph small{color:#5b6b64}
+.m-btn{background:#047857;color:#fff;border:0;border-radius:9px;padding:8px 12px;font:inherit;font-weight:600;display:inline-flex;gap:6px;align-items:center}
+.m-week{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.device.handy .m-week{grid-template-columns:repeat(2,minmax(0,1fr))}
+.m-day{border:1px solid #dfe6e2;border-radius:9px;padding:8px 10px;font-size:13px}
+.m-day b{display:block;font-family:var(--display);font-size:15px}
+.m-day small{color:#5b6b64}
+.m-kpis{display:flex;gap:8px;flex-wrap:wrap}
+.m-kpi{border:1px solid #dfe6e2;border-radius:9px;padding:8px 12px;font-size:13px;display:flex;gap:10px;align-items:center}
+.m-kpi b{font-family:var(--display);font-size:20px}
+.m-tablewrap{overflow-x:auto;border:1px solid #dfe6e2;border-radius:9px}
+.m-table{width:100%;border-collapse:collapse;font-size:13px;min-width:360px}
+.m-table th{text-align:left;font-weight:600;color:#5b6b64;background:#f5f7f6;padding:8px 10px}
+.m-table td{padding:8px 10px;border-top:1px solid #edf1ef}
+.m-yes{color:#16a34a}.m-no{color:#dc2626}
+.m-new{background:#fdf1e0}
+.m-rpe{font-variant-numeric:tabular-nums}
+/* Zeigen & kommentieren */
+.stage.pointing{padding-bottom:320px}
+.pointing [data-b]{cursor:crosshair}
+.hl{outline:2px solid #2563eb!important;outline-offset:2px;background-color:rgba(37,99,235,.06)}
+.tag{position:absolute;z-index:5;background:#2563eb;color:#fff;font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;pointer-events:none;white-space:nowrap}
+[data-pin]{position:relative}
+[data-pin]::after{content:attr(data-pin);position:absolute;top:-8px;right:-8px;width:20px;height:20px;border-radius:50%;background:#d97706;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;box-shadow:0 0 0 2px #fff;z-index:3}
+.pop{position:absolute;z-index:6;width:320px;max-width:calc(100% - 24px);background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.25);padding:12px;display:flex;flex-direction:column;gap:8px}
+.pop .bh{display:flex;align-items:center;gap:8px;font-family:var(--display);font-weight:700;font-size:16px}
+.pop dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;margin:0;font-size:12px}
+.pop dt{color:var(--muted)}.pop dd{margin:0;overflow-wrap:anywhere}
+.pop dd code{font-family:var(--mono);font-size:11px}
+.pop .acts{display:flex;gap:8px;justify-content:flex-end}
+
+/* Benutzer */
+.utable{width:100%;border-collapse:collapse;font-size:14px}
+.utable th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;letter-spacing:.4px;text-transform:uppercase;padding:10px 14px;border-bottom:1px solid var(--line)}
+.utable td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.utable tr.sel td{background:var(--accent-soft)}
+.utable tr{cursor:pointer}
+.role{font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--bg);border:1px solid var(--line)}
+.role.Admin{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.ucols{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:1000px){.ucols{grid-template-columns:minmax(0,1fr)}}
+.matrix{width:100%;border-collapse:collapse;font-size:14px}
+.matrix th,.matrix td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:center}
+.matrix th:first-child,.matrix td:first-child{text-align:left}
+.matrix input{width:18px;height:18px;accent-color:var(--accent)}
+.lock{font-size:12px;color:var(--muted);padding:10px 14px}
+.scroll{overflow-x:auto}
+
+/* Platzhalter-Ansichten */
+.ph{padding:22px;display:flex;flex-direction:column;gap:12px;max-width:760px}
+.ph h2{font-family:var(--display);font-size:22px;margin:0}
+.ph ul{margin:0;padding-left:20px}
+.ph a{color:var(--accent)}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-cone" viewBox="0 0 24 24"><path d="M9.3 6.2 7 16h10l-2.3-9.8"/><path d="M10.6 2h2.8l.9 4.2H9.7z"/><path d="M4 20h16"/><path d="M6 16l-2 4M18 16l2 4"/></symbol>
+  <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M12 4v16"/><circle cx="12" cy="12" r="3"/><path d="M2 9h3v6H2M22 9h-3v6h3"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M8 7h8M8 11h6"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></symbol>
+  <symbol id="i-cup" viewBox="0 0 24 24"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><path d="M6 2v2M10 2v2M14 2v2"/></symbol>
+  <symbol id="i-shirt" viewBox="0 0 24 24"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></symbol>
+  <symbol id="i-gavel" viewBox="0 0 24 24"><path d="m14 13-7.5 7.5a2.12 2.12 0 0 1-3-3L11 10"/><path d="m16 16 6-6M8 8l6-6M9 7l8 8M21 11l-8-8"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-euro" viewBox="0 0 24 24"><path d="M4 10h12M4 14h9"/><path d="M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2"/></symbol>
+  <symbol id="i-hand" viewBox="0 0 24 24"><path d="M11 12h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 14"/><path d="m7 18 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9"/><path d="m2 13 6 6"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M13 15a6 6 0 0 1 8 5"/></symbol>
+  <symbol id="i-sprout" viewBox="0 0 24 24"><path d="M7 20h10"/><path d="M12 20c0-5-1-8-5-10"/><path d="M12 20c0-4 1-6 5-8"/><path d="M7 10c-2.5 0-4-1.5-4-4 2.5 0 4 1.5 4 4Z"/><path d="M17 12c2 0 4-1.5 4-4-2.5 0-4 1.5-4 4Z"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16v-5M12 16V8M17 16v-8"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.56-2.5 5.56-5.55C21.97 6.01 17.46 2 12 2z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+  <symbol id="i-pr" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></symbol>
+  <symbol id="i-pointer" viewBox="0 0 24 24"><path d="M14 4.1 12 6M5.1 8l-2.9-.8M6 12l-1.9 2M7.2 2.2 8 5.1"/><path d="M9.04 9.04a.5.5 0 0 1 .65-.65l11 4.5a.5.5 0 0 1-.07.95l-4.2 1.04a2 2 0 0 0-1.46 1.46l-1.04 4.2a.5.5 0 0 1-.95.07z"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-tablet" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-whistle" viewBox="0 0 24 24"><circle cx="8" cy="14" r="6"/><path d="M12.5 10H22v4h-5"/><path d="M8 8V4"/></symbol>
+</svg>
+
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="logo"><svg class="i"><use href="#i-whistle"/></svg></span><div><b>Trainer-to-go</b><small>Programmierumgebung</small></div></div>
+    <nav class="nav" id="nav" aria-label="Programm-Menü"></nav>
+    <div class="me"><span class="avatar">GK</span><div>Gerhard Kresak<small>Admin · Büro-PC</small></div></div>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <h1 id="vtitle">Auftrags-Zentrale</h1>
+      <span class="sync"><i></i>Live synchronisiert</span>
+      <div class="tb-right">
+        <button class="switch" id="werk" role="switch" aria-checked="true" type="button"><span class="knob"></span><span>Werkstatt an <small id="werkinfo">· 2 PCs online</small></span></button>
+      </div>
+    </div>
+    <div class="draft" role="note"><svg class="i"><use href="#i-info"/></svg><span><b>Entwurf 0.4 zur Freigabe.</b> Programmfenster zum Durchklicken mit Beispieldaten. Neu: <b>Live-Vorschau</b> (auch als eigenes Fenster) mit <b>Zeigen &amp; kommentieren</b>, <b>Benutzer &amp; Rechte</b>, <b>Feature löschen</b> (im Auftrags-Chat eines Features) der Schalter <b>Werkstatt an</b>, <b>Neues Feature</b> / <b>Neue Gruppe</b>, <b>Live mitsehen</b> und <b>Zu erlauben</b> (Beispiel: Kantine › Allergene). Im Entwurf geht noch nichts an eine Werkstatt.</span></div>
+
+    <section id="v-zentrale">
+      <div class="tally" role="group" aria-label="Aufträge nach Stand">
+        <button class="tbtn" data-f="frage" aria-pressed="false"><i class="dot frage"></i><b id="n-frage">0</b><span>Rückfragen an dich</span></button>
+        <button class="tbtn" data-f="erlauben" aria-pressed="false"><i class="dot erlauben"></i><b id="n-erlauben">0</b><span>Zu erlauben</span></button>
+        <button class="tbtn" data-f="laeuft" aria-pressed="false"><i class="dot laeuft"></i><b id="n-laeuft">0</b><span>In Arbeit</span></button>
+        <button class="tbtn" data-f="wartet" aria-pressed="false"><i class="dot wartet"></i><b id="n-wartet">0</b><span>Warteschlange</span></button>
+        <button class="tbtn" data-f="freigabe" aria-pressed="false"><i class="dot freigabe"></i><b id="n-freigabe">0</b><span>Zur Freigabe</span></button>
+      </div>
+      <div class="card flow" id="flow" aria-label="Weg eines Auftrags"></div>
+      <div class="grid">
+        <nav class="card tree" id="tree" aria-label="Bereiche und Gruppen"></nav>
+        <main class="card" id="group"></main>
+        <aside class="card chat zu" id="chat" aria-label="Auftrags-Chat"></aside>
+      </div>
+    </section>
+
+    <section id="v-vorschau" hidden>
+      <div class="card">
+        <div class="pvbar">
+          <select id="pvbranch" aria-label="Stand der App">
+            <option value="main">main · so ist es live</option>
+            <option value="belastung" selected>Training › Belastungssteuerung · in Arbeit</option>
+            <option value="raten">feature/kassa-raten · zur Freigabe</option>
+          </select>
+          <div class="seg" id="pvdev" role="group" aria-label="Gerät">
+            <button type="button" data-d="pc" aria-pressed="true"><svg class="i"><use href="#i-monitor"/></svg>PC</button>
+            <button type="button" data-d="tablet" aria-pressed="false"><svg class="i"><use href="#i-tablet"/></svg>Tablet</button>
+            <button type="button" data-d="handy" aria-pressed="false"><svg class="i"><use href="#i-phone"/></svg>Handy</button>
+          </div>
+          <select id="pvrole" aria-label="Ansicht als">
+            <option>Ansicht als Trainer</option><option>Ansicht als Vereinsadmin</option><option>Ansicht als Eltern</option>
+          </select>
+          <div class="seg" id="pvba" role="group" aria-label="Vorher oder nachher">
+            <button type="button" data-v="vorher" aria-pressed="false">Vorher</button>
+            <button type="button" data-v="nachher" aria-pressed="true">Nachher</button>
+          </div>
+          <button class="point" id="pvpoint" type="button" aria-pressed="false"><svg class="i"><use href="#i-pointer"/></svg>Zeigen &amp; kommentieren</button>
+          <button class="btn ghost sm" id="pvwin" type="button"><svg class="i"><use href="#i-external"/></svg>Eigenes Fenster</button>
+        </div>
+        <div class="pvinfo" id="pvinfo"></div>
+        <div class="stage" id="stage">
+          <div class="device" id="device">
+            <div class="m-head" data-b="Kopfband Verein|src/components/layout/ClubHeader.jsx|design|design-0"><span class="m-crest">SV</span><div><b>SV Beispieldorf</b><small>Demo-Verein · U13</small></div></div>
+            <div class="m-body">
+              <div class="m-nav" data-b="App-Menü|src/components/layout/Sidebar.jsx|design|design-0">
+                <span><svg class="i"><use href="#i-home"/></svg></span><span><svg class="i"><use href="#i-cal"/></svg></span><span class="on"><svg class="i"><use href="#i-cone"/></svg></span><span><svg class="i"><use href="#i-users"/></svg></span><span><svg class="i"><use href="#i-msg"/></svg></span>
+              </div>
+              <div class="m-main">
+                <div class="m-ph">
+                  <div data-b="Seitenkopf|src/components/PageHeader.jsx|training|training-0"><h4>Trainingswoche U13</h4><small>KW 43 · 3 Einheiten · 1 Spiel</small></div>
+                  <button class="m-btn" type="button" tabindex="-1" data-b="Hauptbutton Einheit planen|src/pages/training/TrainingPage.jsx|training|training-0"><svg class="i" style="width:16px;height:16px"><use href="#i-plus"/></svg>Einheit planen</button>
+                </div>
+                <div class="m-week" data-b="Wochenleiste|src/pages/training/WeekStrip.jsx|training|training-4">
+                  <div class="m-day"><small>Mo 19.10.</small><b>Training</b><small>17:30 · Kunstrasen</small></div>
+                  <div class="m-day"><small>Mi 21.10.</small><b>Training</b><small>17:30 · Platz 2</small></div>
+                  <div class="m-day"><small>Fr 23.10.</small><b>Abschluss</b><small>17:00 · Kunstrasen</small></div>
+                  <div class="m-day"><small>Sa 24.10.</small><b>Spiel</b><small>10:00 · auswärts</small></div>
+                </div>
+                <div class="m-kpis">
+                  <div class="m-kpi" data-b="Karte Anwesenheit|src/pages/training/AttendanceCard.jsx|training|training-2"><svg class="i m-yes"><use href="#i-check"/></svg><div><b>87 %</b> Anwesenheit</div></div>
+                  <div class="m-kpi" id="kpi-load" data-b="Belastungs-Karte|src/pages/training/LoadCard.jsx|training|training-3"><svg class="i" style="color:#2563eb"><use href="#i-activity"/></svg><div><b>412</b> Belastung (AU) diese Woche</div></div>
+                </div>
+                <div class="m-tablewrap" data-b="Anwesenheitstabelle|src/pages/training/AttendanceTable.jsx|training|training-2">
+                  <table class="m-table">
+                    <thead><tr><th>Spieler</th><th>Mo</th><th>Mi</th><th>Fr</th><th class="col-rpe m-new">RPE Mi</th></tr></thead>
+                    <tbody id="mrows"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="v-benutzer" hidden>
+      <div class="ucols">
+        <div class="card">
+          <div class="sec" style="justify-content:space-between">Benutzer<button class="btn sm" id="invite" type="button"><svg class="i"><use href="#i-plus"/></svg>Benutzer einladen</button></div>
+          <div class="scroll"><table class="utable"><thead><tr><th>Name</th><th>Rolle</th><th>Claude-Konto</th><th>Werkstatt-PC</th></tr></thead><tbody id="urows"></tbody></table></div>
+        </div>
+        <div class="card" id="rights"></div>
+      </div>
+    </section>
+
+    <section id="v-other" hidden><div class="card ph" id="ph"></div></section>
+  </div>
+</div>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const el=(t,c,txt)=>{const e=document.createElement(t);if(c)e.className=c;if(txt!=null)e.textContent=txt;return e};
+const ic=(n)=>{const s=document.createElementNS("http://www.w3.org/2000/svg","svg");s.setAttribute("class","i");s.setAttribute("aria-hidden","true");const u=document.createElementNS("http://www.w3.org/2000/svg","use");u.setAttribute("href","#i-"+n);s.appendChild(u);return s};
+const ST={live:"Live",arbeit:"In Arbeit",entwurf:"Entwurf",geplant:"Geplant"};
+const now=()=>new Date().toLocaleString("de-AT",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+
+/* ---------- Gliederung ---------- */
+const AREAS=[
+ {id:"sport",name:"Sport",groups:[
+  {id:"kader",name:"Mannschaft & Kader",icon:"users",feats:[["Kader & Spielerprofile","Spieler, Positionen, Notfallkontakte, Stammdaten","live"],["Betreuerstab","Trainer und Funktionäre je Mannschaft, Spielertrainer","live"],["Stammdaten-PDF","Kaderliste mit Abschnitt Betreuerstab","live"],["Trikots & Nummern","Trikotsätze und Rückennummern","live"],["Mehrere Vereine je Konto","Ein Konto in mehreren Vereinen","live"],["Link-Sync Spielerdaten","Spieler und Mannschaften per Link übernehmen","geplant"]]},
+  {id:"training",name:"Training",icon:"cone",feats:[["Trainingsplanung","Einheiten planen, Am-Platz-Ansicht","live"],["Übungsbibliothek","Plattform, Verein, Meine Übungen mit Animation","live"],["Trainings-Anwesenheit","Anwesenheit je Einheit","live"],["Belastungssteuerung","RPE durch den Trainer, Belastungskurve","arbeit"],["Mikro- & Wochenzyklus","Wochenplanung mit Spieltag","arbeit"],["Individualtraining","Pläne für einzelne Spieler","arbeit"],["Platzbelegung","Plätze und Zeiten je Mannschaft","arbeit"]]},
+  {id:"spiele",name:"Spiele & Turniere",icon:"trophy",feats:[["Spielplan","Heim- und Auswärtsspiele, Treffpunkte","live"],["Nominierung & Zusagen","Zusage-Modus je Mannschaft","live"],["Spielbericht","Aufstellung, Tore, Wechsel, Spielzeit","live"],["Auswärtsfahrten","Fahrgemeinschaften und Kosten","live"],["Turniere","Gruppen, Spielplan, Ergebnisse","geplant"]]},
+  {id:"taktik",name:"Taktik",icon:"board",feats:[["Spielidee","Spielphasen und Prinzipien des Teams","arbeit"],["Matchplan je Spiel","Mit befristeter Freigabe für Spieler","arbeit"],["Standards","Ecken, Freistöße, Einwürfe","arbeit"],["Kabinen-Präsentation","Animierte Abläufe vom Funino bis 11er","arbeit"],["PDF Matchplan & Taktikblatt","Druckvorlagen im Vereins-Kopfband","arbeit"]]},
+  {id:"ausbildung",name:"Ausbildungskonzept",icon:"book",feats:[["Trainermappe","Grundsätze des Vereins mit Lesebestätigung","geplant"],["Lehrplan je Altersklasse","Eigene Vorlagen statt ÖFB-/DFB-Texten","geplant"],["Ansicht Einfach / Profi","Standard nach Altersklasse U6 bis U19","geplant"],["Funktionen je Altersklasse","z. B. keine Belastungssteuerung bei U7","geplant"]]}
+ ]},
+ {id:"verein",name:"Verein",groups:[
+  {id:"kalender",name:"Kalender & Start",icon:"cal",feats:[["Kalender","Termine aller Mannschaften","live"],["Kalender Alle Vereine","Überschneidungen über Vereine hinweg","live"],["Cockpit Heute & Woche","Startseite je Rolle, anpassbar","live"],["Globale Suche","Suche oben über alle Bereiche","geplant"]]},
+  {id:"komm",name:"Kommunikation",icon:"msg",feats:[["Chat & Direktnachrichten","Eltern lesen bei Minderjährigen mit","live"],["Abstimmungen","Umfragen mit Ruhezeiten","live"],["Kinderschutz-Einsicht","Einsicht mit Grund und Protokoll","live"],["Benachrichtigungen 3 Stufen","Wichtig, Normal, Info","geplant"]]},
+  {id:"mitglieder",name:"Mitglieder & Funktionen",icon:"home",feats:[["Mitgliederverzeichnis","Pflege einstellbar","live"],["Vereinsfunktionen","Obmann, Kassier, Stellvertreter mit Amtszeit","live"],["Rollen & Rechte","Vorlagen, 4 Stufen, Vier-Augen","live"],["Einrichtungsassistent","Geführte Grundeinstellungen für Admins","geplant"]]},
+  {id:"kantine",name:"Kantine",icon:"cup",feats:[["Artikel & Lager","Kalkulation je Artikel, Preisfreigabe","live"],["Schichten & Personal","Kantinentage aus Heimspielen","live"],["Bestellvorlagen","Vorbestellung über Kostenstellen","live"],["Tagesabschluss","Kassasturz und Auswertung","live"],["Allergene je Artikel","14 Allergene, Legende auf der Preisliste","arbeit",true],["Bonieren & Kasse","Echte Registrierkasse","geplant"]]},
+  {id:"ausruestung",name:"Ausrüstung",icon:"shirt",feats:[["Ausrüstung & Ausgabe","Material je Mannschaft und Spieler","live"],["Verknüpfung Kassa","Kosten an die Kassa übergeben","live"]]}
+ ]},
+ {id:"leitung",name:"Leitung",groups:[
+  {id:"vorstand",name:"Vorstand",icon:"gavel",feats:[["Förderungen","Förderanträge ausfüllen, Verwendungsnachweis","entwurf"],["Jahresbericht","Automatisch vorbefüllt, Obmann gibt frei","entwurf"],["Vorstandsaufgaben","Nur für Vorstände sichtbar","entwurf"],["Vertretung Obmann","Freigabe durch Obmann oder zwei Vorstände","entwurf"]]},
+  {id:"schrift",name:"Schriftführung",icon:"pen",feats:[["Versammlungen & Wahlen","Offen, geheim, Papierstimmen","arbeit"],["Protokolle","Mit Umlaufbeschluss im Vorstand","arbeit"],["Briefvorlagen","Schriftverkehr des Vereins","entwurf"]]},
+  {id:"finanzen",name:"Finanzen",icon:"euro",feats:[["Kassabuch","Mehrere Kassen, nur Kassier bucht","live"],["Kassaprüfung","Digitale Bestätigung, Prüfbericht","live"],["Mitgliedsbeiträge","Beiträge in der Kassa","arbeit"],["Ausbildungsbeiträge","Beiträge je Spieler","arbeit"],["Spenden","Meldung an das Finanzamt","live"],["Budget & Kostenstellen","Mannschaften als Kostenstellen","live"],["Ratenzahlung","Beiträge in 2 bis 10 Raten","arbeit",true]]},
+  {id:"sponsoring",name:"Sponsoring",icon:"hand",feats:[["Sponsoren & Verträge","Rechnungen aus der App, Sachsponsoring","entwurf"],["Logos in PDF & Website","Schalter je Sponsor","entwurf"]]},
+  {id:"beirat",name:"Beirat",icon:"circle",feats:[["Beiräte & Bereiche","Frei einstellbar, Verschwiegenheit","entwurf"]]},
+  {id:"nachwuchs",name:"Nachwuchsleitung",icon:"sprout",feats:[["Trainergespräche","Bewertung durch die Leitung, Selbsteinschätzung","geplant"],["Überblick Nachwuchs","Alle Nachwuchsteams auf einen Blick","geplant"]]},
+  {id:"sportlich",name:"Sportliche Leitung",icon:"target",feats:[["Kampfmannschaft & Kader","Planung über Saisonen","geplant"]]}
+ ]},
+ {id:"plattform",name:"Plattform",groups:[
+  {id:"erp",name:"ERP & Vertrieb",icon:"chart",feats:[["Kunden & Abos","Angebot, Vertrag, Abo","arbeit"],["Ausgangsrechnungen","Täglich 00:00 erstellt, nicht versendet","arbeit"],["Eingangsrechnungen","Postfach, KI-Auslesen, Ablage 7/8 Jahre","arbeit"],["Vertrieb & Provisionen","Gebiete, Ziele, eigene Kunden","arbeit"],["DATEV- & BMD-Export","Buchhaltung AT und DE","arbeit"]]},
+  {id:"design",name:"Design-Studio",icon:"palette",feats:[["Rahmen je Gerät","PC, Tablet, Handy","arbeit"],["Bausteine & Raster","Einrasten, Breite, Reihenfolge","arbeit"],["Ausrollen & Rückgängig","Für alle, Paket oder Verein","arbeit"]]},
+  {id:"website",name:"Website",icon:"globe",feats:[["Startseite & Preise","Preise live aus dem ERP","live"],["Anfragen & Newsletter","Anfragen landen im ERP","live"],["Öffentlicher Demo-Verein","Eigener späterer Schritt","geplant"]]},
+  {id:"handbuch",name:"Handbuch & PDF-Layouts",icon:"file",feats:[["Handbuch mit Rollenfilter","In der App, unter /hilfe und als PDF","arbeit"],["Erklärvideos","Stumm mit Untertiteln, EU-Hosting","geplant"],["PDF-Kopfband","Logo, Vereinsfarben, Sponsoren","arbeit"],["Glossar AT / DE","App- und Trainerbegriffe","arbeit"]]},
+  {id:"einst",name:"Einstellungen & Rechte",icon:"gear",feats:[["Hell / Dunkel & Dichte","Je Nutzer, Vereins-Standard","geplant"],["Offline-Modus","Verschlüsselt, beim Abmelden gelöscht","geplant"],["Datenschutz-Einstellungen","DSGVO-Auskunft und Löschung","arbeit"]]}
+ ]}
+];
+const G={};AREAS.forEach(a=>a.groups.forEach(g=>{g.area=a;g.feats=g.feats.map((f,i)=>({id:g.id+"-"+i,name:f[0],desc:f[1],st:f[2],neu:!!f[3],aus:false}));G[g.id]=g}));
+const worker=g=>"Werkstatt "+g.name;
+
+/* ---------- Beispiel-Aufträge ---------- */
+let JOBS=[
+ {id:1,g:"training",f:"training-3",titel:"Belastungskurve über 4 Wochen anzeigen",stand:"frage",msgs:[
+  {w:"me",u:"Gerhard Kresak",t:"Bei der Belastungssteuerung möchte ich die Kurve der letzten 4 Wochen sehen, nicht nur die aktuelle Woche.",z:"21.10. 18:12"},
+  {w:"bot",t:"Verstanden. Zeige ich die 4 Wochen als Linie je Spieler oder als Mannschaftsdurchschnitt mit Ausreißern markiert? Für U11 bis U14 empfehle ich nur den Durchschnitt, ab U15 beides.",z:"21.10. 18:20",k:"frage"}]},
+ {id:2,g:"training",f:"training-6",titel:"Platzbelegung: Kunstrasen halbieren",stand:"wartet",msgs:[{w:"me",u:"Beispiel Entwickler",t:"Kunstrasen soll in zwei Hälften buchbar sein.",z:"22.10. 08:40"}]},
+ {id:3,g:"kantine",f:"kantine-4",titel:"Kantine: Allergene je Artikel",stand:"laeuft",
+  perm:{cmd:"npm install --save allergene-eu@2.1.0",why:"Liste der 14 EU-Allergene mit Kurzzeichen für AT und DE, damit sie nicht von Hand gepflegt werden muss."},
+  live:[["09:12","file","Liest src/pages/kantine/ArticleForm.jsx"],["09:13","file","Liest supabase/migrations/20261020_kantine.sql"],
+   ["09:15","pen","Ändert src/pages/kantine/ArticleForm.jsx (+31 −2)",'   <Field label="Preis" name="price" />\n+  <AllergenPicker\n+    value={article.allergens}\n+    land={club.country}\n+  />\n-  <Field label="Hinweis" name="note" />'],
+   ["09:17","plus","Neue Datei supabase/migrations/20261022_kantine_allergene.sql"],["09:18","book","Ergänzt Handbuch-Kapitel Kantine › Allergene"],["09:19","shield","Wartet auf deine Erlaubnis: Paket installieren","","wait"]],msgs:[
+  {w:"me",u:"Gerhard Kresak",t:"Bei allen Artikeln sollen die 14 Allergene nach EU-Verordnung hinterlegt werden können, mit Anzeige auf der Preisliste.",z:"22.10. 09:05"},
+  {w:"bot",t:"Ich baue das auf Zweig feature/kantine-allergene. Allergene als Buchstaben A bis R wie in Österreich üblich, in Deutschland als Ziffern mit Fußnote. Preislisten-PDF bekommt eine Legende. Handbuch-Abschnitt Kantine wird ergänzt.",z:"22.10. 09:12"}]},
+ {id:4,g:"finanzen",f:"finanzen-3",titel:"Ausbildungsbeiträge: Ratenzahlung",stand:"freigabe",msgs:[
+  {w:"me",u:"Gerhard Kresak",t:"Ausbildungsbeiträge sollen in Raten zahlbar sein.",z:"21.10. 15:30"},
+  {w:"bot",t:"Fertig zur Freigabe.",z:"22.10. 10:48",k:"ergebnis",liste:["Raten 2, 3, 4 oder 10 je Spieler","Erinnerung 3 Tage vor Fälligkeit an Eltern","Buchung automatisch im Kassabuch","Handbuch und PDF Zahlungsplan ergänzt"],pr:"PR #14 · feature/kassa-raten · Prüfungen grün",zweig:"feature/kassa-raten"}]},
+ {id:5,g:"training",f:"training-2",titel:"Anwesenheit als Excel-Export",stand:"sicherheit",msgs:[
+  {w:"me",u:"Beispiel Texterin",t:"Trainings-Anwesenheit soll als Excel exportierbar sein.",z:"21.10. 09:10"},
+  {w:"bot",t:"Zusammengeführt als v1.32.0 und veröffentlicht. Die Sicherheitsprüfung läuft (Ticket #15).",z:"22.10. 11:40"}]},
+ {id:6,g:"komm",f:"komm-1",titel:"Abstimmungen: Erinnerung 24 Stunden vorher",stand:"wissen",msgs:[
+  {w:"me",u:"Gerhard Kresak",t:"Wer noch nicht abgestimmt hat, soll 24 Stunden vor Ende erinnert werden.",z:"20.10. 19:02"},
+  {w:"bot",t:"Sicherheitsprüfung Grün, in der Wissensdatenbank und auf trainer-to-go.at veröffentlicht. Erledigt.",z:"21.10. 16:30",k:"ergebnis"}]}
+];
+let nextId=7,sel={g:"kantine",f:"kantine-4"},filter=null,view="zentrale",werkstatt=true,ctab="live";
+
+const STEPS=[["auftrag","Auftrag","Zentrale"],["arbeit","In Arbeit","Werkstatt-PC"],["freigabe","Freigabe","Du oder mit Recht"],["zusammen","Zusammenführen","Admin-PC"],["sicherheit","Sicherheitsprüfung","Admin-PC"],["wissen","Wissen & veröffentlicht","Admin-PC"]];
+const STEPIDX={wartet:0,laeuft:1,frage:1,freigabe:2,zusammen:3,sicherheit:4,wissen:5};
+function pipe(j){const p=el("div","pipe");const n=STEPIDX[j.stand];STEPS.forEach((s,i)=>p.appendChild(el("span",i<n||(n===5&&i===5)?"done":i===n?"now":"",s[1])));return p}
+function jobsFor(gid,fid){return JOBS.filter(j=>j.g===gid&&(fid===undefined||j.f===fid))}
+function counts(){const c={frage:0,erlauben:0,laeuft:0,wartet:0,freigabe:0};JOBS.forEach(j=>{if(j.stand in c)c[j.stand]++;if(permOpen(j))c.erlauben++});return c}
+function permOpen(j){return !!(j.perm&&!j.perm.done)}
+function match(j){return filter==="erlauben"?permOpen(j):j.stand===filter}
+
+/* ---------- Menü ---------- */
+const NAV=[["zentrale","Auftrags-Zentrale","inbox"],["vorschau","Live-Vorschau","eye"],["_","Ablauf"],["zweige","Zweige & Versionen","branch"],["pruef","Prüfstand","shield"],["wissen","Wissensdatenbank","book"],["_","Dokumentation"],["log","Änderungsprotokoll","history"],["doku","Dokumentation","download"],["_","Verwaltung"],["benutzer","Benutzer & Rechte","key"]];
+function renderNav(){const N=$("nav");N.textContent="";NAV.forEach(n=>{if(n[0]==="_"){N.appendChild(el("div","grp",n[1]));return}
+ const b=el("button");b.type="button";b.setAttribute("aria-current",String(view===n[0]));b.appendChild(ic(n[2]));b.appendChild(el("span",null,n[1]));
+ if(n[0]==="zentrale"){const cc=counts(),q=cc.frage+cc.erlauben;if(q)b.appendChild(el("span","badge-n",q))}
+ b.onclick=()=>{view=n[0];renderAll()};N.appendChild(b)})}
+const PH={
+ zweige:["Zweige & Versionen","Alle Arbeitszweige live, mit Stand, Pull Request und dem Knopf zum Zusammenführen. Übernommen aus der bestehenden Seite, jetzt mit Daten aus derselben Quelle wie die Zentrale.",["Offene Zweige mit Prüfungen","Versionen mit Sicherung zum Zurückholen","Zusammenführen nur Admin oder mit Recht"]],
+ pruef:["Prüfstand","Ampel je Zusammenführung nach AGENTS.md. Übernommen aus der bestehenden Seite.",["Grün, Orange, Rot, Ungeprüft","Befunde je Zweig","Prüfung starten läuft auf dem Admin-PC"]],
+ wissen:["Wissensdatenbank","Alles, was in der Sicherheitsprüfung grün und veröffentlicht ist (docs/WISSEN.md).",["Suche über alle Einträge","Verknüpft mit Feature und Auftrag"]],
+ log:["Änderungsprotokoll","Jede Änderung mit was, wer und wann (docs/CHANGELOG.md), filterbar nach Benutzer, Gruppe und Version.",["Auch Aufträge aus der Zentrale mit Benutzername","Neue Anweisungen markiert"]],
+ doku:["Dokumentation","Alle Dokumente jederzeit lesbar und herunterladbar.",["Änderungsprotokoll als PDF","Handbuch als PDF","Konzepte je Bereich","Versionen-Liste"]]
+};
+
+/* ---------- Zentrale ---------- */
+function renderFlow(){const F=$("flow");F.textContent="";STEPS.forEach((s,i)=>{const n=JOBS.filter(j=>STEPIDX[j.stand]===i).length;const d=el("div","st"+(i===1&&n?" on":""));const k=el("div","k");if(i===1&&n)k.appendChild(el("i","pulse"));k.appendChild(el("span",null,s[1]));d.appendChild(k);d.appendChild(el("b",null,n));d.appendChild(el("div","who",s[2]));F.appendChild(d)})}
+function renderTally(){const c=counts();Object.keys(c).forEach(k=>$("n-"+k).textContent=c[k]);document.querySelectorAll(".tbtn").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.f===filter)))}
+function renderTree(){
+ const T=$("tree");T.textContent="";
+ AREAS.forEach(a=>{
+  const box=el("div","area");box.appendChild(el("div","sec",a.name));
+  a.groups.forEach(g=>{
+   const js=jobsFor(g.id);
+   if(filter&&!js.some(match))return;
+   const b=el("button");b.type="button";b.setAttribute("aria-current",String(sel.g===g.id));
+   b.appendChild(ic(g.icon));b.appendChild(el("span",null,g.name));
+   if(js.some(j=>j.stand==="laeuft")){const w=el("span","work");w.appendChild(el("i","pulse"));w.appendChild(el("span",null,"arbeitet"));b.appendChild(w)}
+   const fr=js.filter(j=>j.stand==="frage").length;
+   if(fr)b.appendChild(el("span","q",fr+" Frage"+(fr>1?"n":"")));
+   b.appendChild(el("span","cnt",g.feats.length));
+   b.onclick=()=>{sel={g:g.id,f:null};renderZ();openChat()};
+   box.appendChild(b);
+  });
+  if(box.children.length>1)T.appendChild(box);
+ });
+ if(!T.children.length)T.appendChild(el("div","empty","In keiner Gruppe gibt es Aufträge mit diesem Stand."));
+ const ag=el("button","addg");ag.type="button";ag.appendChild(ic("plus"));ag.appendChild(el("span",null,"Neue Gruppe"));ag.onclick=()=>newDialog("grp");T.appendChild(ag);
+}
+function renderGroup(){
+ const g=G[sel.g],M=$("group");M.textContent="";
+ const h=el("div","ghead");const l=el("div");l.style.minWidth="0";
+ l.appendChild(el("div","crumb",g.area.name));
+ const t=el("h2");t.style.cssText="display:flex;align-items:center;gap:10px";t.appendChild(ic(g.icon));t.appendChild(document.createTextNode(g.name));l.appendChild(t);
+ const o=el("div","owner");o.appendChild(ic("bot"));o.appendChild(el("span",null,"Bearbeitet von: "+worker(g)+" · Gruppenwissen "));o.appendChild(el("code",null,"docs/gruppen/"+g.id+".md"));
+ l.appendChild(o);h.appendChild(l);
+ const b=el("button","btn");b.type="button";b.appendChild(ic("msg"));b.appendChild(document.createTextNode("Auftrag an die Gruppe"));
+ b.onclick=()=>{sel.f=null;renderZ();openChat()};const bx=el("div");bx.style.cssText="display:flex;gap:8px;flex-wrap:wrap";const nf=el("button","btn ghost");nf.type="button";nf.appendChild(ic("plus"));nf.appendChild(document.createTextNode("Neues Feature"));nf.onclick=()=>newDialog("feat");bx.appendChild(nf);bx.appendChild(b);h.appendChild(bx);
+ M.appendChild(h);
+ const F=el("div","feats");
+ g.feats.forEach(f=>{
+  const working=jobsFor(g.id,f.id).some(j=>j.stand==="laeuft");
+  const c=el("button","feat"+(working?" working":"")+(f.aus?" aus":""));c.type="button";c.setAttribute("aria-current",String(sel.f===f.id));
+  const top=el("div","top");top.appendChild(el("h3",null,f.name));const bw=el("span","bw");
+  if(f.aus)bw.appendChild(el("span","badge aus","Ausgeblendet"));if(f.neu)bw.appendChild(el("span","badge neu","Neu"));bw.appendChild(el("span","badge "+f.st,ST[f.st]));top.appendChild(bw);c.appendChild(top);
+  c.appendChild(el("p",null,f.desc));
+  const js=jobsFor(g.id,f.id);const ft=el("div","foot");
+  if(working){const w=el("span","work");w.appendChild(el("i","pulse"));w.appendChild(el("span",null,"Hier wird gerade gearbeitet"));ft.appendChild(w)}
+  else if(js.length){const j=js[js.length-1];ft.appendChild(el("i","dot "+(j.stand in {frage:1,wartet:1,freigabe:1}?j.stand:"freigabe")));ft.appendChild(el("span",null,{frage:"Rückfrage an dich",wartet:"Wartet",freigabe:"Zur Freigabe",zusammen:"Wird zusammengeführt",sicherheit:"In der Sicherheitsprüfung",wissen:"Erledigt und veröffentlicht"}[j.stand]))}
+  else{ft.appendChild(ic("msg"));ft.appendChild(el("span",null,"Auftrag geben"))}
+  c.appendChild(ft);
+  c.onclick=()=>{sel.f=f.id;renderZ();openChat()};
+  F.appendChild(c);
+ });
+ M.appendChild(F);
+ const L=el("div","legend");L.appendChild(el("span",null,"Stand:"));["live","arbeit","entwurf","geplant"].forEach(k=>L.appendChild(el("span","badge "+k,ST[k])));L.appendChild(el("span","badge neu","Neu"));L.appendChild(el("span",null,"= automatisch hinzugekommen (7 Tage)"));
+ M.appendChild(L);
+}
+function renderChat(){
+ const g=G[sel.g],f=sel.f?g.feats.find(x=>x.id===sel.f):null,C=$("chat");C.textContent="";
+ const h=el("div","chead");
+ const t=el("div","t");t.appendChild(ic(f?"layers":g.icon));t.appendChild(el("span",null,f?f.name:g.name));
+ const x=el("button","close","Schließen");x.type="button";x.onclick=()=>C.classList.add("zu");t.appendChild(x);
+ h.appendChild(t);
+ const s=el("div","s");s.appendChild(el("span","scope",f?"Feature":"Ganze Gruppe"));s.appendChild(el("span",null,"geht an "+worker(g)));h.appendChild(s);
+ const jsAll=f?jobsFor(g.id,f.id):jobsFor(g.id);const run=jsAll.find(j=>j.stand==="laeuft"&&j.live)||jsAll.find(j=>j.stand==="laeuft");
+ if(run){const sg=el("div","seg");sg.style.marginTop="8px";[["gespraech","Gespräch"],["live","Live mitsehen"]].forEach(([k,tx])=>{const bb=el("button");bb.type="button";bb.setAttribute("aria-pressed",String(ctab===k));if(k==="live")bb.appendChild(el("i","pulse"));bb.appendChild(document.createTextNode(tx));bb.onclick=()=>{ctab=k;renderChat()};sg.appendChild(bb)});h.appendChild(sg)}else ctab="gespraech";
+ if(f){const a=el("div","acts");
+  const pv=el("button","btn ghost sm");pv.type="button";pv.appendChild(ic("eye"));pv.appendChild(document.createTextNode("In der Vorschau zeigen"));pv.onclick=()=>{view="vorschau";renderAll()};a.appendChild(pv);
+  const del=el("button","btn ghost sm");del.type="button";del.appendChild(ic("trash"));del.appendChild(document.createTextNode(f.aus?"Wieder einblenden":"Feature löschen …"));
+  del.onclick=()=>{if(f.aus){f.aus=false;toast("„"+f.name+"“ ist wieder eingeblendet");renderZ()}else delDialog(g,f)};a.appendChild(del);h.appendChild(a)}
+ C.appendChild(h);
+ if(run&&ctab==="live"){C.appendChild(liveView(run,g));return}
+ const th=el("div","thread");th.setAttribute("aria-live","polite");
+ const js=f?jobsFor(g.id,f.id):jobsFor(g.id);
+ if(!js.length){const e=el("div","empty");e.appendChild(ic("msg"));e.appendChild(el("div",null,f?"Noch kein Auftrag zu „"+f.name+"“. Beschreibe unten, was sich ändern soll, oder zeige es in der Live-Vorschau.":"Noch kein Auftrag für "+g.name+". Beschreibe unten, was sich in der ganzen Gruppe ändern soll."));th.appendChild(e)}
+ js.filter(j=>j.stand!=="wartet").forEach(j=>{
+  const sy=el("div","sys");sy.appendChild(el("span",null,"Auftrag #"+j.id+": "+j.titel+(f?"":j.f?" · "+g.feats.find(x=>x.id===j.f).name:"")));th.appendChild(sy);th.appendChild(pipe(j));
+  j.msgs.forEach(m=>{
+   const b=el("div","msg "+m.w+(m.k?" "+m.k:""));
+   const w=el("div","who");w.appendChild(el("span",null,m.w==="me"?(m.u||"Du"):worker(g)));w.appendChild(el("span",null,"· "+m.z));if(m.k==="frage")w.appendChild(el("span",null,"· Rückfrage"));b.appendChild(w);
+   b.appendChild(el("div",null,m.t));
+   if(m.ctx){const cx=el("div","ctx");cx.appendChild(ic("pointer"));const d=el("div");d.appendChild(el("div",null,"Gezeigt: "+m.ctx.name+" · "+m.ctx.ansicht));d.appendChild(el("code",null,m.ctx.file));cx.appendChild(d);b.appendChild(cx)}
+   if(m.liste){const u=el("ul");m.liste.forEach(i=>u.appendChild(el("li",null,i)));b.appendChild(u)}
+   if(m.pr){const p=el("div","pr");p.appendChild(ic("pr"));p.appendChild(el("span",null,m.pr));b.appendChild(p);
+    const r=el("div");r.style.cssText="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap";
+    const ok=el("button","btn sm","Freigeben & zusammenführen");ok.type="button";
+    const pv=el("button","btn ghost sm");pv.type="button";pv.appendChild(ic("eye"));pv.appendChild(document.createTextNode("Vorschau"));pv.onclick=()=>{$("pvbranch").value="raten";view="vorschau";renderAll()};
+    const nv=el("button","btn ghost sm","Nachbessern");nv.type="button";nv.onclick=()=>{$("tx").focus();$("tx").placeholder="Was soll nachgebessert werden?"};
+    if(j.stand!=="freigabe"){ok.disabled=true;ok.textContent="Wird zusammengeführt";nv.hidden=true}
+    ok.onclick=()=>{if(b.querySelector(".confirm"))return;const cf=el("div","confirm");const q=el("div");q.appendChild(document.createTextNode("Zweig "));q.appendChild(el("code",null,m.zweig));q.appendChild(document.createTextNode(" in main zusammenführen und auf trainer-to-go.at veröffentlichen? Danach folgen Sicherheitsprüfung und Wissensdatenbank automatisch."));cf.appendChild(q);
+     const rr=el("div");rr.style.cssText="display:flex;gap:8px;flex-wrap:wrap";const y=el("button","btn sm","Ja, zusammenführen");y.type="button";const n=el("button","btn ghost sm","Abbrechen");n.type="button";n.onclick=()=>cf.remove();
+     y.onclick=()=>{j.stand="zusammen";j.msgs.push({w:"bot",t:"Zusammenführen gestartet. Danach Sicherung, Versionsnummer, Sicherheitsprüfung und Wissensdatenbank.",z:now()});toast("Freigegeben von Gerhard Kresak: "+m.zweig);renderZ()};
+     rr.appendChild(y);rr.appendChild(n);cf.appendChild(rr);b.appendChild(cf)};
+    r.appendChild(ok);r.appendChild(pv);r.appendChild(nv);b.appendChild(r)}
+   th.appendChild(b);
+  });
+  if(permOpen(j))th.appendChild(permCard(j,g));
+ });
+ C.appendChild(th);
+ const wq=js.filter(j=>j.stand==="wartet");
+ if(wq.length){const q=el("div","queue");const sc=el("div","sec","Warteschlange");sc.style.padding="0 0 4px";q.appendChild(sc);
+  wq.forEach((j,i)=>{const r=el("div","row");r.appendChild(el("span",null,(i+1)+"."));r.appendChild(el("b",null,j.titel));q.appendChild(r)});
+  const hn=el("div","hint","Startet automatisch auf dem nächsten freien Werkstatt-PC.");hn.style.marginTop="4px";q.appendChild(hn);C.appendChild(q)}
+ const cp=el("div","compose");
+ const offen=js.find(j=>j.stand==="frage");
+ const ta=el("textarea");ta.id="tx";ta.placeholder=offen?"Antwort auf die Rückfrage …":f?"Was soll sich bei „"+f.name+"“ ändern?":"Was soll sich in "+g.name+" ändern?";
+ ta.setAttribute("aria-label","Nachricht");cp.appendChild(ta);
+ const r=el("div","row");
+ r.appendChild(el("span","hint",!werkstatt?"Werkstatt aus: Auftrag wartet auf einen Werkstatt-PC":offen?"Antwort geht an den laufenden Auftrag":(js.some(j=>j.stand==="laeuft")?"Neuer Auftrag kommt in die Warteschlange":"Startet sofort")));
+ const sb=el("button","btn");sb.type="button";sb.appendChild(ic("send"));sb.appendChild(document.createTextNode(offen?"Antworten":"Senden"));
+ sb.onclick=()=>{const v=ta.value.trim();if(!v){ta.focus();return}if(offen){offen.msgs.push({w:"me",u:"Gerhard Kresak",t:v,z:now()});offen.stand="laeuft";toast("Antwort an "+worker(g)+" gesendet")}else addJob(sel.g,sel.f,v,null);renderZ()};
+ r.appendChild(sb);cp.appendChild(r);C.appendChild(cp);
+ th.scrollTop=th.scrollHeight;
+}
+function permCard(j,g){
+ const c=el("div","perm");const h=el("div","ph1");h.appendChild(ic("shield"));h.appendChild(el("span",null,worker(g)+" bittet um Erlaubnis"));c.appendChild(h);
+ c.appendChild(el("code",null,j.perm.cmd));c.appendChild(el("div",null,j.perm.why));
+ const a=el("div","acts");
+ [["einmal","Einmal erlauben","btn sm"],["immer","Immer erlauben in "+g.name,"btn ghost sm"],["nein","Ablehnen","btn ghost sm"]].forEach(([k,t,cl])=>{const b=el("button",cl,t);b.type="button";b.onclick=()=>{
+  j.perm.done=k;const tm=new Date().toLocaleTimeString("de-AT",{hour:"2-digit",minute:"2-digit"});
+  if(j.live){const last=j.live[j.live.length-1];if(last[4]==="wait")last[4]="";j.live.push([tm,k==="nein"?"x":"check",k==="nein"?"Abgelehnt von Gerhard Kresak – Werkstatt sucht einen anderen Weg":"Erlaubt von Gerhard Kresak"+(k==="immer"?" (immer in "+g.name+")":"")+": "+j.perm.cmd,"",k==="nein"?"no":"ok"])}
+  toast(k==="nein"?"Abgelehnt":"Erlaubt: "+j.perm.cmd);renderZ()};a.appendChild(b)});
+ c.appendChild(a);c.appendChild(el("div","hint","Erlauben dürfen nur der Admin oder wer das Recht „Freigeben“ für diesen Bereich hat. Du bekommst dazu eine Push-Nachricht."));
+ return c;
+}
+function liveView(j,g){
+ const L=el("div","livelog");L.setAttribute("aria-live","polite");
+ const hd=el("div","hint","Auftrag #"+j.id+": "+j.titel+" · Werkstatt-PC: Laptop");L.appendChild(hd);
+ (j.live||[]).forEach(e=>{const r=el("div","lg"+(e[4]?" "+e[4]:""));r.appendChild(el("time",null,e[0]));r.appendChild(ic(e[1]));r.appendChild(el("span",null,e[2]));
+  if(e[3]){const d=el("div","diff");e[3].split("\n").forEach(line=>{const sp=el("span",line.startsWith("+")?"a":line.startsWith("-")?"d":"",line+"\n");d.appendChild(sp)});r.appendChild(d)}
+  L.appendChild(r)});
+ if(permOpen(j))L.appendChild(permCard(j,g));
+ else{const w=el("div","lg");w.appendChild(el("time",null,"jetzt"));w.appendChild(ic("pen"));const sp=el("span",null,"Schreibt");sp.appendChild(el("span","cursor"));w.appendChild(sp);L.appendChild(w)}
+ setTimeout(()=>{L.scrollTop=L.scrollHeight},0);
+ return L;
+}
+const POOL=[["file","Liest src/lib/pdfStudio/types/priceList.js"],["pen","Ändert src/lib/pdfStudio/types/priceList.js (+12 −0)","   rows.map(r => [r.name, r.price])\n+  legend: allergenLegend(club.country),\n+  rows.map(r => [r.name, r.allergens.join(','), r.price])"],["activity","Führt die Tests aus: 48 bestanden"],["file","Ergänzt Funktionsverzeichnis: F-142 Allergene je Artikel"],["pr","Öffnet Pull Request #16 · feature/kantine-allergene"]];
+setInterval(()=>{if(view!=="zentrale"||ctab!=="live"||!werkstatt)return;const j=JOBS.find(x=>x.stand==="laeuft"&&x.live&&!permOpen(x)&&x.perm);if(!j)return;j.pool=j.pool||0;if(j.pool>=POOL.length)return;const p=POOL[j.pool++];j.live.push([new Date().toLocaleTimeString("de-AT",{hour:"2-digit",minute:"2-digit"}),p[0],p[1],p[2]||""]);renderChat()},4000);
+function newDialog(kind){
+ const g=G[sel.g];const ov=el("div","overlay");const d=el("div","dlg");d.setAttribute("role","dialog");d.setAttribute("aria-modal","true");
+ d.appendChild(el("h3",null,kind==="feat"?"Neues Feature in "+g.name:"Neue Gruppe"));
+ const l1=el("label","f");l1.appendChild(el("span",null,"Name"));const n=el("input");n.type="text";n.id="nn";l1.appendChild(n);d.appendChild(l1);
+ const l2=el("label","f");l2.appendChild(el("span",null,kind==="feat"?"Was soll das Feature können?":"Wofür ist die Gruppe da?"));const ds=el("textarea");ds.id="nd";l2.appendChild(ds);d.appendChild(l2);
+ let ar,sy;
+ if(kind==="grp"){const l3=el("label","f");l3.appendChild(el("span",null,"Bereich"));ar=el("select");ar.id="na";AREAS.forEach(a=>{const o=el("option",null,a.name);o.value=a.id;ar.appendChild(o)});ar.value=g.area.id;l3.appendChild(ar);d.appendChild(l3);
+  const l4=el("label","f");l4.appendChild(el("span",null,"Symbol"));sy=el("select");sy.id="ns";[["layers","Ebenen"],["cone","Hütchen"],["trophy","Pokal"],["users","Personen"],["cal","Kalender"],["msg","Nachricht"],["euro","Euro"],["file","Dokument"],["gear","Einstellungen"]].forEach(([v,t])=>{const o=el("option",null,t);o.value=v;sy.appendChild(o)});l4.appendChild(sy);d.appendChild(l4)}
+ const ck=el("label","chk");const cb=el("input");cb.type="checkbox";cb.id="nj";cb.checked=true;ck.appendChild(cb);ck.appendChild(el("span",null,kind==="feat"?"Gleich als Auftrag an die Werkstatt geben (sonst bleibt es „Geplant“)":"Eigene Werkstatt mit Gruppenwissen anlegen"));d.appendChild(ck);
+ d.appendChild(el("div","hint",kind==="feat"?"Neue Features anlegen dürfen der Admin und wer „Aufträge geben“ für diesen Bereich hat. Es steht danach im Funktionsverzeichnis.":"Neue Gruppen legt nur der Admin an. Sie bekommen eine eigene Werkstatt und die Datei docs/gruppen/<name>.md."));
+ const a=el("div","acts");const c=el("button","btn ghost","Abbrechen");c.type="button";c.onclick=()=>ov.remove();
+ const ok=el("button","btn","Anlegen");ok.type="button";
+ ok.onclick=()=>{const nm=n.value.trim();if(!nm){n.focus();return}ov.remove();
+  if(kind==="feat"){const f={id:g.id+"-"+g.feats.length,name:nm,desc:ds.value.trim()||"Neu angelegt",st:"geplant",neu:true,aus:false};g.feats.push(f);sel.f=f.id;
+   if(cb.checked)addJob(g.id,f.id,"Neues Feature bauen: "+nm+(ds.value.trim()?" – "+ds.value.trim():""),null);else toast("Feature „"+nm+"“ angelegt")}
+  else{const area=AREAS.find(x=>x.id===ar.value);const id="g"+Date.now();const ng={id,name:nm,icon:sy.value,feats:[],area};area.groups.push(ng);G[id]=ng;sel={g:id,f:null};toast("Gruppe „"+nm+"“ in "+area.name+" angelegt")}
+  renderZ();openChat()};
+ a.appendChild(c);a.appendChild(ok);d.appendChild(a);ov.appendChild(d);ov.onclick=e=>{if(e.target===ov)ov.remove()};document.body.appendChild(ov);n.focus();
+}
+function addJob(gid,fid,txt,ctx){
+ const busy=JOBS.some(j=>j.g===gid&&(j.stand==="laeuft"||j.stand==="frage"));
+ const st=(!werkstatt||busy)?"wartet":"laeuft";
+ JOBS.push({id:nextId++,g:gid,f:fid,titel:txt.length>48?txt.slice(0,46)+"…":txt,stand:st,msgs:[{w:"me",u:"Gerhard Kresak",t:txt,z:now(),ctx}]});
+ toast(st==="laeuft"?"Auftrag an "+worker(G[gid])+" gesendet":"Auftrag in die Warteschlange gestellt");
+ return st;
+}
+function delDialog(g,f){
+ const ov=el("div","overlay");const d=el("div","dlg");d.setAttribute("role","dialog");d.setAttribute("aria-modal","true");d.setAttribute("aria-label","Feature löschen");
+ d.appendChild(el("h3",null,"„"+f.name+"“ löschen"));
+ const mk=(v,t,s,c)=>{const l=el("label","opt");const i=el("input");i.type="radio";i.name="dm";i.value=v;i.checked=!!c;l.appendChild(i);const x=el("div");x.appendChild(el("b",null,t));x.appendChild(el("span",null,s));l.appendChild(x);return l};
+ d.appendChild(mk("aus","Ausblenden","Sofort per Schalter in der App abgeschaltet. Der Code bleibt, jederzeit wieder einblendbar.",true));
+ d.appendChild(mk("ausbau","Aus der App ausbauen","Auftrag über den ganzen Weg bis zur Freigabe. Daten werden vorher gesichert, Handbuch, PDF-Layouts und Funktionsverzeichnis mit bereinigt. Über die Versionen wiederherstellbar.",false));
+ const lb=el("label","f");lb.appendChild(el("span",null,"Zur Bestätigung den Namen eintippen: "+f.name));const inp=el("input");inp.type="text";inp.id="delname";inp.autocomplete="off";lb.appendChild(inp);d.appendChild(lb);
+ d.appendChild(el("div","hint","Löschen dürfen nur Admins oder Benutzer mit dem Recht „Löschen“ für diesen Bereich."));
+ const a=el("div","acts");const c=el("button","btn ghost","Abbrechen");c.type="button";c.onclick=()=>ov.remove();
+ const ok=el("button","btn danger","Löschen");ok.type="button";ok.disabled=true;
+ inp.oninput=()=>ok.disabled=inp.value.trim()!==f.name;
+ ok.onclick=()=>{const m=d.querySelector("input[name=dm]:checked").value;ov.remove();
+  if(m==="aus"){f.aus=true;toast("„"+f.name+"“ ausgeblendet")}else{addJob(g.id,f.id,"Feature ausbauen: "+f.name+" (Daten vorher sichern, Handbuch, PDF und Funktionsverzeichnis bereinigen)",null)}renderZ()};
+ a.appendChild(c);a.appendChild(ok);d.appendChild(a);ov.appendChild(d);ov.onclick=e=>{if(e.target===ov)ov.remove()};document.body.appendChild(ov);inp.focus();
+}
+
+/* ---------- Live-Vorschau ---------- */
+const PLAYERS=[["Lukas M.",1,1,1,6],["Jonas B.",1,0,1,5],["Elias K.",1,1,1,7],["Felix H.",0,1,1,4],["Noah S.",1,1,0,6]];
+let device="pc",ba="nachher",pointing=false,pinN=0;
+function renderPreview(){
+ const br=$("pvbranch").value;
+ const R=$("mrows");R.textContent="";
+ const showRpe=br==="belastung"&&ba==="nachher";
+ document.querySelectorAll(".col-rpe").forEach(c=>c.hidden=!showRpe);
+ $("kpi-load").hidden=br==="main"||(br==="belastung"&&ba==="vorher");
+ PLAYERS.forEach(p=>{const tr=el("tr");tr.appendChild(el("td",null,p[0]));
+  [1,2,3].forEach(i=>{const td=el("td");const s=ic(p[i]?"check":"x");s.setAttribute("class","i "+(p[i]?"m-yes":"m-no"));s.style.cssText="width:16px;height:16px";td.setAttribute("data-b","Symbol Anwesend/Abwesend|src/components/icons/AttendanceIcon.jsx|training|training-2");td.appendChild(s);tr.appendChild(td)});
+  const r=el("td","m-rpe col-rpe m-new",String(p[4]));r.hidden=!showRpe;r.setAttribute("data-b","Spalte RPE|src/pages/training/AttendanceTable.jsx|training|training-3");tr.appendChild(r);R.appendChild(tr)});
+ const D=$("device");D.className="device"+(device==="handy"?" handy":"");D.style.width=device==="pc"?"100%":device==="tablet"?"768px":"390px";
+ document.querySelectorAll("#pvdev button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.d===device)));
+ document.querySelectorAll("#pvba button").forEach(b=>{b.setAttribute("aria-pressed",String(b.dataset.v===ba));b.disabled=br==="main"});
+ const I=$("pvinfo");I.textContent="";
+ if(br==="belastung"){const w=el("span","work");w.appendChild(el("i","pulse"));w.appendChild(el("span",null,"Live"));I.appendChild(w);I.appendChild(el("span",null,"Werkstatt Training baut gerade daran. Jede Änderung erscheint hier sofort. Orange hinterlegt: neu gegenüber main."))}
+ else if(br==="raten"){I.appendChild(ic("pr"));I.appendChild(el("span",null,"Vorschau von PR #14, fertig zur Freigabe. Testdaten des Demo-Vereins, keine echten Daten."))}
+ else{I.appendChild(ic("check"));I.appendChild(el("span",null,"So ist die App gerade auf trainer-to-go.at (Demo-Verein)."))}
+ $("pvpoint").setAttribute("aria-pressed",String(pointing));$("stage").classList.toggle("pointing",pointing);
+ if(pointing)I.appendChild(el("strong",null," · Zeigen aktiv: auf ein Symbol, eine Tabelle oder einen Button klicken."));
+}
+let tagEl=null,hlEl=null;
+function clearHl(){if(hlEl)hlEl.classList.remove("hl");hlEl=null;if(tagEl){tagEl.remove();tagEl=null}}
+function relRect(n){const s=$("stage").getBoundingClientRect(),r=n.getBoundingClientRect();return{x:r.left-s.left+$("stage").scrollLeft,y:r.top-s.top,w:r.width,h:r.height}}
+$("stage").addEventListener("mouseover",e=>{if(!pointing||$("stage").querySelector(".pop"))return;const t=e.target.closest("[data-b]");if(t===hlEl)return;clearHl();if(!t)return;hlEl=t;t.classList.add("hl");
+ const p=relRect(t);tagEl=el("div","tag",t.dataset.b.split("|")[0]);tagEl.style.left=Math.max(4,p.x)+"px";tagEl.style.top=Math.max(4,p.y-22)+"px";$("stage").appendChild(tagEl)});
+$("stage").addEventListener("mouseleave",()=>{if(!$("stage").querySelector(".pop"))clearHl()});
+$("stage").addEventListener("click",e=>{
+ if(!pointing||e.target.closest(".pop"))return;const t=e.target.closest("[data-b]");if(!t)return;e.preventDefault();e.stopPropagation();
+ $("stage").querySelectorAll(".pop").forEach(p=>p.remove());clearHl();hlEl=t;t.classList.add("hl");
+ const [name,file,gid,fid]=t.dataset.b.split("|");const g=G[gid];const f=g.feats.find(x=>x.id===fid);
+ const ansicht=({pc:"PC",tablet:"Tablet",handy:"Handy"})[device]+" · "+$("pvrole").value.replace("Ansicht als ","");
+ const pop=el("div","pop");pop.setAttribute("role","dialog");pop.setAttribute("aria-label","Kommentar zu "+name);
+ const bh=el("div","bh");bh.appendChild(ic("pointer"));bh.appendChild(el("span",null,name));pop.appendChild(bh);
+ const dl=el("dl");[["Gruppe",g.area.name+" › "+g.name],["Feature",f?f.name:"–"],["Datei",null],["Ansicht",ansicht]].forEach(([k,v])=>{dl.appendChild(el("dt",null,k));const dd=el("dd");if(v===null)dd.appendChild(el("code",null,file));else dd.textContent=v;dl.appendChild(dd)});pop.appendChild(dl);
+ const ta=el("textarea");ta.id="pvtx";ta.placeholder="Was soll sich hier ändern?";ta.setAttribute("aria-label","Kommentar");pop.appendChild(ta);
+ const a=el("div","acts");const c=el("button","btn ghost sm","Abbrechen");c.type="button";c.onclick=()=>{pop.remove();clearHl()};
+ const s=el("button","btn sm");s.type="button";s.appendChild(ic("send"));s.appendChild(document.createTextNode("Als Auftrag senden"));
+ s.onclick=()=>{const v=ta.value.trim();if(!v){ta.focus();return}addJob(gid,fid,v,{name,file,ansicht});pinN++;t.dataset.pin=pinN;pop.remove();clearHl();toast("Baustein erkannt: "+name+" → "+worker(g)+" (Auftrag #"+(nextId-1)+")");renderNav()};
+ a.appendChild(c);a.appendChild(s);pop.appendChild(a);
+ const p=relRect(t);const st=$("stage");pop.style.left=Math.min(Math.max(12,p.x),Math.max(12,st.clientWidth-332))+"px";pop.style.top=(p.y+p.h+10)+"px";st.appendChild(pop);ta.focus();
+},true);
+$("pvpoint").onclick=()=>{pointing=!pointing;if(!pointing){clearHl();$("stage").querySelectorAll(".pop").forEach(p=>p.remove())}renderPreview()};
+$("pvdev").onclick=e=>{const b=e.target.closest("button");if(!b)return;device=b.dataset.d;$("stage").querySelectorAll(".pop").forEach(p=>p.remove());clearHl();renderPreview()};
+$("pvba").onclick=e=>{const b=e.target.closest("button");if(!b||b.disabled)return;ba=b.dataset.v;renderPreview()};
+$("pvbranch").onchange=()=>{ba="nachher";renderPreview()};
+$("pvrole").onchange=renderPreview;
+$("pvwin").onclick=()=>toast("Im Programm öffnet sich die Vorschau als zweites Fenster, zum Beispiel für den zweiten Bildschirm. Zeigen & kommentieren geht dort genauso.");
+
+/* ---------- Benutzer & Rechte ---------- */
+const BEREICHE=["Sport","Verein","Leitung","Plattform"];
+let USERS=[
+ {n:"Gerhard Kresak",r:"Admin",k:"Max",pc:"Büro-PC · online",rights:{}},
+ {n:"Beispiel Entwickler",r:"Entwickler",k:"Pro",pc:"Laptop · online",rights:{Sport:{a:1,f:0,l:0},Verein:{a:1,f:0,l:0},Leitung:{a:0,f:0,l:0},Plattform:{a:0,f:0,l:0}}},
+ {n:"Beispiel Texterin",r:"Texter",k:"nicht nötig",pc:"–",rights:{Sport:{a:1,f:0,l:0},Verein:{a:1,f:0,l:0},Leitung:{a:0,f:0,l:0},Plattform:{a:1,f:0,l:0}}},
+ {n:"Beispiel Leser",r:"Leser",k:"nicht nötig",pc:"–",rights:{}}
+];
+let uSel=1;
+function renderUsers(){
+ const T=$("urows");T.textContent="";
+ USERS.forEach((u,i)=>{const tr=el("tr",i===uSel?"sel":"");const td=el("td");td.style.cssText="display:flex;align-items:center;gap:10px";td.appendChild(el("span","avatar",u.n.split(" ").map(s=>s[0]).join("").slice(0,2)));td.appendChild(el("span",null,u.n));tr.appendChild(td);
+  const tr2=el("td");tr2.appendChild(el("span","role "+u.r,u.r));tr.appendChild(tr2);tr.appendChild(el("td",null,u.k));tr.appendChild(el("td",null,u.pc));tr.onclick=()=>{uSel=i;renderUsers()};T.appendChild(tr)});
+ const R=$("rights");R.textContent="";const u=USERS[uSel];
+ R.appendChild(el("div","sec","Rechte · "+u.n));
+ if(u.r==="Admin"){R.appendChild(el("div","lock","Admin darf alles: Aufträge geben, freigeben, löschen, Rechte vergeben. Rechtstexte und Datenschutz ändern darf nur der Admin."));return}
+ if(u.r==="Leser"){R.appendChild(el("div","lock","Leser sehen Zentrale, Vorschau und Dokumentation, geben aber keine Aufträge."));return}
+ const w=el("div","scroll");const t=el("table","matrix");const th=el("thead");const hr=el("tr");["Bereich","Aufträge geben","Freigeben","Löschen"].forEach(x=>hr.appendChild(el("th",null,x)));th.appendChild(hr);t.appendChild(th);
+ const tb=el("tbody");BEREICHE.forEach(b=>{const tr=el("tr");tr.appendChild(el("td",null,b));[["a"],["f"],["l"]].forEach(([k])=>{const td=el("td");const c=el("input");c.type="checkbox";c.id="r-"+uSel+"-"+b+"-"+k;c.checked=!!u.rights[b][k];c.setAttribute("aria-label",b+" "+k);
+  if(u.r==="Texter"&&k!=="a"){c.disabled=true}
+  c.onchange=()=>{u.rights[b][k]=c.checked?1:0;toast((c.checked?"Recht vergeben: ":"Recht entzogen: ")+({a:"Aufträge geben",f:"Freigeben",l:"Löschen"})[k]+" · "+b+" · "+u.n)};td.appendChild(c);tr.appendChild(td)});tb.appendChild(tr)});
+ t.appendChild(tb);w.appendChild(t);R.appendChild(w);
+ R.appendChild(el("div","lock",u.r==="Texter"?"Texter geben nur Text-Aufträge (Handbuch, Website-, Hilfe- und E-Mail-Texte). Freigeben und Löschen ist für Texter gesperrt.":"Freigeben und Löschen vergibst nur du, je Bereich. Rechtstexte und Datenschutz bleiben immer beim Admin."));
+}
+$("invite").onclick=()=>{
+ const ov=el("div","overlay");const d=el("div","dlg");d.setAttribute("role","dialog");d.setAttribute("aria-modal","true");d.setAttribute("aria-label","Benutzer einladen");
+ d.appendChild(el("h3",null,"Benutzer einladen"));
+ const l1=el("label","f");l1.appendChild(el("span",null,"E-Mail-Adresse"));const e1=el("input");e1.type="email";e1.id="invmail";l1.appendChild(e1);d.appendChild(l1);
+ const l2=el("label","f");l2.appendChild(el("span",null,"Rolle"));const s2=el("select");s2.id="invrole";["Entwickler","Texter","Leser"].forEach(x=>{const o=el("option",null,x);s2.appendChild(o)});l2.appendChild(s2);d.appendChild(l2);
+ d.appendChild(el("div","hint","Entwickler brauchen ein eigenes Claude-Konto (Pro oder Max) und werden zusätzlich ins GitHub-Projekt eingeladen. Texter und Leser brauchen beides nicht."));
+ const a=el("div","acts");const c=el("button","btn ghost","Abbrechen");c.type="button";c.onclick=()=>ov.remove();
+ const ok=el("button","btn","Einladung senden");ok.type="button";ok.onclick=()=>{if(!e1.value.includes("@")){e1.focus();return}ov.remove();USERS.push({n:e1.value,r:s2.value,k:s2.value==="Entwickler"?"ausstehend":"nicht nötig",pc:"–",rights:{Sport:{a:0,f:0,l:0},Verein:{a:0,f:0,l:0},Leitung:{a:0,f:0,l:0},Plattform:{a:0,f:0,l:0}}});uSel=USERS.length-1;renderUsers();toast("Einladung an "+e1.value+" vorbereitet (im Entwurf nicht versendet)")};
+ a.appendChild(c);a.appendChild(ok);d.appendChild(a);ov.appendChild(d);ov.onclick=ev=>{if(ev.target===ov)ov.remove()};document.body.appendChild(ov);e1.focus();
+};
+
+/* ---------- Rahmen ---------- */
+let tt;function toast(t){let e=document.querySelector(".toast");if(!e){e=el("div","toast");e.setAttribute("role","status");document.body.appendChild(e)}e.textContent=t;e.hidden=false;clearTimeout(tt);tt=setTimeout(()=>e.hidden=true,3600)}
+function openChat(){$("chat").classList.remove("zu")}
+function renderZ(){renderNav();renderFlow();renderTally();renderTree();renderGroup();renderChat()}
+function renderAll(){
+ const titles={zentrale:"Auftrags-Zentrale",vorschau:"Live-Vorschau",benutzer:"Benutzer & Rechte"};
+ $("vtitle").textContent=titles[view]||PH[view][0];
+ $("v-zentrale").hidden=view!=="zentrale";$("v-vorschau").hidden=view!=="vorschau";$("v-benutzer").hidden=view!=="benutzer";$("v-other").hidden=!PH[view];
+ if(PH[view]){const P=$("ph");P.textContent="";P.appendChild(el("h2",null,PH[view][0]));P.appendChild(el("p",null,PH[view][1]));const u=el("ul");PH[view][2].forEach(x=>u.appendChild(el("li",null,x)));P.appendChild(u);P.appendChild(el("p","hint","Im Entwurf als Platzhalter. Im Programm erscheint hier die bestehende Seite, live aus derselben Datenquelle."))}
+ renderZ();if(view==="vorschau")renderPreview();if(view==="benutzer")renderUsers();
+}
+document.querySelectorAll(".tbtn").forEach(b=>b.onclick=()=>{filter=filter===b.dataset.f?null:b.dataset.f;if(filter){const j=JOBS.find(match);if(j){sel={g:j.g,f:j.f};openChat()}}renderZ()});
+$("werk").onclick=()=>{werkstatt=!werkstatt;$("werk").setAttribute("aria-checked",String(werkstatt));$("werkinfo").textContent=werkstatt?"· 2 PCs online":"· dieser PC aus, 1 PC online";toast(werkstatt?"Werkstatt an: dieser PC übernimmt wieder Aufträge":"Werkstatt aus: dieser PC übernimmt keine Aufträge mehr");renderChat()};
+if(window.matchMedia("(min-width:761px)").matches)openChat();
+renderAll();
+})();
+</script>
