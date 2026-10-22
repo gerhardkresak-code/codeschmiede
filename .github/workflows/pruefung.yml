@@ -41,8 +41,9 @@ jobs:
           for f in lib/*.mjs; do node --check "$f"; done
           npm test
   programm:
-    runs-on: ubuntu-24.04   # fest: „ubuntu-latest“ wechselt seit 19.10.2026 auf Ubuntu 26, dort hing die Paket-Installation
-    timeout-minutes: 20
+    # Auf Windows geprüft (wie Gerhards Rechner): braucht keine Linux-Systempakete – der Ubuntu-Paketserver hing am 22.10.2026 mehrfach.
+    runs-on: windows-latest
+    timeout-minutes: 30
     defaults: { run: { working-directory: desktop/src-tauri } }
     steps:
       - uses: actions/checkout@v4
@@ -54,17 +55,5 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: desktop/src-tauri -> target }
-      - name: Systembibliotheken für Tauri (Linux-Prüfung)
-        timeout-minutes: 12
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          # Paket-Server antworten zeitweise nicht (Prüfung hing 2026-10-22 mehrfach): kurze Zeitlimits + bis zu 3 Versuche
-          A="-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o DPkg::Lock::Timeout=60"
-          for v in 1 2 3; do
-            sudo -E apt-get $A update && sudo -E apt-get $A install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev && exit 0
-            echo "Versuch $v fehlgeschlagen, neuer Versuch …"; sleep 10
-          done
-          exit 1
       - name: Programm prüfen (Tests)
         run: cargo test --release
