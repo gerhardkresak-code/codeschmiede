@@ -38,3 +38,21 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
   Der Werkstatt-Dienst filtert Geheimnisse aus dem Live-Log.
 - Keine Dritt-Server ohne Eintrag in `docs/DATENSCHUTZ.md`. Schriften und Bibliotheken selbst hosten.
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
+
+## Neue Anweisungen
+- **2026-10-22 16:25 – Automatische Updates:** Jede neue Version des Programms wird automatisch eingespielt (im Hintergrund laden,
+  beim nächsten Start aktiv, Knopf „Jetzt neu starten“, nie mitten in einem Auftrag). Jede Programmänderung in `main` erhöht die Version
+  in `desktop/src-tauri/tauri.conf.json`, `Cargo.toml` und `desktop/dienst/package.json`; der Ablauf „Programm bauen“ veröffentlicht sie signiert.
+- **2026-10-22 20:39 – Weg bis live:** Freigabe → Sicherheitsprüfung → Zusammenführen → Prüfung des ganzen Features in einer Testfassung → erst dann live.
+  Rot an einer Prüfung = Nacharbeit, nichts geht live.
+- **2026-10-22 16:45 – Alles landet beim Feature:** Was Gerhard im Gruppen-Chat oder im Claude-Chat zu einem Feature sagt, erscheint beim Feature
+  in der Codeschmiede (Herkunft „aus Gruppe“ / „aus Claude-Chat“). Claude trägt Anweisungen aus dem Claude-Chat als Nachricht
+  (`kanal = 'claude-chat'`) beim passenden Auftrag bzw. als neuen Auftrag ein und meldet dort, was gebaut wurde.
+- **2026-10-22 22:38 – Nur für Gerhard selbst:** Die Codeschmiede wird vorerst nur von Gerhard genutzt. Verkauf, Mandanten, Lizenz und
+  Käufer-Einrichtung werden **nicht** gebaut (Idee für später: `docs/KONZEPT-PRODUKT.md`).
+- **2026-10-22 22:31 – Features aus dem Gespräch und Bezüge:** Features legt Gerhard selbst oder Claude aus dem Gespräch an, Claude
+  immer erst nach Ja/Nein. Beide lassen sich löschen. `@Feature` (oder erkannt + Rückfrage) setzt eine Referenz im selben Projekt. Ändert
+  sich die Referenz, fragt Claude, ob nachgezogen werden soll. Konzept: `docs/KONZEPT-FEATURE-BEZUEGE.md`.
+- **2026-10-22 22:40 – Dauerhafte PR-Freigabe:** „Ich gebe alle PR somit frei“ gilt dauerhaft (Gerhard 22:40). Claude führt Pull Requests
+  zusammen, sobald alle Prüfungen grün sind; rote Prüfungen, offene Befunde der unabhängigen Prüfung oder Datenbank-Änderungen, die Gerhard
+  noch einspielen muss, halten den PR an. Entwürfe brauchen weiter Gerhards Freigabe vor dem Bau.

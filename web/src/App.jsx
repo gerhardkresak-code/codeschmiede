@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
   Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power, Hammer,
+  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { WS_ICON, STAND, ROLLEN, BEREICH_RECHTE } from "./config";
@@ -15,8 +16,14 @@ const btn = "inline-flex items-center justify-center gap-2 h-10 px-4 rounded-xl 
 const ghost = "inline-flex items-center justify-center gap-2 h-10 px-4 rounded-xl border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition";
 const card = "rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900";
 const input = "w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-[15px] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500";
-const STEPS = [["wartet", "Auftrag"], ["laeuft", "In Arbeit"], ["freigabe", "Freigabe"], ["zusammen", "Zusammenführen"], ["sicherheit", "Sicherheitsprüfung"], ["wissen", "Wissen & veröffentlicht"]];
-const STEP_IDX = { wartet: 0, laeuft: 1, frage: 1, freigabe: 2, zusammen: 3, sicherheit: 4, wissen: 5 };
+// Weg eines Auftrags (Entwurf 0.7, freigegeben 2026-10-22 20:41): Freigabe → Sicherheitsprüfung → Zusammenführen → Feature-Prüfung → live
+const STEPS = [["wartet", "Auftrag"], ["laeuft", "In Arbeit"], ["freigabe", "Freigabe"], ["sicherheit", "Sicherheitsprüfung"], ["zusammen", "Zusammenführen"], ["feature", "Feature-Prüfung"], ["wissen", "Live & Wissen"]];
+const STEP_IDX = { wartet: 0, laeuft: 1, frage: 1, nacharbeit: 1, freigabe: 2, sicherheit: 3, zusammen: 4, feature: 5, wissen: 6, erledigt: 6 };
+const ABGESCHLOSSEN = ["wissen", "erledigt"];
+// Cloudflare Pages: Testseite eines Zweigs (klein, nur a-z0-9 und „-“, höchstens 28 Zeichen)
+const cfAlias = (zweig) => String(zweig || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 28).replace(/^-+|-+$/g, "");
+const vorschauUrl = (projekt, a) => (a?.zweig && projekt?.vorschau_domain && !ABGESCHLOSSEN.includes(a.stand) ? `https://${cfAlias(a.zweig)}.${projekt.vorschau_domain}` : projekt?.live_url || null);
+const oeffneExtern = (url) => { if (isDesktop()) tauri("plugin:opener|open_url", { url }).catch(() => {}); else window.open(url, "_blank", "noopener"); };
 const fmt = (d) => new Date(d).toLocaleString("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const fehler = (e) => (e?.message || "Unbekannter Fehler").replace(/^.*?ERROR:\s*/, "");
 
@@ -72,6 +79,13 @@ function useWerkstattDaten(me, projektId) {
       if (gids.length) {
         f = (await supabase.from("ws_features").select("*").in("gruppe_id", gids).order("id")).data || [];
         a = (await supabase.from("ws_auftraege").select("*").in("gruppe_id", gids).neq("stand", "abgebrochen").order("id")).data || [];
+        // Offene Rückfrage = Auftrag in „frage“ und die letzte Nachricht kommt von der Werkstatt (noch nicht beantwortet)
+        const fragIds = a.filter((x) => x.stand === "frage").map((x) => x.id);
+        if (fragIds.length) {
+          const n = (await supabase.from("ws_nachrichten").select("auftrag_id, von, id").in("auftrag_id", fragIds).order("id", { ascending: false })).data || [];
+          const letzte = {}; n.forEach((m) => { if (!(m.auftrag_id in letzte)) letzte[m.auftrag_id] = m; });
+          a = a.map((x) => (x.stand === "frage" ? { ...x, offeneFrage: !letzte[x.id]?.von } : x));
+        }
       }
     }
     setD({ projekte: pj.data || [], mitglieder: mg.data || [], bereiche: b, gruppen: g, features: f, auftraege: a, benutzer: u.data || [], rechte: r.data || [],
@@ -82,7 +96,7 @@ function useWerkstattDaten(me, projektId) {
     if (!me) return undefined;
     setLaden(true); holen();
     const ch = supabase.channel("cs-zentrale-" + (projektId || "start"));
-    ["ws_projekte", "ws_projekt_mitglieder", "ws_gruppen", "ws_features", "ws_auftraege", "ws_benutzer", "ws_rechte", "ws_werkstatt_pcs", "ws_verbrauch", "ws_einstellungen", "ws_abo_limits"].forEach((t) =>
+    ["ws_projekte", "ws_projekt_mitglieder", "ws_gruppen", "ws_features", "ws_auftraege", "ws_nachrichten", "ws_benutzer", "ws_rechte", "ws_werkstatt_pcs", "ws_verbrauch", "ws_einstellungen", "ws_abo_limits"].forEach((t) =>
       ch.on("postgres_changes", { event: "*", schema: "public", table: t }, () => { clearTimeout(timer.current); timer.current = setTimeout(holen, 300); }));
     ch.subscribe();
     return () => { supabase.removeChannel(ch); clearTimeout(timer.current); };
@@ -144,7 +158,7 @@ export default function App() {
   if (!ich) return <EinladungAnnehmen sitzung={sitzung} onFertig={ladeIch} />;
 
   const nav = [["zentrale", "Auftrags-Zentrale", Inbox], ["vorschau", "Live-Vorschau", Eye], ["_", "Ablauf"], ["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen], ["_", "Dokumentation"], ["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["_", "Verwaltung"], ["benutzer", "Benutzer & Rechte", KeyRound], ["verbrauch", "Verbrauch & Limits", Gauge]];
-  const offen = daten.auftraege.filter((a) => a.stand === "frage").length;
+  const offen = daten.auftraege.filter((a) => a.offeneFrage).length;
   const aktuell = daten.projekte.find((p) => p.id === daten.projektId);
   const PIcon = WS_ICON[aktuell?.symbol] || Layers;
 
@@ -242,24 +256,35 @@ function Zentrale({ d, ich, toast }) {
   const feats = d.features.filter((f) => f.gruppe_id === g?.id && !f.ausgebaut);
   const f = sel.f ? d.features.find((x) => x.id === sel.f) : null;
   const aufFor = (gid, fid) => d.auftraege.filter((a) => a.gruppe_id === gid && (fid === undefined || a.feature_id === fid));
-  const zaehl = (s) => d.auftraege.filter((a) => a.stand === s).length;
+  const [station, setStation] = useState(null);
+  const [platz, setPlatz] = useState(null); // Feature-Arbeitsplatz (Doppelklick)
+  const fragen = d.auftraege.filter((a) => a.offeneFrage).length;
   if (!g) return <div className={`${card} p-8 text-slate-500`}>Noch keine Gruppen angelegt.</div>;
+  const platzF = platz ? d.features.find((x) => x.id === platz) : null;
+  const platzG = platzF ? d.gruppen.find((x) => x.id === platzF.gruppe_id) : null;
   return (
     <>
-      <div className="flex flex-wrap gap-2 mb-3">
-        {[["frage", "Rückfragen an dich", "bg-amber-500"], ["laeuft", "In Arbeit", "bg-blue-600"], ["wartet", "Warteschlange", "bg-slate-300"], ["freigabe", "Zur Freigabe", "bg-green-600"]].map(([s, t, c]) => (
-          <div key={s} className={`${card} flex items-center gap-2 px-3 py-2`}><i className={`w-2.5 h-2.5 rounded-full ${c}`} /><b className="font-display text-xl tabular-nums">{zaehl(s)}</b><span className="text-sm text-slate-500">{t}</span></div>))}
+      <div className="flex flex-wrap gap-1.5 mb-4" role="toolbar" aria-label="Weg eines Auftrags">
+        {fragen > 0 && <button type="button" aria-pressed={station === "frage"} onClick={() => { setStation(station === "frage" ? null : "frage"); setPlatz(null); }} className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200 ${station === "frage" ? "ring-2 ring-amber-500" : ""}`}><i className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />{fragen} Rückfrage{fragen > 1 ? "n" : ""} an dich</button>}
+        {STEPS.map(([s, t], i) => {
+          const z = d.auftraege.filter((a) => STEP_IDX[a.stand] === i && (s !== "wissen" || a.stand === "wissen") && a.stand !== "frage").length;
+          const handeln = ["freigabe", "zusammen"].includes(s) && z > 0;
+          return (
+            <button key={s} type="button" aria-pressed={station === s} onClick={() => { setStation(station === s ? null : s); setPlatz(null); }}
+              className={`inline-flex items-center gap-2 rounded-full border pl-3 pr-1.5 py-1 text-sm font-semibold ${station === s ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/50" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-600"}`}>
+              {t}<span className={`min-w-[24px] text-center rounded-full px-1.5 tabular-nums ${handeln ? "bg-amber-500 text-amber-950" : "bg-slate-100 dark:bg-slate-800"}`}>{z}</span>
+            </button>);
+        })}
       </div>
-      <div className={`${card} grid grid-cols-3 md:grid-cols-6 mb-5`}>
-        {STEPS.map(([s, t], i) => <div key={s} className="px-3.5 py-2.5 border-l first:border-l-0 border-slate-200 dark:border-slate-800"><div className="text-xs text-slate-500">{t}</div><b className="font-display text-xl tabular-nums">{d.auftraege.filter((a) => STEP_IDX[a.stand] === i).length}</b></div>)}
-      </div>
-      <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_400px] items-start">
+      {station ? <StationsUebersicht station={station} d={d} darf={darf} toast={toast} onSchliessen={() => setStation(null)} onOeffne={(fid) => { setStation(null); setPlatz(fid); }} onGruppe={(gid) => { setStation(null); setSel({ g: gid, f: null }); }} />
+      : platzF ? <FeatureArbeitsplatz f={platzF} g={platzG} d={d} ich={ich} darf={darf} toast={toast} onZurueck={() => setPlatz(null)} onLoeschen={() => setDlg({ art: "loeschen", f: platzF })} />
+      : <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_400px] items-start">
         <nav className={`${card} overflow-hidden`} aria-label="Bereiche und Gruppen">
           {d.bereiche.map((b) => (
             <div key={b.id} className="border-t first:border-t-0 border-slate-200 dark:border-slate-800 pb-1">
               <div className="font-display font-semibold text-xs uppercase tracking-widest text-slate-500 px-4 pt-3 pb-1">{b.name}</div>
               {d.gruppen.filter((x) => x.bereich_id === b.id).map((x) => {
-                const Icon = WS_ICON[x.symbol] || Layers; const js = aufFor(x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const fr = js.filter((a) => a.stand === "frage").length;
+                const Icon = WS_ICON[x.symbol] || Layers; const js = aufFor(x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const fr = js.filter((a) => a.offeneFrage).length;
                 return (
                   <button key={x.id} type="button" aria-current={g.id === x.id} onClick={() => setSel({ g: x.id, f: null })}
                     className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-[15px] ${g.id === x.id ? "bg-emerald-50 dark:bg-emerald-950/40 font-semibold shadow-[inset_3px_0_0_#047857]" : "hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20"}`}>
@@ -290,12 +315,13 @@ function Zentrale({ d, ich, toast }) {
           <div className="grid gap-3 p-4 grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
             {feats.length === 0 && <div className="text-sm text-slate-500 col-span-full py-6 text-center">In dieser Gruppe gibt es noch keine Features.</div>}
             {feats.map((x) => {
-              const js = aufFor(g.id, x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const neu = x.neu_bis && new Date(x.neu_bis) > new Date();
+              const js = aufFor(g.id, x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const neu = x.neu_bis && new Date(x.neu_bis) > new Date(); const frageHier = js.some((a) => a.offeneFrage);
               return (
-                <button key={x.id} type="button" aria-current={sel.f === x.id} onClick={() => setSel({ g: g.id, f: x.id })}
-                  className={`text-left flex flex-col gap-2 rounded-xl border p-3.5 min-w-0 ${x.ausgeblendet ? "opacity-55" : ""} ${sel.f === x.id ? "border-emerald-600 ring-1 ring-emerald-600 bg-emerald-50 dark:bg-emerald-950/40" : "border-slate-200 dark:border-slate-800 hover:border-emerald-600"} ${arbeitet ? "shadow-[inset_0_3px_0_#2563eb]" : ""}`}>
+                <button key={x.id} type="button" aria-current={sel.f === x.id} onClick={() => setSel({ g: g.id, f: x.id })} onDoubleClick={() => setPlatz(x.id)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && sel.f === x.id) { e.preventDefault(); setPlatz(x.id); } }} title="Einmal klicken: Kurzinfo · doppelt klicken: Arbeitsplatz mit Chat und Live-Vorschau"
+                  className={`text-left flex flex-col gap-2 rounded-xl border p-3.5 min-w-0 ${frageHier ? "ring-1 ring-amber-400" : ""} ${x.ausgeblendet ? "opacity-55" : ""} ${sel.f === x.id ? "border-emerald-600 ring-1 ring-emerald-600 bg-emerald-50 dark:bg-emerald-950/40" : "border-slate-200 dark:border-slate-800 hover:border-emerald-600"} ${arbeitet ? "shadow-[inset_0_3px_0_#2563eb]" : ""}`}>
                   <div className="flex items-start justify-between gap-2"><h3 className="font-display font-semibold text-[17px] leading-tight">{x.name}</h3>
-                    <span className="flex gap-1 flex-wrap justify-end">{x.ausgeblendet && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md border border-dashed border-slate-400 text-slate-500">Ausgeblendet</span>}{neu && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-700 text-white">Neu</span>}<Badge stand={x.stand} /></span></div>
+                    <span className="flex gap-1 flex-wrap justify-end">{frageHier && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200">Rückfrage an dich</span>}{x.ausgeblendet && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md border border-dashed border-slate-400 text-slate-500">Ausgeblendet</span>}{neu && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-700 text-white">Neu</span>}<Badge stand={x.stand} /></span></div>
                   {x.beschreibung && <p className="text-[13px] text-slate-500 line-clamp-2">{x.beschreibung}</p>}
                   <div className="mt-auto text-xs text-slate-500 flex items-center gap-1.5">
                     {arbeitet ? <span className="inline-flex items-center gap-1.5 font-semibold text-blue-600"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />Hier wird gerade gearbeitet</span>
@@ -307,8 +333,9 @@ function Zentrale({ d, ich, toast }) {
           </div>
         </section>
 
-        <AuftragsChat g={g} f={f} d={d} ich={ich} darf={darf} toast={toast} onLoeschen={() => setDlg({ art: "loeschen", f })} />
-      </div>
+        {f ? <FeatureKurzinfo f={f} g={g} d={d} onOeffnen={() => setPlatz(f.id)} onGruppe={() => setSel({ g: g.id, f: null })} />
+          : <AuftragsChat g={g} f={null} d={d} ich={ich} darf={darf} toast={toast} kanal="gruppe" />}
+      </div>}
       {dlg?.art === "feature" && <NeuesFeature g={g} ich={ich} texter={rolle === "texter"} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: g.id, f: id })} />}
       {dlg?.art === "gruppe" && <NeueGruppe d={d} ich={ich} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: id, f: null })} />}
       {dlg?.art === "loeschen" && <Loeschen f={dlg.f} g={g} ich={ich} toast={toast} onClose={() => setDlg(null)} />}
@@ -316,7 +343,7 @@ function Zentrale({ d, ich, toast }) {
   );
 }
 
-function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen }) {
+function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschmiede", baustein, onBausteinFertig, eingebettet }) {
   const auftraege = d.auftraege.filter((a) => a.gruppe_id === g.id && (!f || a.feature_id === f.id));
   const ids = auftraege.map((a) => a.id);
   const { nachrichten, log, erlaubnisse } = useAuftragDetails(ids);
@@ -332,24 +359,29 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen }) {
     const t = text.trim(); if (!t) return; setBusy(true);
     try {
       if (frage) {
-        const { error } = await supabase.from("ws_nachrichten").insert({ auftrag_id: frage.id, von: ich.id, art: "text", text: t });
+        const { error } = await supabase.from("ws_nachrichten").insert({ auftrag_id: frage.id, von: ich.id, art: "text", text: bausteinText(t), kanal });
         if (error) throw error; toast("Antwort an die Werkstatt gesendet");
       } else {
         const istTexter = d.mitglieder.some((m) => m.projekt_id === d.projektId && m.benutzer_id === ich.id && m.rolle === "texter");
-        const { data, error } = await supabase.from("ws_auftraege").insert({ gruppe_id: g.id, feature_id: f?.id || null, titel: t.length > 80 ? t.slice(0, 78) + "…" : t, art: istTexter ? "text" : "aendern", erstellt_von: ich.id }).select().single();
+        const { data, error } = await supabase.from("ws_auftraege").insert({ gruppe_id: g.id, feature_id: f?.id || null, titel: t.length > 80 ? t.slice(0, 78) + "…" : t, art: istTexter ? "text" : "aendern", erstellt_von: ich.id, baustein: baustein || null }).select().single();
         if (error) throw error;
-        const r = await supabase.from("ws_nachrichten").insert({ auftrag_id: data.id, von: ich.id, art: "text", text: t });
+        const r = await supabase.from("ws_nachrichten").insert({ auftrag_id: data.id, von: ich.id, art: "text", text: bausteinText(t), kanal });
         if (r.error) throw r.error; toast(`Auftrag #${data.id} an Werkstatt ${g.name} gestellt`);
       }
-      setText("");
+      setText(""); onBausteinFertig?.();
     } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
   };
-  const freigeben = async (a) => { const { error } = await supabase.rpc("ws_freigeben", { p_auftrag: a.id }); toast(error ? fehler(error) : `Freigegeben: ${a.zweig}`); };
+  const bausteinText = (t) => (baustein ? `[Baustein: ${baustein.name}${baustein.seite ? ` · Seite ${baustein.seite}` : ""}]\n${t}` : t);
+  const freigeben = async (a) => { const { error } = await supabase.rpc("ws_freigeben", { p_auftrag: a.id }); toast(error ? fehler(error) : `Auftrag #${a.id} freigegeben – Sicherheitsprüfung startet`); };
+  const zusammen = async (a) => { const { error } = await supabase.rpc("ws_zusammenfuehren", { p_auftrag: a.id }); toast(error ? fehler(error) : `Auftrag #${a.id}: Zusammenführen gestartet`); };
+  const beantwortet = (m) => m.art === "frage" && nachrichten.some((x) => x.auftrag_id === m.auftrag_id && x.id > m.id && x.von);
+  const [alleFragen, setAlleFragen] = useState(false);
+  const zahlBeantwortet = nachrichten.filter(beantwortet).length;
   const erlauben = async (e, s) => { const { error } = await supabase.rpc("ws_erlaubnis_entscheiden", { p_id: e.id, p_status: s }); toast(error ? fehler(error) : s === "abgelehnt" ? "Abgelehnt" : "Erlaubt"); };
   const offeneErl = erlaubnisse.filter((e) => e.status === "offen");
 
   return (
-    <aside className={`${card} flex flex-col lg:col-span-2 xl:col-span-1 xl:sticky xl:top-3 xl:max-h-[calc(100vh-24px)]`} aria-label="Auftrags-Chat">
+    <aside className={`${card} flex flex-col min-h-0 ${eingebettet ? "h-full" : "lg:col-span-2 xl:col-span-1 xl:sticky xl:top-3 xl:max-h-[calc(100vh-24px)]"}`} aria-label="Auftrags-Chat">
       <div className="p-4 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-2 font-display font-bold text-lg">{f ? <Layers className="w-5 h-5" /> : <MessageSquare className="w-5 h-5" />}{f ? f.name : g.name}</div>
         <div className="text-sm text-slate-500 mt-0.5 flex gap-2 items-center flex-wrap"><span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{f ? "Feature" : "Ganze Gruppe"}</span>geht an Werkstatt {g.name}</div>
@@ -357,7 +389,7 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen }) {
           {laufend && <div className="inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-sm">
             {[["gespraech", "Gespräch"], ["live", "Live mitsehen"]].map(([k, t]) => <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)} className={`px-3 py-1.5 inline-flex items-center gap-1.5 ${tab === k ? "bg-emerald-50 text-emerald-700 font-semibold dark:bg-emerald-950" : ""}`}>{k === "live" && <i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />}{t}</button>)}
           </div>}
-          {f && darf(g.bereich_id, "loeschen") && <button type="button" className={`${ghost} h-8 text-xs`} onClick={onLoeschen}><Trash2 className="w-3.5 h-3.5" />{f.ausgeblendet ? "Wieder einblenden" : "Feature löschen …"}</button>}
+          {f && onLoeschen && darf(g.bereich_id, "loeschen") && <button type="button" className={`${ghost} h-8 text-xs`} onClick={onLoeschen}><Trash2 className="w-3.5 h-3.5" />{f.ausgeblendet ? "Wieder einblenden" : "Feature löschen …"}</button>}
         </div>
       </div>
       {tab === "live" && laufend ? (
@@ -369,21 +401,30 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen }) {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 min-h-[220px]" aria-live="polite">
+          {zahlBeantwortet > 0 && <button type="button" onClick={() => setAlleFragen(!alleFragen)} className="self-center text-xs text-slate-500 underline underline-offset-2">{alleFragen ? "Beantwortete Rückfragen ausblenden" : `${zahlBeantwortet} beantwortete Rückfrage${zahlBeantwortet > 1 ? "n" : ""} (abgeschlossen) anzeigen`}</button>}
           {auftraege.length === 0 && <div className="text-sm text-slate-500 text-center py-8">{f ? `Noch kein Auftrag zu „${f.name}“.` : `Noch kein Auftrag für ${g.name}.`} Beschreibe unten, was sich ändern soll.<br /><span className="text-xs">Bitte keine Daten von Vereinsmitgliedern hineinschreiben.</span></div>}
           {auftraege.map((a) => (
             <React.Fragment key={a.id}>
-              <div className="self-center text-xs text-slate-500 text-center">Auftrag #{a.id}: {a.titel}</div>
-              <div className="flex gap-1 flex-wrap">{STEPS.map(([s, t], i) => { const n = STEP_IDX[a.stand]; return <span key={s} className={`flex-1 min-w-[70px] text-[10px] font-semibold text-center px-1 py-0.5 rounded ${i < n || (n === 5 && i === 5) ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400" : i === n ? "bg-blue-600 text-white" : "border border-slate-200 dark:border-slate-800 text-slate-400"}`}>{t}</span>; })}</div>
-              {nachrichten.filter((m) => m.auftrag_id === a.id).map((m) => (
-                <div key={m.id} className={`max-w-[88%] rounded-xl px-3 py-2 text-sm ${m.von ? "self-end bg-emerald-50 dark:bg-emerald-950/50" : m.art === "frage" ? "self-start bg-amber-50 border border-amber-400 dark:bg-amber-950/40" : "self-start bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"}`}>
-                  <div className="text-[11px] font-semibold text-slate-500">{m.von ? name(m.von) : `Werkstatt ${g.name}`} · {fmt(m.erstellt)}{m.art === "frage" ? " · Rückfrage" : ""}</div>
+              <div className="self-center text-xs text-slate-500 text-center flex items-center gap-2">Auftrag #{a.id}: {a.titel}{ABGESCHLOSSEN.includes(a.stand) && <span className="inline-flex items-center gap-1 font-semibold text-green-700 dark:text-green-400"><CircleCheck className="w-3.5 h-3.5" />abgeschlossen</span>}</div>
+              <Schritte a={a} />
+              {nachrichten.filter((m) => m.auftrag_id === a.id && (alleFragen || !beantwortet(m))).map((m) => {
+                const zu = beantwortet(m);
+                return (
+                <div key={m.id} className={`max-w-[88%] rounded-xl px-3 py-2 text-sm ${m.von ? "self-end bg-emerald-50 dark:bg-emerald-950/50" : m.art === "frage" && !zu ? "self-start bg-amber-50 border border-amber-400 dark:bg-amber-950/40" : m.art === "system" ? "self-center bg-transparent text-slate-500 text-xs" : "self-start bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"} ${zu ? "opacity-75" : ""}`}>
+                  {m.art !== "system" && <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5 flex-wrap">{m.von ? name(m.von) : `Werkstatt ${g.name}`} · {fmt(m.erstellt)}{m.art === "frage" ? " · Rückfrage" : ""}
+                    {m.kanal === "gruppe" && f && <span className="px-1.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">aus Gruppe</span>}
+                    {m.kanal === "claude-chat" && <span className="px-1.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">aus Claude-Chat</span>}
+                    {zu && <span className="text-green-700 dark:text-green-400 inline-flex items-center gap-1"><CircleCheck className="w-3 h-3" />abgeschlossen</span>}</div>}
                   <div className="whitespace-pre-wrap break-words">{m.text}</div>
-                </div>))}
+                </div>); })}
+              <PruefBefunde a={a} />
               {offeneErl.filter((e) => e.auftrag_id === a.id).map((e) => <ErlaubnisKarte key={e.id} e={e} g={g} kann={kannFrei} onEntscheid={erlauben} />)}
-              {a.stand === "freigabe" && (
+              {["freigabe", "zusammen"].includes(a.stand) && (
                 <div className="rounded-xl border border-green-600 p-3 text-sm flex flex-col gap-2">
                   <div className="flex items-center gap-2 font-mono text-xs"><GitPullRequest className="w-4 h-4" />PR #{a.pr_nummer} · {a.zweig}</div>
-                  {kannFrei ? <FreigabeKnopf a={a} onJa={() => freigeben(a)} /> : <div className="text-xs text-slate-500">Freigeben darf der Admin oder wer das Recht „Freigeben“ hat.</div>}
+                  {!kannFrei ? <div className="text-xs text-slate-500">Freigeben und Zusammenführen darf der Admin oder wer das Recht „Freigeben“ hat.</div>
+                    : a.stand === "freigabe" ? <FreigabeKnopf a={a} onJa={() => freigeben(a)} />
+                    : <ZusammenKnopf a={a} onJa={() => zusammen(a)} />}
                 </div>)}
             </React.Fragment>))}
         </div>
@@ -416,11 +457,218 @@ function ErlaubnisKarte({ e, g, kann, onEntscheid }) {
 
 function FreigabeKnopf({ a, onJa }) {
   const [frag, setFrag] = useState(false);
-  if (!frag) return <button type="button" className={`${btn} h-9 text-sm self-start`} onClick={() => setFrag(true)}><Check className="w-4 h-4" />Freigeben & zusammenführen</button>;
+  const lokal = a.pruefung?.lokal;
+  if (!frag) return (
+    <div className="flex flex-col gap-1.5">
+      {lokal && <span className={`text-xs ${lokal.ergebnis === "gruen" ? "text-green-700 dark:text-green-400" : "text-red-600"}`}>Bauen & Tests am PC: {lokal.ergebnis === "gruen" ? "grün" : "rot"}{lokal.befund ? ` · ${lokal.befund.split("\n")[0]}` : ""}</span>}
+      <button type="button" className={`${btn} h-9 text-sm self-start`} onClick={() => setFrag(true)}><Check className="w-4 h-4" />Freigeben</button>
+    </div>);
   return (
-    <div className="flex flex-col gap-2"><span>Zweig <code className="font-mono text-xs">{a.zweig}</code> in main zusammenführen und auf trainer-to-go.at veröffentlichen? Danach folgen Sicherheitsprüfung und Wissensdatenbank automatisch.</span>
+    <div className="flex flex-col gap-2"><span>Auftrag #{a.id} freigeben? Danach läuft die Sicherheitsprüfung automatisch; live geht erst etwas, wenn du zusammenführst und die Feature-Prüfung grün ist.</span>
+      <div className="flex gap-2"><button type="button" className={`${btn} h-9 text-sm`} onClick={onJa}>Ja, freigeben</button><button type="button" className={`${ghost} h-9`} onClick={() => setFrag(false)}>Abbrechen</button></div></div>
+  );
+}
+
+function ZusammenKnopf({ a, onJa }) {
+  const [frag, setFrag] = useState(false);
+  if (!frag) return <button type="button" className={`${btn} h-9 text-sm self-start`} onClick={() => setFrag(true)}><GitMerge className="w-4 h-4" />Zusammenführen</button>;
+  return (
+    <div className="flex flex-col gap-2"><span>Auftrag #{a.id} mit dem neuesten Stand zusammenführen? Das ganze Feature wird in einer Testfassung geprüft und erst bei Grün live geschaltet.</span>
       <div className="flex gap-2"><button type="button" className={`${btn} h-9 text-sm`} onClick={onJa}>Ja, zusammenführen</button><button type="button" className={`${ghost} h-9`} onClick={() => setFrag(false)}>Abbrechen</button></div></div>
   );
+}
+
+// Weg eines Auftrags: aktuelle Station hervorgehoben, Nacharbeit rot
+function Schritte({ a }) {
+  const n = STEP_IDX[a.stand] ?? 0; const fertig = ABGESCHLOSSEN.includes(a.stand); const rot = a.stand === "nacharbeit";
+  const laeuftStation = ["sicherheit", "feature"].includes(a.stand) && a.pruefung?.[a.stand]?.ergebnis === "laeuft";
+  return (
+    <div className="flex gap-1 flex-wrap" aria-label={`Stand: ${STEPS[n]?.[1]}`}>
+      {STEPS.map(([s, t], i) => (
+        <span key={s} className={`flex-1 min-w-[64px] text-[10px] font-semibold text-center px-1 py-0.5 rounded ${fertig || i < n ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400" : i === n ? (rot ? "bg-red-600 text-white" : "bg-emerald-700 text-white") : "border border-slate-200 dark:border-slate-800 text-slate-400"}`}>
+          {i === n && rot ? "Nacharbeit" : t}{i === n && laeuftStation ? " …" : ""}
+        </span>))}
+    </div>);
+}
+
+function PruefBefunde({ a }) {
+  const eintraege = [["sicherheit", "Sicherheitsprüfung"], ["feature", "Feature-Prüfung"]].filter(([k]) => a.pruefung?.[k]?.befund);
+  if (!eintraege.length) return null;
+  return eintraege.map(([k, t]) => { const p = a.pruefung[k]; return (
+    <details key={k} className={`rounded-lg border px-3 py-2 text-xs ${p.ergebnis === "gruen" ? "border-green-600" : p.ergebnis === "rot" ? "border-red-500" : "border-slate-300 dark:border-slate-700"}`}>
+      <summary className="cursor-pointer font-semibold">{t}: {p.ergebnis === "gruen" ? "grün" : p.ergebnis === "rot" ? "rot" : p.ergebnis === "laeuft" ? "läuft …" : p.ergebnis}{p.zeit ? ` · ${fmt(p.zeit)}` : ""}</summary>
+      <div className="whitespace-pre-wrap mt-1.5 text-slate-600 dark:text-slate-300">{p.befund}</div>
+    </details>); });
+}
+
+// ---------------- Kurzinfo (einfacher Klick auf ein Feature) ----------------
+function FeatureKurzinfo({ f, g, d, onOeffnen, onGruppe }) {
+  const js = d.auftraege.filter((a) => a.feature_id === f.id);
+  const letzter = js[js.length - 1];
+  const laufend = js.find((a) => a.stand === "laeuft");
+  const pc = laufend ? d.pcs.find((p) => p.id === laufend.werkstatt_pc) : null;
+  return (
+    <aside className={`${card} p-4 flex flex-col gap-3 lg:col-span-2 xl:col-span-1 xl:sticky xl:top-3`} aria-label="Kurzinfo">
+      <div><div className="text-xs text-slate-500">{g.name} · <span className="font-mono">{f.id}</span></div><h2 className="font-display font-bold text-xl leading-tight">{f.name}</h2></div>
+      {f.beschreibung && <p className="text-sm text-slate-600 dark:text-slate-300">{f.beschreibung}</p>}
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+        <dt className="text-slate-500">Stand</dt><dd><Badge stand={f.stand} /></dd>
+        <dt className="text-slate-500">Letzter Auftrag</dt><dd>{letzter ? `#${letzter.id} · ${STEPS[STEP_IDX[letzter.stand]]?.[1] || letzter.stand}${letzter.stand === "nacharbeit" ? " (Nacharbeit)" : ""}` : "–"}</dd>
+        {js.some((a) => a.offeneFrage) && <><dt className="text-amber-700 font-semibold">Rückfrage</dt><dd className="text-amber-700 font-semibold">wartet auf deine Antwort – Öffnen</dd></>}
+        <dt className="text-slate-500">Gerade</dt><dd>{laufend ? <span className="inline-flex items-center gap-1.5 text-blue-600 font-semibold"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />Werkstatt {pc?.name || ""} arbeitet</span> : "niemand"}</dd>
+        <dt className="text-slate-500">Aufträge</dt><dd>{js.length} ({js.filter((a) => ABGESCHLOSSEN.includes(a.stand)).length} abgeschlossen)</dd>
+      </dl>
+      <button type="button" className={btn} onClick={onOeffnen}><Layers className="w-4 h-4" />Öffnen: Chat & Live-Vorschau</button>
+      <button type="button" className={ghost} onClick={onGruppe}><MessageSquare className="w-4 h-4" />Zum Chat der Gruppe</button>
+      <p className="text-xs text-slate-500">Tipp: Doppelklick auf die Karte öffnet den Arbeitsplatz direkt.</p>
+    </aside>);
+}
+
+// ---------------- Stationen-Übersicht (Klick auf eine Station oben) ----------------
+function StationsUebersicht({ station, d, darf, toast, onSchliessen, onOeffne, onGruppe }) {
+  const name = station === "frage" ? "Rückfragen an dich" : STEPS.find((s) => s[0] === station)?.[1];
+  const liste = d.auftraege.filter((a) => (station === "frage" ? a.offeneFrage : station === "laeuft" ? ["laeuft", "nacharbeit"].includes(a.stand) : a.stand === station));
+  const [busy, setBusy] = useState(false);
+  const gruppeVon = (a) => d.gruppen.find((x) => x.id === a.gruppe_id);
+  const kann = (a) => darf(gruppeVon(a)?.bereich_id, "freigeben");
+  const aktion = station === "freigabe" ? ["ws_freigeben", "Freigeben", "Alle freigeben"] : station === "zusammen" ? ["ws_zusammenfuehren", "Zusammenführen", "Alle zusammenführen"] : null;
+  const ausfuehren = async (as) => {
+    setBusy(true);
+    let ok = 0; const fehlerListe = [];
+    for (const a of as) { const { error } = await supabase.rpc(aktion[0], { p_auftrag: a.id }); if (error) fehlerListe.push(`#${a.id}: ${fehler(error)}`); else ok++; }
+    setBusy(false);
+    toast(fehlerListe.length ? `${ok} erledigt · ${fehlerListe.join(" · ")}` : `${ok} Auftrag${ok === 1 ? "" : "e"}: ${aktion[1]} gestartet`);
+  };
+  const proFeature = {};
+  liste.forEach((a) => { const k = a.feature_id || `gruppe:${a.gruppe_id}`; (proFeature[k] = proFeature[k] || []).push(a); });
+  const erklaerung = { frage: "Die Werkstatt wartet auf deine Antwort – Arbeitsplatz öffnen und antworten.", wartet: "Warten auf einen freien Werkstatt-PC.", laeuft: "Die Werkstatt arbeitet (inkl. Nacharbeit nach roter Prüfung).", freigabe: "Bauen & Tests am PC sind gelaufen – deine Freigabe startet die Sicherheitsprüfung.", sicherheit: "Läuft automatisch auf dem Admin-PC.", zusammen: "Sicherheitsprüfung grün – Zusammenführen startet die Prüfung des ganzen Features, danach live.", feature: "Testfassung mit neuestem Stand wird geprüft, bei Grün automatisch live.", wissen: "Live geschaltet und in der Wissensdatenbank." }[station];
+  return (
+    <section className={`${card} p-4 flex flex-col gap-4`} aria-label={`Station ${name}`}>
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="font-display font-bold text-2xl">{name}</h2>
+        <span className="text-sm text-slate-500">{liste.length} Auftrag{liste.length === 1 ? "" : "e"} · {erklaerung}</span>
+        <span className="flex-1" />
+        {aktion && liste.filter(kann).length > 1 && <button type="button" className={btn} disabled={busy} onClick={() => ausfuehren(liste.filter(kann))}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : station === "zusammen" ? <GitMerge className="w-4 h-4" /> : <Check className="w-4 h-4" />}{aktion[2]}</button>}
+        <button type="button" className={ghost} onClick={onSchliessen}><X className="w-4 h-4" />Schließen</button>
+      </div>
+      {liste.length === 0 && <div className="text-sm text-slate-500 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-4">An dieser Station wartet gerade nichts.</div>}
+      {Object.entries(proFeature).map(([k, as]) => {
+        const f = d.features.find((x) => x.id === k); const g = f ? d.gruppen.find((x) => x.id === f.gruppe_id) : gruppeVon(as[0]);
+        return (
+          <div key={k} className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-950 flex-wrap">
+              <span className="text-xs text-slate-500">{g?.name}</span>{f && <><span className="font-mono text-xs text-slate-400">{f.id}</span><b className="font-display">{f.name}</b></>}{!f && <b className="font-display">ganze Gruppe</b>}
+              <span className="flex-1" />{f ? <button type="button" className={`${ghost} h-8 text-xs`} onClick={() => onOeffne(f.id)}><Layers className="w-3.5 h-3.5" />Arbeitsplatz</button>
+                : onGruppe && <button type="button" className={`${ghost} h-8 text-xs`} onClick={() => onGruppe(as[0].gruppe_id)}><MessageSquare className="w-3.5 h-3.5" />Gruppen-Chat</button>}
+            </div>
+            {as.map((a) => {
+              const p = a.pruefung?.[station];
+              return (
+                <div key={a.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center px-3 py-2.5 border-t border-slate-200 dark:border-slate-800">
+                  <div className="min-w-0"><div className="font-semibold text-sm">#{a.id} {a.titel}</div>
+                    <div className="text-xs text-slate-500 flex gap-2 flex-wrap">{a.pr_nummer && <span className="inline-flex items-center gap-1"><GitPullRequest className="w-3 h-3" />PR #{a.pr_nummer}</span>}
+                      {a.stand === "nacharbeit" && <span className="text-red-600 font-semibold">Nacharbeit nach roter Prüfung</span>}
+                      {a.pruefung?.lokal && station === "freigabe" && <span>Bauen & Tests: {a.pruefung.lokal.ergebnis === "gruen" ? "grün" : "rot"}</span>}
+                      {station === "zusammen" && a.pruefung?.sicherheit && <span className="text-green-700 dark:text-green-400">Sicherheitsprüfung grün</span>}
+                      {p?.ergebnis === "laeuft" && <span className="inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />läuft seit {fmt(p.zeit)}</span>}
+                      {p?.ergebnis === "fehler" && <span className="text-red-600">Fehler: {p.befund} – wird erneut versucht</span>}
+                      {p?.ergebnis === "wartet" && <span>{p.befund}</span>}
+                    </div></div>
+                  {aktion && (kann(a) ? <button type="button" className={`${btn} h-9 text-sm`} disabled={busy} onClick={() => ausfuehren([a])}>{aktion[1]}</button> : <span className="text-xs text-slate-500">kein Recht</span>)}
+                </div>);
+            })}
+          </div>);
+      })}
+    </section>);
+}
+
+// ---------------- Feature-Arbeitsplatz (Doppelklick): Chat links, Live-Vorschau rechts ----------------
+function FeatureArbeitsplatz({ f, g, d, ich, darf, toast, onZurueck, onLoeschen }) {
+  const projekt = d.projekte.find((p) => p.id === d.projektId);
+  const js = d.auftraege.filter((a) => a.feature_id === f.id);
+  const aktiv = [...js].reverse().find((a) => !ABGESCHLOSSEN.includes(a.stand) && a.zweig) || null;
+  const laufend = js.find((a) => a.stand === "laeuft");
+  const [links, setLinks] = useState(() => Number(merke.lies("cs-platz-links")) || 40);
+  const [baustein, setBaustein] = useState(null);
+  const raster = useRef(null);
+  const ziehen = (e) => {
+    const r = raster.current?.getBoundingClientRect(); if (!r) return;
+    const bewegen = (ev) => { const p = Math.min(70, Math.max(25, ((ev.clientX - r.left) / r.width) * 100)); setLinks(p); merke.schreib("cs-platz-links", String(Math.round(p))); };
+    const los = () => { window.removeEventListener("pointermove", bewegen); window.removeEventListener("pointerup", los); };
+    window.addEventListener("pointermove", bewegen); window.addEventListener("pointerup", los); e.preventDefault();
+  };
+  return (
+    <section className="flex flex-col gap-3" aria-label={`Arbeitsplatz ${f.name}`}>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" className={ghost} onClick={onZurueck}><ArrowLeft className="w-4 h-4" />Zentrale</button>
+        <div className="min-w-0"><div className="text-xs text-slate-500">{g?.name} · <span className="font-mono">{f.id}</span></div><h2 className="font-display font-bold text-xl leading-tight">{f.name}</h2></div>
+        {laufend && <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />Hier wird gerade gearbeitet</span>}
+        <span className="flex-1" />
+        {onLoeschen && darf(g?.bereich_id, "loeschen") && <button type="button" className={`${ghost} h-9 text-xs`} onClick={onLoeschen}><Trash2 className="w-3.5 h-3.5" />{f.ausgeblendet ? "Wieder einblenden" : "Feature löschen …"}</button>}
+      </div>
+      <div ref={raster} className="grid gap-0 lg:[grid-template-columns:var(--links)_8px_minmax(0,1fr)] h-auto lg:h-[calc(100vh-190px)] min-h-[560px]" style={{ "--links": `${links}%` }}>
+        <AuftragsChat g={g} f={f} d={d} ich={ich} darf={darf} toast={toast} eingebettet baustein={baustein} onBausteinFertig={() => setBaustein(null)} />
+        <div className="hidden lg:block cursor-col-resize group" onPointerDown={ziehen} role="separator" aria-orientation="vertical" aria-label="Breite ändern"><div className="mx-auto w-1 h-full rounded bg-slate-200 dark:bg-slate-800 group-hover:bg-emerald-600" /></div>
+        <LiveVorschau projekt={projekt} a={aktiv} toast={toast} onBaustein={setBaustein} baustein={baustein} />
+      </div>
+    </section>);
+}
+
+// Live-Vorschau: echte Testseite des Auftrags (Cloudflare), meldet neue Stände, „Zeigen & kommentieren“ über den Vorschau-Helfer der App
+function LiveVorschau({ projekt, a, toast, onBaustein, baustein }) {
+  const url = vorschauUrl(projekt, a);
+  const [breite, setBreite] = useState("100%");
+  const [neu, setNeu] = useState(false); const [stand, setStand] = useState(null); const [schluessel, setSchluessel] = useState(0);
+  const [zeigen, setZeigen] = useState(false); const [helfer, setHelfer] = useState(false);
+  const frame = useRef(null);
+  const herkunft = url ? new URL(url).origin : null;
+  useEffect(() => { setNeu(false); setStand(null); setHelfer(false); setZeigen(false); }, [url]);
+  // Neuer Stand: /version.json der Testseite (enthält den Commit, den Cloudflare gebaut hat)
+  useEffect(() => {
+    if (!url) return undefined;
+    let aus = false;
+    const pruefen = async () => {
+      try {
+        const r = await fetch(`${url}/version.json?t=${Date.now()}`, { cache: "no-store" }); if (!r.ok) return;
+        const v = await r.json(); if (aus || !v?.commit) return;
+        setStand((alt) => { if (alt && alt !== v.commit) setNeu(true); return alt || v.commit; });
+      } catch { /* Testseite noch nicht gebaut oder ohne version.json */ }
+    };
+    pruefen(); const t = setInterval(pruefen, 20000);
+    return () => { aus = true; clearInterval(t); };
+  }, [url]);
+  // Antworten des Vorschau-Helfers (nur von der Testseite selbst)
+  useEffect(() => {
+    const an = (e) => {
+      if (e.origin !== herkunft || e.source !== frame.current?.contentWindow || typeof e.data !== "object" || !e.data) return;
+      if (e.data.cs === "bereit") setHelfer(true);
+      if (e.data.cs === "baustein") {
+        const b = { name: String(e.data.name || "").slice(0, 200), seite: String(e.data.seite || "").slice(0, 200), pfad: String(e.data.pfad || "").slice(0, 300), text: String(e.data.text || "").slice(0, 200) };
+        onBaustein(b); setZeigen(false); toast(`Baustein gewählt: ${b.name} – schreib links, was sich ändern soll`);
+      }
+    };
+    window.addEventListener("message", an); return () => window.removeEventListener("message", an);
+  }, [herkunft, onBaustein, toast]);
+  useEffect(() => { if (herkunft && frame.current?.contentWindow) frame.current.contentWindow.postMessage({ cs: "zeigen", an: zeigen }, herkunft); }, [zeigen, herkunft]);
+  const neuLaden = () => { setNeu(false); setStand(null); setSchluessel((k) => k + 1); };
+  if (!url) return <div className={`${card} grid place-items-center p-8 text-sm text-slate-500`}>Für dieses Projekt ist noch keine Vorschau-Adresse hinterlegt.</div>;
+  return (
+    <div className={`${card} flex flex-col min-h-[480px] min-w-0 overflow-hidden`}>
+      <div className="flex flex-wrap items-center gap-2 p-2 border-b border-slate-200 dark:border-slate-800">
+        <span className="min-w-0 flex-1 truncate font-mono text-xs text-slate-500 bg-slate-50 dark:bg-slate-950 rounded-lg px-2.5 py-1.5" title={url}>{url.replace("https://", "")}{a ? ` · Auftrag #${a.id}` : " · aktuelle App"}</span>
+        {[["390px", Smartphone, "Handy"], ["820px", Tablet, "Tablet"], ["100%", Monitor, "Desktop"]].map(([w, I, t]) => <button key={w} type="button" title={t} aria-pressed={breite === w} onClick={() => setBreite(w)} className={`p-2 rounded-lg border ${breite === w ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950" : "border-slate-200 dark:border-slate-800"}`}><I className="w-4 h-4" /></button>)}
+        <button type="button" title="Neu laden" onClick={neuLaden} className="p-2 rounded-lg border border-slate-200 dark:border-slate-800"><RefreshCw className="w-4 h-4" /></button>
+        <button type="button" aria-pressed={zeigen} disabled={!helfer} title={helfer ? "Auf ein Element in der Vorschau klicken und kommentieren" : "Die Testseite hat den Vorschau-Helfer noch nicht (kommt mit dem nächsten Stand der App)"} onClick={() => setZeigen(!zeigen)}
+          className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-semibold disabled:opacity-50 ${zeigen ? "border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300" : "border-slate-200 dark:border-slate-800"}`}><MousePointerClick className="w-4 h-4" />Zeigen & kommentieren</button>
+        <button type="button" title="Im eigenen Fenster öffnen" onClick={() => oeffneExtern(`${url}${projekt?.vorschau_pfad || "/"}`)} className="p-2 rounded-lg border border-slate-200 dark:border-slate-800"><ExternalLink className="w-4 h-4" /></button>
+      </div>
+      {neu && <button type="button" onClick={neuLaden} className="m-2 self-end inline-flex items-center gap-2 rounded-full bg-emerald-700 text-white px-3 py-1.5 text-sm font-semibold"><RefreshCw className="w-4 h-4" />Neuer Stand da · neu laden</button>}
+      {baustein && <div className="mx-2 mt-2 text-xs rounded-lg border border-orange-400 bg-orange-50 dark:bg-orange-950/40 px-2.5 py-1.5 flex items-center gap-2">Gewählt: <b>{baustein.name}</b>{baustein.seite && <span className="text-slate-500">· {baustein.seite}</span>}<button type="button" className="ml-auto" onClick={() => onBaustein(null)} title="Auswahl aufheben"><X className="w-3.5 h-3.5" /></button></div>}
+      <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-2 overflow-auto grid justify-items-center">
+        <iframe key={schluessel} ref={frame} title="Live-Vorschau" src={`${url}${projekt?.vorschau_pfad || "/"}?cs=1`} className="h-full min-h-[440px] bg-white rounded-lg border border-slate-200 dark:border-slate-800" style={{ width: breite, maxWidth: "100%" }}
+          onLoad={() => { setHelfer(false); frame.current?.contentWindow?.postMessage({ cs: "hallo" }, herkunft); }} />
+      </div>
+    </div>);
 }
 
 function NeuesFeature({ g, ich, texter, toast, onClose, onFertig }) {
@@ -712,7 +960,7 @@ function WerkstattSchalter({ ich, sitzung, d, toast }) {
   }, [desk]);
   useEffect(() => { if (desk && st?.laeuft && sitzung?.access_token) tauri("ws_token", { token: sitzung.access_token }).catch(() => {}); }, [desk, st?.laeuft, sitzung?.access_token]);
   if (!desk) return <span className="text-xs text-slate-500" title="Die Werkstatt läuft nur im Programm Codeschmiede">Werkstatt-PCs online: <b>{d.pcs.filter((p) => p.an && Date.now() - new Date(p.zuletzt).getTime() < 180000).length}</b></span>;
-  if (!darfWerkstatt) return null;
+  if (!darfWerkstatt) return <UpdateHinweis toast={toast} />;
   const an = !!st?.laeuft;
   const umschalten = async () => {
     setBusy(true);
@@ -733,7 +981,28 @@ function WerkstattSchalter({ ich, sitzung, d, toast }) {
         <span className={`relative w-9 h-5 rounded-full transition ${an ? "bg-green-600" : "bg-slate-300 dark:bg-slate-700"}`}><i className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${an ? "left-[18px]" : "left-0.5"}`} /></span>
         Werkstatt {an ? "an" : "aus"}{st?.auftrag ? <span className="text-xs text-slate-500">· Auftrag #{st.auftrag}</span> : null}
       </button>
+      <UpdateHinweis toast={toast} />
     </>
+  );
+}
+
+// Automatische Updates des Programms (Anweisung Gerhard 2026-10-22 16:25): im Hintergrund geladen, beim nächsten Start aktiv
+function UpdateHinweis({ toast }) {
+  const [u, setU] = useState(null); const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!isDesktop()) return undefined;
+    let aus = false;
+    const tick = () => tauri("ws_update_status").then((x) => !aus && setU(x)).catch(() => {}); // ältere Programmversion: Befehl fehlt
+    tick(); const t = setInterval(tick, 60000);
+    return () => { aus = true; clearInterval(t); };
+  }, []);
+  if (!u?.bereit) return null;
+  const neustart = async () => { setBusy(true); try { await tauri("ws_update_neustart"); } catch (e) { toast(fehler(e)); setBusy(false); } };
+  return (
+    <button type="button" disabled={busy} onClick={neustart} title={`Version ${u.neu} ist geladen und wird spätestens beim nächsten Start aktiv.`}
+      className="inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 text-sm text-emerald-800 dark:text-emerald-200">
+      <Download className="w-4 h-4" />Version {u.neu} bereit · Jetzt neu starten
+    </button>
   );
 }
 
