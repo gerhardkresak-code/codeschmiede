@@ -111,8 +111,8 @@ button{font:inherit;cursor:pointer}
 </style>
 
 <div class="kopf">
-  <h1>Entwurf 0.6 · Feature-Arbeitsplatz &amp; Stationen</h1>
-  <p>Klickbarer Entwurf, Stand 22.10.2026 20:50. Oben die Stationen anklicken (z. B. „Zusammenführen“). Einfach klicken zeigt die Kurzinfo, doppelt klicken öffnet den Arbeitsplatz mit Chat und Live-Vorschau. Beispieldaten aus Trainer to go.</p>
+  <h1>Entwurf 0.7 · Feature-Arbeitsplatz &amp; Stationen</h1>
+  <p>Klickbarer Entwurf, Stand 22.10.2026 20:45. Oben die Stationen anklicken (z. B. „Zusammenführen“). Einfach klicken zeigt die Kurzinfo, doppelt klicken öffnet den Arbeitsplatz mit Chat und Live-Vorschau. Beispieldaten aus Trainer to go.</p>
 </div>
 
 <div class="app">
@@ -178,7 +178,7 @@ button{font:inherit;cursor:pointer}
   <div><h3>Einfach &amp; doppelt klicken</h3>Ein Klick zeigt rechts Stand, letzten Auftrag und wer gerade arbeitet. Ein Doppelklick (am Handy: „Öffnen“ in der Kurzinfo) öffnet den Arbeitsplatz.</div>
   <div><h3>Live-Vorschau</h3>Jeder Auftrag hat eine eigene Testseite bei Cloudflare. Nach jeder Änderung baut Cloudflare neu (1–3 Min.). Dann erscheint „Neuer Stand da“, und die Vorschau lädt neu. Vor dem ersten Auftrag zeigt sie die aktuelle App.</div>
   <div><h3>Zeigen &amp; kommentieren</h3>Einschalten, auf ein Element in der Vorschau klicken, Kommentar schreiben. Die Nachricht nennt den Baustein (z. B. „PaketKarte (Verein)“) und landet im Chat dieses Features.</div>
-  <div><h3>Stationen oben</h3>Die Zahlen zeigen, wie viele Aufträge an jeder Station warten. Ein Klick öffnet die Übersicht nach Feature: alle auf einmal oder einzeln freigeben, zusammenführen, prüfen. Nach dem Zusammenführen ist die Änderung live; die Sicherheitsprüfung läuft automatisch danach und schließt mit „Wissen &amp; veröffentlicht“ ab. Rot geht als Nacharbeit zurück an die Werkstatt.</div>
+  <div><h3>Stationen oben</h3>Die Zahlen zeigen, wie viele Aufträge an jeder Station warten. Ein Klick öffnet die Übersicht nach Feature: alle auf einmal oder einzeln. Ablauf: Freigeben → Sicherheitsprüfung (automatisch) → Zusammenführen in eine Testfassung → ganzes Feature wird geprüft (automatisch) → erst dann live und ins Wissen. Rot geht als Nacharbeit zurück an die Werkstatt, live geht dann nichts.</div>
   <div><h3>Schritte im Chat</h3>Jeder Auftrag zeigt im Chat seinen Weg; die aktuelle Station ist grün hervorgehoben und wechselt live. Erledigte Aufträge und beantwortete Fragen werden als „abgeschlossen“ markiert.</div>
   <div><h3>Alles landet beim Feature</h3>Nachrichten aus dem Gruppen-Chat und aus dem Claude-Chat erscheinen hier mit Herkunft (Abzeichen „Gruppe“ bzw. „Claude-Chat“). Was Claude dort baut, steht ebenfalls hier.</div>
 </div>
@@ -200,10 +200,10 @@ const VERLAUF=[
  {wer:"Gerhard",ich:true,kanal:"Gruppe",z:"16:41",t:"Netto pflegen, brutto anzeigen. Paket = Summe minus 15 %."},
  {wer:"Werkstatt",kanal:"",z:"16:44",t:"Erledigt auf Zweig feature/cs-12-module-preise: Tabelle „Module“, Preisfeld je Feature, Paketpreis wird live berechnet. Testseite wird gebaut …"}];
 const $=s=>document.querySelector(s);
-const STATIONEN=[["auftrag","Auftrag"],["arbeit","In Arbeit"],["freigabe","Freigabe"],["zusammen","Zusammenführen"],["sicherheit","Sicherheitsprüfung"],["wissen","Wissen & veröffentlicht"]];
+const STATIONEN=[["auftrag","Auftrag"],["arbeit","In Arbeit"],["freigabe","Freigabe"],["sicherheit","Sicherheitsprüfung"],["zusammen","Zusammenführen"],["feature","Feature-Prüfung"],["wissen","Live & Wissen"]];
 const AUFTRAEGE=[
- {nr:3,f:"F-154",fn:"Module & Preise je Feature",t:"Testanfrage",st:"zusammen",pr:15,wer:"Gerhard"},
- {nr:4,f:"F-005",fn:"Mehrere Vereine mit einem Konto",t:"Mehrere Vereine in die Einstellungen umziehen",st:"zusammen",pr:16,wer:"Gerhard"},
+ {nr:3,f:"F-154",fn:"Module & Preise je Feature",t:"Testanfrage",st:"freigabe",pr:15,wer:"Gerhard"},
+ {nr:4,f:"F-005",fn:"Mehrere Vereine mit einem Konto",t:"Mehrere Vereine in die Einstellungen umziehen",st:"freigabe",pr:16,wer:"Gerhard"},
  {nr:7,f:"F-150",fn:"Abo-Pakete",t:"Testphase im Paket anzeigen",st:"freigabe",pr:17,wer:"Werkstatt"},
  {nr:12,f:"F-154",fn:"Module & Preise je Feature",t:"Module mit Preis, Paketpreis live",st:"arbeit",pr:null,wer:"Werkstatt SFGK"}];
 let offen=null;
@@ -212,7 +212,9 @@ function zeichneStationen(){
     return `<button type="button" class="station ${z&&["freigabe","zusammen"].includes(k)?"hat":""} ${offen===k?"akt":""}" data-st="${k}">${n}<span class="zahl">${z}</span></button>`;}).join("");
   document.querySelectorAll(".station").forEach(b=>b.addEventListener("click",()=>{offen=offen===b.dataset.st?null:b.dataset.st;zeigeUebersicht();}));
 }
-const AKTION={freigabe:["Freigeben","Alle freigeben","zusammen"],zusammen:["Zusammenführen","Alle zusammenführen","sicherheit"],sicherheit:["Prüfung neu starten","",""],arbeit:["","",""],auftrag:["","",""],wissen:["","",""]};
+// Freigeben → Sicherheitsprüfung läuft automatisch → Zusammenführen (Klick) → Feature-Prüfung automatisch → live
+const AKTION={freigabe:["Freigeben","Alle freigeben","sicherheit"],sicherheit:["","",""],zusammen:["Zusammenführen","Alle zusammenführen","feature"],feature:["","",""],arbeit:["","",""],auftrag:["","",""],wissen:["","",""]};
+const AUTO={sicherheit:"zusammen",feature:"wissen"};
 function zeigeUebersicht(){
   zeichneStationen();
   const u=$("#uebersicht");u.hidden=!offen;$("#zeile-z").hidden=!!offen;$("#zentrale-raster").hidden=!!offen;
@@ -220,9 +222,9 @@ function zeigeUebersicht(){
   const name=STATIONEN.find(s=>s[0]===offen)[1];const liste=AUFTRAEGE.filter(a=>a.st===offen);const [einz,alle,nach]=AKTION[offen];
   const proF={};liste.forEach(a=>(proF[a.f]=proF[a.f]||{fn:a.fn,l:[]}).l.push(a));
   u.innerHTML=`<div class="kopfz"><h2 style="font-size:24px">${name}</h2><span class="pill p-arbeit">${liste.length} Aufträge</span><span style="flex:1"></span>${alle&&liste.length>1?`<button class="knopf voll" type="button" id="alle">${alle}</button>`:""}<button class="knopf" type="button" id="schliessen">Schließen</button></div>`+
-   (liste.length?Object.entries(proF).map(([f,g])=>`<div class="gruppe-f"><h3><span class="code">${f}</span>${g.fn}</h3>${g.l.map(a=>`<div class="auftr"><div><div class="t">#${a.nr} ${a.t}</div><div class="d">${a.pr?`Pull Request #${a.pr} · `:""}${offen==="zusammen"?"Freigegeben von Gerhard · Prüfung am PC: grün":offen==="freigabe"?"Prüfung am PC: grün · wartet auf deine Freigabe":"Werkstatt arbeitet"}</div></div>${einz?`<button class="knopf voll" type="button" data-nr="${a.nr}">${einz}</button>`:""}</div>`).join("")}</div>`).join(""):`<div class="leer">An dieser Station wartet gerade nichts.</div>`);
+   (liste.length?Object.entries(proF).map(([f,g])=>`<div class="gruppe-f"><h3><span class="code">${f}</span>${g.fn}</h3>${g.l.map(a=>`<div class="auftr"><div><div class="t">#${a.nr} ${a.t}</div><div class="d">${a.pr?`Pull Request #${a.pr} · `:""}${offen==="zusammen"?"Sicherheitsprüfung grün · wartet auf Zusammenführen":offen==="freigabe"?"Bauen &amp; Tests am PC: grün · wartet auf deine Freigabe":offen==="sicherheit"?"Unabhängige Prüfung läuft …":offen==="feature"?"Ganzes Feature wird in der Testfassung geprüft …":"Werkstatt arbeitet"}</div></div>${einz?`<button class="knopf voll" type="button" data-nr="${a.nr}">${einz}</button>`:""}</div>`).join("")}</div>`).join(""):`<div class="leer">An dieser Station wartet gerade nichts.</div>`);
   $("#schliessen").addEventListener("click",()=>{offen=null;zeigeUebersicht();});
-  const weiter=nrs=>{nrs.forEach(n=>{const a=AUFTRAEGE.find(x=>x.nr===n);a.st=nach;if(nach==="sicherheit")setTimeout(()=>{a.st="wissen";zeichneStationen();if(offen)zeigeUebersicht();},3000);});zeigeUebersicht();};
+  const weiter=nrs=>{nrs.forEach(n=>{const a=AUFTRAEGE.find(x=>x.nr===n);a.st=nach;if(AUTO[nach])setTimeout(()=>{a.st=AUTO[nach];zeichneStationen();if(offen)zeigeUebersicht();},3000);});zeigeUebersicht();};
   u.querySelectorAll("[data-nr]").forEach(b=>b.addEventListener("click",()=>nach&&weiter([+b.dataset.nr])));
   $("#alle")?.addEventListener("click",()=>weiter(liste.map(a=>a.nr)));
 }
