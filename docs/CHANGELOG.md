@@ -4,6 +4,7 @@ Jede Änderung: **was**, **wer**, **wann**. Neue Zeilen oben.
 
 | Version | Datum | Wer | Was |
 |---|---|---|---|
+| – (Konzept) | 2026-10-22 | Claude, **Neue Anweisung** Gerhard 22:38 | **Nur für Gerhard selbst:** Verkauf/Mandanten/Lizenz werden nicht gebaut, Konzept „Codeschmiede als Produkt“ nur als Idee für später. |
 | – (Konzept) | 2026-10-22 | Claude, **Neue Anweisungen** Gerhard 22:26 / 22:31 | **Codeschmiede als Produkt** (Käufer betreibt alles selbst, Einrichtungs-Assistent mit Prüfung + Ampel, Claude per Abo oder API-Schlüssel, Windows + Mac) und **Features aus dem Gespräch & Bezüge** (Anlegen nach Ja/Nein, `@Liga` als Referenz, Nachziehen per Rückfrage, nur im selben Projekt). Entwürfe 0.9 (mit „Marke“, Logo C) und Regelwerk veröffentlicht. Noch nicht gebaut. |
 | – (Oberfläche) | 2026-10-22 | Claude, Anweisungen Gerhard 21:41 / 21:43 | **Rückfragen:** beantwortete Rückfragen sind abgeschlossen und werden im Chat ausgeblendet (auf Wunsch einblendbar) und zählen nicht mehr als offen. Offene Rückfragen sieht man überall: gelber Knopf oben (Übersicht mit Sprung zum Feature bzw. Gruppen-Chat), Zahl bei der Gruppe, Abzeichen „Rückfrage an dich“ auf der Feature-Karte (z. B. Mannschaft & Kader › Online-Spielermeldung) und in der Kurzinfo. |
 | – (Oberfläche) | 2026-10-22 | Claude, Meldung Gerhard 21:35 | **Live-Vorschau öffnet die App statt der Website:** Startseite je Projekt (`vorschau_pfad`, Trainer to go: `/home`, ohne Anmeldung geht es von dort zur Anmeldung). Datenbank 0006. |

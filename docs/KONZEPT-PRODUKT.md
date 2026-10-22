@@ -1,6 +1,8 @@
 # Konzept · Codeschmiede als Produkt + Einrichtungs-Assistent
 
-Stand 2026-10-22 22:50 · Entscheidungen Gerhard 22:26–22:31 · **Entwurf, noch nicht freigegeben**
+Stand 2026-10-22 22:40 · **Nur Idee für später – nicht umsetzen** (Gerhard 22:38: „Vorerst will ich das nur für mich selbst nutzen. War nur eine Frage mit dem Verkaufen.“)
+
+> **Jetzt gilt:** keine Mandanten, keine Lizenz, keine Käufer-Einrichtung. Übrig bleibt höchstens ein schlanker Einrichtungs-Assistent für Gerhards **eigene** PCs (Claude-Abo, GitHub, Werkstatt, Projekt koppeln, Ampel) – nur nach Gerhards Ja.
 
 ## 1. Ziel
 Die Codeschmiede wird verkauft. Ein Käufer installiert sie auf seinem Windows-PC oder Mac
