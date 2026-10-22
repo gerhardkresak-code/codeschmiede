@@ -17,6 +17,8 @@ alter table public.ws_auftraege add column if not exists pruefung jsonb not null
 alter table public.ws_auftraege add column if not exists letzter_commit text;   -- zuletzt hochgeladener Stand (für die Live-Vorschau)
 alter table public.ws_auftraege add column if not exists live_commit text;      -- Stand, mit dem der Auftrag live gegangen ist
 -- Zweignamen nur in der Form der Werkstatt (verhindert Git-Optionen wie „--upload-pack=…“ als Zweigname)
+-- Altbestand bereinigen, sonst scheitert die Prüfregel (bisher alle Zweige von der Werkstatt in dieser Form)
+update public.ws_auftraege set zweig = null where zweig is not null and zweig !~ '^feature/cs-[0-9]+-[a-z0-9-]{1,40}$' and stand in ('abgebrochen','erledigt');
 alter table public.ws_auftraege drop constraint if exists ws_auftraege_zweig_check;
 alter table public.ws_auftraege add constraint ws_auftraege_zweig_check check (zweig is null or zweig ~ '^feature/cs-[0-9]+-[a-z0-9-]{1,40}$');
 

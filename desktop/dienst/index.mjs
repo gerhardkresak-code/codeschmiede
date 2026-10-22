@@ -430,10 +430,11 @@ async function cloudBau(projekt, zweig, sha, auftragId) {
       try { const r = await fetch(`${testseite}/version.json?t=${Date.now()}`, { cache: "no-store" }); if (r.ok && (await r.json())?.commit === sha) return { ok: true, text: `Cloudflare hat ${sha.slice(0, 7)} gebaut (${testseite})` }; } catch { /* noch nicht da */ }
     }
     try {
-      const { stdout } = await sh("gh", ["api", `repos/${projekt.repo}/commits/${sha}/check-runs`, "--jq", ".check_runs[] | [.name, .status, (.conclusion // \"\")] | @tsv"]);
+      const { stdout } = await sh("gh", ["api", `repos/${projekt.repo}/commits/${sha}/check-runs`, "--jq", ".check_runs[] | select(.app.slug == \"cloudflare-workers-and-pages\") | [.name, .status, (.conclusion // \"\")] | @tsv"]);
+      // nur Prüfläufe der echten Cloudflare-App zählen, nicht gleichnamige aus eigenen Abläufen (Prüfung O-a)
       for (const z of stdout.trim().split("\n").filter(Boolean)) {
         const [name, status, ergebnis] = z.split("\t");
-        if (!/cloudflare/i.test(name) || status !== "completed") continue;
+        if (status !== "completed") continue;
         if (ergebnis === "success") return { ok: true, text: `Prüflauf „${name}“ grün für ${sha.slice(0, 7)}` };
         return { ok: false, text: `Prüflauf „${name}“: ${ergebnis} für ${sha.slice(0, 7)}` };
       }

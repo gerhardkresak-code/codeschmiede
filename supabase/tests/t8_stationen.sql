@@ -61,7 +61,7 @@ select ws_zusammenfuehren((select id from ws_auftraege where titel='T1'));
 update ws_auftraege set stand='nacharbeit' where titel='T1';
 update ws_auftraege set stand='abgebrochen' where titel='T1';
 \echo [3] *** E2 tauscht im Stand sicherheit Zweig/PR/Commit aus (sollte FEHLER sein) ***
-update ws_auftraege set zweig='feature/anderer-ungepruefter-zweig', pr_nummer=99, letzter_commit='deadbeef' where titel='T1';
+update ws_auftraege set zweig='feature/cs-77-ungeprueft', pr_nummer=99, letzter_commit='deadbeef' where titel='T1';
 reset role; select stand, zweig, pr_nummer, letzter_commit from ws_auftraege where titel='T1'; set role authenticated;
 \echo [4] Admin-PC: Sicherheitsprüfung grün -> zusammen
 :ADM
@@ -73,7 +73,7 @@ select ws_zusammenfuehren((select id from ws_auftraege where titel='T1'));
 select ws_zusammenfuehren((select id from ws_auftraege where titel='T1'));
 \echo [4c] *** E2 tauscht im Stand zusammen (nach grüner Prüfung) Zweig/PR aus (sollte FEHLER sein) ***
 :E2
-update ws_auftraege set zweig='feature/nach-pruefung-getauscht', pr_nummer=98 where titel='T1';
+update ws_auftraege set zweig='feature/cs-78-getauscht', pr_nummer=98 where titel='T1';
 \echo [4d] E1 zusammenfuehren -> OK (-> feature); erneut -> FEHLER
 :E1
 select ws_zusammenfuehren((select id from ws_auftraege where titel='T1')) \g /dev/null
@@ -81,7 +81,7 @@ select ws_zusammenfuehren((select id from ws_auftraege where titel='T1'));
 \echo [4e] Sicherheit nicht grün: zusammenfuehren -> FEHLER
 :ADM
 insert into ws_auftraege(gruppe_id,titel,erstellt_von,zweig,pr_nummer) values ('training','T2',auth.uid(),null,null);
-update ws_auftraege set zweig='feature/cs-2', pr_nummer=12, stand='zusammen', pruefung='{"sicherheit":{"ergebnis":"rot"}}' where titel='T2';
+update ws_auftraege set zweig='feature/cs-2-t2', pr_nummer=12, stand='zusammen', pruefung='{"sicherheit":{"ergebnis":"rot"}}' where titel='T2';
 :E1
 select ws_zusammenfuehren((select id from ws_auftraege where titel='T2'));
 
