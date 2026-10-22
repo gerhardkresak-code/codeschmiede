@@ -1,9 +1,7 @@
 fn main() {
-    // Eigene Befehle des Programms – nur diese darf die Web-App aufrufen (siehe capabilities/remote.json)
-    tauri_build::try_build(
-        tauri_build::Attributes::new().app_manifest(
-            tauri_build::AppManifest::new().commands(&["device_info", "device_sign", "device_reset"]),
-        ),
-    )
+    // Eigene Befehle des Programms – nur diese darf die Oberfläche aufrufen (siehe capabilities/web.json)
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
+        "ws_api_key_status", "ws_api_key_set", "ws_api_key_delete", "ws_check", "ws_start", "ws_token", "ws_stop", "ws_status",
+    ])))
     .expect("tauri-build fehlgeschlagen");
 }

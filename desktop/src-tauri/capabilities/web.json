@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "codeschmiede-web",
+  "description": "Die Oberfläche der Codeschmiede darf im Programm genau diese Befehle nutzen: Werkstatt starten/stoppen, Status lesen, API-Schlüssel im Tresor setzen/prüfen/löschen (nie lesen), Voraussetzungen prüfen, Links öffnen.",
+  "windows": ["main"],
+  "remote": { "urls": ["https://codeschmiede.pages.dev/*", "https://*.codeschmiede.pages.dev/*"] },
+  "permissions": [
+    "allow-ws-api-key-status", "allow-ws-api-key-set", "allow-ws-api-key-delete", "allow-ws-check",
+    "allow-ws-start", "allow-ws-token", "allow-ws-stop", "allow-ws-status",
+    { "identifier": "opener:allow-open-url", "allow": [{ "url": "https://*" }] }
+  ]
+}

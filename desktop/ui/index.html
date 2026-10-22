@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Trainer-to-go Programmierumgebung</title>
+<title>Codeschmiede</title>
 <style>
   :root { --bg:#022c22; --fg:#ecfdf5; --muted:#a7f3d0; --btn:#047857; --btnh:#065f46; }
   html,body { height:100%; margin:0; }
@@ -25,20 +25,20 @@
 <body>
   <div class="box">
     <img src="logo.png" alt="">
-    <h1>Trainer-to-go Programmierumgebung</h1>
+    <h1>Codeschmiede</h1>
     <p id="status">Verbindung wird aufgebaut …</p>
     <div id="spin" class="spin" aria-hidden="true"></div>
     <div id="offline" class="hidden">
-      <p style="margin-top:14px">Keine Verbindung zu trainer-to-go.at. Die Programmierumgebung arbeitet immer mit den aktuellen Daten und braucht deshalb Internet.</p>
+      <p style="margin-top:14px">Keine Verbindung zum Internet. Die Codeschmiede arbeitet immer mit den aktuellen Daten und braucht deshalb Internet.</p>
       <button id="retry" type="button">Erneut versuchen</button>
     </div>
   </div>
 <script src="config.js"></script>
 <script>
-  // Startseite: prüft die Verbindung und öffnet dann die Plattform-Seite von trainer-to-go.at.
+  // Startseite: prüft die Verbindung und öffnet dann die Plattform-Seite der Codeschmiede.
   // Keine Daten werden lokal gespeichert – alles läuft live über den Server (docs/DESKTOP.md).
   (function () {
-    var START = window.TTG_START_URL || "https://trainer-to-go.at/werkstatt";
+    var START = window.TTG_START_URL || "https://codeschmiede.pages.dev/";
     var origin = new URL(START).origin;
     var timer = null;
     function show(offline) {

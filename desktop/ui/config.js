@@ -1,2 +1,2 @@
-// Start-Adresse der Programmierumgebung. Wird beim Bauen bei Bedarf überschrieben (Vorschau eines Zweigs).
-window.TTG_START_URL = "https://trainer-to-go.at/werkstatt";
+// Start-Adresse der Codeschmiede-Oberfläche (beim Bauen bei Bedarf überschrieben).
+window.TTG_START_URL = "https://codeschmiede.pages.dev/";
