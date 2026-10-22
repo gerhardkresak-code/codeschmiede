@@ -1,9 +1,9 @@
 // Codeschmiede – Programm für Windows und Mac.
 //
-// Schlanke Hülle (Tauri) um die Oberfläche der Codeschmiede, die live geladen wird. Dazu zwei Aufgaben:
-// 1. Claude-API-Schlüssel sicher im Tresor dieses Benutzers verwahren (Windows-Anmeldeinformationsverwaltung / Mac-Schlüsselbund).
-//    Die Oberfläche kann ihn setzen, prüfen und löschen, aber nie lesen.
-// 2. Den Werkstatt-Dienst (Node, Ordner „dienst“) starten und stoppen. Er bekommt den Schlüssel nur als Umgebungsvariable.
+// Schlanke Hülle (Tauri) um die Oberfläche der Codeschmiede, die live geladen wird. Aufgabe des Programms:
+// den Werkstatt-Dienst (Node, Ordner „dienst“) starten und stoppen. Der Dienst lässt die Aufträge vom offiziellen
+// Claude Code abarbeiten, das die Person selbst installiert und mit ihrem eigenen Abo angemeldet hat
+// (Entscheidung Gerhard 2026-10-22 14:22). Das Programm speichert keine Zugangsdaten zu Claude.
 // Konzept: docs/KONZEPT.md
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -12,72 +12,6 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
-
-mod tresor {
-    pub const SERVICE: &str = "Codeschmiede";
-    pub const ACCOUNT: &str = "claude_api_schluessel";
-
-    #[cfg(any(windows, target_os = "macos"))]
-    fn entry() -> Result<keyring::Entry, String> {
-        keyring::Entry::new(SERVICE, ACCOUNT).map_err(|e| e.to_string())
-    }
-    #[cfg(any(windows, target_os = "macos"))]
-    pub fn lesen() -> Result<Option<String>, String> {
-        match entry()?.get_password() {
-            Ok(s) => Ok(Some(s)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(e.to_string()),
-        }
-    }
-    #[cfg(any(windows, target_os = "macos"))]
-    pub fn schreiben(s: &str) -> Result<(), String> {
-        entry()?.set_password(s).map_err(|e| e.to_string())
-    }
-    #[cfg(any(windows, target_os = "macos"))]
-    pub fn loeschen() -> Result<(), String> {
-        match entry()?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(e.to_string()),
-        }
-    }
-
-    // Andere Systeme (nur Entwicklung/Prüfung): Datei im Benutzerordner, nur für den Besitzer lesbar
-    #[cfg(not(any(windows, target_os = "macos")))]
-    fn pfad() -> std::path::PathBuf {
-        std::path::Path::new(&std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".codeschmiede-schluessel")
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    pub fn lesen() -> Result<Option<String>, String> {
-        match std::fs::read_to_string(pfad()) {
-            Ok(s) => Ok(Some(s.trim().to_string())),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(e.to_string()),
-        }
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    pub fn schreiben(s: &str) -> Result<(), String> {
-        std::fs::write(pfad(), s).map_err(|e| e.to_string())?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(pfad(), std::fs::Permissions::from_mode(0o600));
-        }
-        Ok(())
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    pub fn loeschen() -> Result<(), String> {
-        match std::fs::remove_file(pfad()) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e.to_string()),
-        }
-    }
-}
-
-/// Prüft das Format eines Anthropic-API-Schlüssels (ohne ihn irgendwo auszugeben).
-fn schluessel_gueltig(k: &str) -> bool {
-    k.starts_with("sk-ant-") && k.len() >= 30 && k.len() <= 300 && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-}
 
 #[derive(Default)]
 struct Werkstatt {
@@ -97,6 +31,7 @@ struct Status {
 
 #[derive(Serialize)]
 struct Pruefung {
+    claude: bool,
     node: bool,
     git: bool,
     gh: bool,
@@ -112,13 +47,17 @@ struct StartKonfig {
     admin: bool,
 }
 
-/// PATH für Kindprozesse: am Mac kennen Programme aus dem Finder Homebrew-Pfade nicht.
+/// PATH für Kindprozesse: am Mac kennen Programme aus dem Finder Homebrew-Pfade nicht;
+/// Claude Code liegt oft in ~/.local/bin bzw. ~/.claude/local.
 fn pfad_umgebung() -> String {
     let basis = std::env::var("PATH").unwrap_or_default();
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_default();
     if cfg!(target_os = "macos") {
-        format!("/opt/homebrew/bin:/usr/local/bin:{basis}")
+        format!("/opt/homebrew/bin:/usr/local/bin:{home}/.local/bin:{home}/.claude/local:{basis}")
+    } else if cfg!(windows) {
+        format!("{home}\\.local\\bin;{basis}")
     } else {
-        basis
+        format!("{home}/.local/bin:{basis}")
     }
 }
 
@@ -138,27 +77,9 @@ fn laeuft_erfolgreich(programm: &str, args: &[&str]) -> bool {
 }
 
 #[tauri::command]
-fn ws_api_key_status() -> Result<bool, String> {
-    Ok(tresor::lesen()?.is_some())
-}
-
-#[tauri::command]
-fn ws_api_key_set(key: String) -> Result<(), String> {
-    let k = key.trim();
-    if !schluessel_gueltig(k) {
-        return Err("Das ist kein gültiger Claude-API-Schlüssel (beginnt mit sk-ant-).".into());
-    }
-    tresor::schreiben(k)
-}
-
-#[tauri::command]
-fn ws_api_key_delete() -> Result<(), String> {
-    tresor::loeschen()
-}
-
-#[tauri::command]
 fn ws_check() -> Pruefung {
     Pruefung {
+        claude: laeuft_erfolgreich("claude", &["--version"]) || (cfg!(windows) && laeuft_erfolgreich("claude.cmd", &["--version"])),
         node: laeuft_erfolgreich("node", &["--version"]),
         git: laeuft_erfolgreich("git", &["--version"]),
         gh: laeuft_erfolgreich("gh", &["--version"]),
@@ -191,7 +112,6 @@ fn ws_start(config: StartKonfig, app: tauri::AppHandle, state: tauri::State<'_, 
             }
         }
     }
-    let schluessel = tresor::lesen()?.ok_or("Kein API-Schlüssel hinterlegt.")?;
     if !config.supabase_url.starts_with("https://") || config.access_token.is_empty() || config.user_id.is_empty() {
         return Err("Ungültige Anmeldedaten für die Werkstatt.".into());
     }
@@ -203,8 +123,9 @@ fn ws_start(config: StartKonfig, app: tauri::AppHandle, state: tauri::State<'_, 
     let mut kind = befehl("node")
         .arg(&skript)
         .current_dir(&daten)
-        .env("ANTHROPIC_API_KEY", schluessel)
-        .env("CLAUDE_AGENT_SDK_CLIENT_APP", "codeschmiede")
+        // Claude Code soll mit dem Abo-Login der Person arbeiten, nicht mit einem Schlüssel aus der Umgebung
+        .env_remove("ANTHROPIC_API_KEY")
+        .env_remove("ANTHROPIC_AUTH_TOKEN")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -237,6 +158,43 @@ fn ws_start(config: StartKonfig, app: tauri::AppHandle, state: tauri::State<'_, 
     Ok(())
 }
 
+/// Richtet auf Wunsch die Statuszeile von Claude Code ein, die die Abo-Limits für die Codeschmiede ablegt.
+/// Eine bestehende eigene Statuszeile wird nie überschrieben.
+#[tauri::command]
+fn ws_statuszeile(app: tauri::AppHandle) -> Result<String, String> {
+    let skript = app.path().resource_dir().map_err(|e| e.to_string())?.join("dienst").join("werkzeuge").join("abo-statuszeile.mjs");
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).map_err(|_| "Benutzerordner nicht gefunden".to_string())?;
+    let ordner = std::path::Path::new(&home).join(".claude");
+    std::fs::create_dir_all(&ordner).map_err(|e| e.to_string())?;
+    let datei = ordner.join("settings.json");
+    let befehl_text = format!("node \"{}\"", skript.display());
+    let neu = statuszeile_eintragen(std::fs::read_to_string(&datei).ok().as_deref(), &befehl_text)?;
+    match neu {
+        None => Ok("Statuszeile ist schon eingerichtet.".into()),
+        Some(text) => {
+            std::fs::write(&datei, text).map_err(|e| e.to_string())?;
+            Ok("Statuszeile eingerichtet – die Abo-Limits erscheinen nach der nächsten Nutzung von Claude Code.".into())
+        }
+    }
+}
+
+/// Liefert den neuen Inhalt von settings.json (None = schon eingerichtet). Fehler, wenn eine fremde Statuszeile existiert.
+fn statuszeile_eintragen(alt: Option<&str>, befehl_text: &str) -> Result<Option<String>, String> {
+    let mut j: serde_json::Value = match alt {
+        Some(t) if !t.trim().is_empty() => serde_json::from_str(t).map_err(|_| "~/.claude/settings.json ist kein gültiges JSON – bitte von Hand prüfen.".to_string())?,
+        _ => serde_json::json!({}),
+    };
+    if let Some(v) = j.get("statusLine") {
+        if v.get("command").and_then(|c| c.as_str()) == Some(befehl_text) {
+            return Ok(None);
+        }
+        return Err("Es gibt schon eine eigene Statuszeile in Claude Code – sie wird nicht überschrieben.".into());
+    }
+    let obj = j.as_object_mut().ok_or("Unerwarteter Inhalt in ~/.claude/settings.json")?;
+    obj.insert("statusLine".into(), serde_json::json!({ "type": "command", "command": befehl_text }));
+    Ok(Some(serde_json::to_string_pretty(&j).unwrap()))
+}
+
 #[tauri::command]
 fn ws_token(token: String, state: tauri::State<'_, Zustand>) -> Result<(), String> {
     let mut w = state.0.lock().unwrap();
@@ -253,7 +211,6 @@ fn ws_stop(state: tauri::State<'_, Zustand>) -> Result<(), String> {
         let _ = writeln!(e, "{}", serde_json::json!({ "stop": true }));
     }
     if let Some(mut k) = w.kind.take() {
-        // Dienst meldet „aus“ und beendet sich; sicherheitshalber nach kurzer Zeit beenden
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_secs(3));
             let _ = k.kill();
@@ -279,9 +236,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(Zustand(zustand))
-        .invoke_handler(tauri::generate_handler![
-            ws_api_key_status, ws_api_key_set, ws_api_key_delete, ws_check, ws_start, ws_token, ws_stop, ws_status
-        ])
+        .invoke_handler(tauri::generate_handler![ws_check, ws_start, ws_token, ws_stop, ws_status, ws_statuszeile])
         .build(tauri::generate_context!())
         .expect("Codeschmiede konnte nicht starten")
         .run(move |_app, ereignis| {
@@ -303,23 +258,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn schluessel_format() {
-        assert!(schluessel_gueltig("sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789"));
-        assert!(!schluessel_gueltig("sk-ant-kurz"));
-        assert!(!schluessel_gueltig("ghp_abcdefghijklmnopqrstuvwxyz0123456789"));
-        assert!(!schluessel_gueltig("sk-ant-api03-mit leerzeichen und so weiter 12345"));
-    }
-
-    #[test]
-    fn tresor_rundreise() {
-        // nur auf Linux (Datei-Tresor) ohne Systemdialog prüfbar
-        #[cfg(not(any(windows, target_os = "macos")))]
-        {
-            let k = "sk-ant-api03-test-test-test-test-test-test";
-            tresor::schreiben(k).unwrap();
-            assert_eq!(tresor::lesen().unwrap().as_deref(), Some(k));
-            tresor::loeschen().unwrap();
-            assert!(tresor::lesen().unwrap().is_none());
-        }
+    fn statuszeile_neu_und_vorhanden() {
+        let b = "node \"/x/abo-statuszeile.mjs\"";
+        let neu = statuszeile_eintragen(None, b).unwrap().unwrap();
+        assert!(neu.contains("statusLine"));
+        assert!(statuszeile_eintragen(Some(&neu), b).unwrap().is_none());
+        let fremd = r#"{"statusLine":{"type":"command","command":"meins.sh"},"model":"opus"}"#;
+        assert!(statuszeile_eintragen(Some(fremd), b).is_err());
+        let andere = r#"{"model":"opus"}"#;
+        let r = statuszeile_eintragen(Some(andere), b).unwrap().unwrap();
+        assert!(r.contains("\"model\"") && r.contains("statusLine"));
+        assert!(statuszeile_eintragen(Some("kaputt{"), b).is_err());
     }
 }

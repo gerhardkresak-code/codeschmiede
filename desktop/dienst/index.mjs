@@ -1,6 +1,7 @@
 // Werkstatt-Dienst der Codeschmiede.
-// Läuft auf einem Werkstatt-PC, solange im Programm „Werkstatt an“ ist. Holt wartende Aufträge, arbeitet sie mit Claude ab
-// (Claude Agent SDK, API-Schlüssel aus dem Tresor des PCs über die Umgebung ANTHROPIC_API_KEY) und meldet alles live zurück.
+// Läuft auf einem Werkstatt-PC, solange im Programm „Werkstatt an“ ist. Holt wartende Aufträge und lässt sie vom
+// offiziellen Claude Code abarbeiten, das die Person selbst installiert und mit ihrem eigenen Abo angemeldet hat
+// (Entscheidung Gerhard 2026-10-22 14:22). Meldet Live-Log, Rückfragen, Erlaubnis-Anfragen und Abo-Limits zurück.
 // Konzept: docs/KONZEPT.md · Regeln: AGENTS.md
 //
 // Steuerung über stdin (eine JSON-Zeile je Nachricht):
@@ -9,16 +10,20 @@
 // Meldungen über stdout (eine JSON-Zeile je Meldung): { typ: "status"|"fehler", text, auftrag }
 
 import { createInterface } from "node:readline";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir, readFile, writeFile, access } from "node:fs/promises";
+import { mkdir, readFile, writeFile, access, stat } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
 import { createClient } from "@supabase/supabase-js";
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import { ohneGeheimnisse, kuerzen } from "./lib/geheim.mjs";
 import { waehleModell } from "./lib/modell.mjs";
-import { werteAus, zweigName, passtRegel } from "./lib/ergebnis.mjs";
+import { werteAus, zweigName } from "./lib/ergebnis.mjs";
+import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
+
+const HIER = path.dirname(fileURLToPath(import.meta.url));
+const CLAUDE = process.platform === "win32" ? "claude.cmd" : "claude";
 
 const sh = promisify(execFile);
 const melde = (typ, text, auftrag) => process.stdout.write(JSON.stringify({ typ, text, auftrag: auftrag ?? null, zeit: new Date().toISOString() }) + "\n");
@@ -56,6 +61,8 @@ const sitzungenDatei = () => path.join(cfg.daten_ordner, "sitzungen.json");
 async function sitzungen() { try { return JSON.parse(await readFile(sitzungenDatei(), "utf8")); } catch { return {}; } }
 async function merkeSitzung(id, wert) { const s = await sitzungen(); s[id] = wert; await writeFile(sitzungenDatei(), JSON.stringify(s, null, 2)); }
 
+const tokenDatei = () => path.join(cfg.daten_ordner, "zugriff.token");
+async function tokenSchreiben() { await writeFile(tokenDatei(), token || "", { mode: 0o600 }); }
 function verbinde() {
   db = createClient(cfg.supabase_url, cfg.anon_key, {
     accessToken: async () => token,
@@ -80,16 +87,25 @@ async function lebenszeichen(an = true) {
   if (pcId) await db.from("ws_werkstatt_pcs").update({ an, zuletzt: new Date().toISOString() }).eq("id", pcId);
 }
 
-// ---------- Limits ----------
-async function limitOk() {
-  const [{ data: e }, { data: gesamt }] = await Promise.all([
-    db.from("ws_einstellungen").select("*").maybeSingle(),
-    db.rpc("ws_verbrauch_gesamt_monat"),
-  ]);
-  if (!e?.monatslimit_usd) return { ok: false, grund: "Kein Monatslimit festgelegt" };
-  const anteil = (Number(gesamt || 0) / Number(e.monatslimit_usd)) * 100;
-  if (e.stopp_am_limit && anteil >= 100) return { ok: false, grund: "Monatslimit erreicht" };
-  return { ok: true, warnung: anteil >= e.warnung_prozent, anteil };
+// ---------- Abo-Limits ----------
+let aboStand = null;   // letzter bekannter Stand { fuenf_std_prozent, fuenf_std_reset, woche_prozent, woche_reset }
+async function aboMelden(r, quelle = "werkstatt") {
+  if (!r) return;
+  aboStand = { ...(aboStand || {}), ...Object.fromEntries(Object.entries(r).filter(([, v]) => v != null)) };
+  await db.from("ws_abo_limits").upsert({ benutzer_id: cfg.user_id, ...aboStand, quelle, aktualisiert: new Date().toISOString() });
+}
+// Statuszeile von Claude Code (tools/abo-statuszeile.mjs) schreibt ~/.codeschmiede/abo.json – neuere Werte übernehmen
+let aboDateiZeit = 0;
+async function aboAusStatuszeile() {
+  const datei = path.join(os.homedir(), ".codeschmiede", "abo.json");
+  try {
+    const z = (await stat(datei)).mtimeMs; if (z <= aboDateiZeit) return; aboDateiZeit = z;
+    await aboMelden(findeAboLimits(JSON.parse(await readFile(datei, "utf8"))), "statuszeile");
+  } catch { /* keine Statuszeile eingerichtet */ }
+}
+async function aboLage() {
+  const { data: e } = await db.from("ws_einstellungen").select("*").maybeSingle();
+  return aboEntscheidung(aboStand, { kleinAb: e?.abo_klein_ab_prozent ?? 75, pauseAb: e?.abo_pause_ab_prozent ?? 95 });
 }
 
 // ---------- Projekt-Repository und Arbeitsordner ----------
@@ -109,32 +125,6 @@ async function arbeitsordner(projekt, auftrag) {
     catch { await git(repo, "worktree", "add", ordner, zweig); } // Zweig gibt es schon (Fortsetzung)
   }
   return { ordner, zweig };
-}
-
-// ---------- Erlaubnis-Anfragen ----------
-function beschreibe(werkzeug, eingabe) {
-  if (werkzeug === "Bash") return String(eingabe?.command || "");
-  if (eingabe?.file_path) return String(eingabe.file_path);
-  if (eingabe?.url) return String(eingabe.url);
-  return JSON.stringify(eingabe || {}).slice(0, 300);
-}
-async function erlaubnis(auftrag, werkzeug, eingabe, signal) {
-  const text = ohneGeheimnisse(beschreibe(werkzeug, eingabe));
-  // Regeln „immer erlauben“ dieser Gruppe
-  const { data: regeln } = await db.from("ws_erlaubnisse").select("werkzeug, eingabe, auftrag_id, ws_auftraege!inner(gruppe_id)")
-    .eq("status", "immer").eq("ws_auftraege.gruppe_id", auftrag.gruppe_id);
-  if ((regeln || []).some((r) => passtRegel(r, werkzeug, text))) return true;
-  const { data: anf, error } = await db.from("ws_erlaubnisse").insert({ auftrag_id: auftrag.id, werkzeug, eingabe: kuerzen(text, 1000), grund: "Die Werkstatt braucht das für diesen Auftrag." }).select().single();
-  if (error) return false;
-  await log(auftrag.id, "erlaubnis", `Wartet auf deine Erlaubnis: ${werkzeug} ${kuerzen(text, 120)}`);
-  melde("status", "Wartet auf Erlaubnis", auftrag.id);
-  const bis = Date.now() + 30 * 60 * 1000;
-  while (Date.now() < bis && !signal?.aborted && !stopp) {
-    await new Promise((r) => setTimeout(r, 2000));
-    const { data } = await db.from("ws_erlaubnisse").select("status").eq("id", anf.id).single();
-    if (data && data.status !== "offen") return data.status !== "abgelehnt";
-  }
-  return false;
 }
 
 // ---------- Live-Log aus dem Verlauf ----------
@@ -189,33 +179,49 @@ async function fuehreAus(auftrag, { fortsetzen = false } = {}) {
     const { ordner, zweig } = await arbeitsordner(projekt, auftrag);
     const merk = (await sitzungen())[auftrag.id] || {};
     const versuch = merk.versuch || 0;
-    const modell = waehleModell({ ...auftrag, text: nachrichten.map((n) => n.text).join(" ") }, { versuch, gruppenName: gruppe.name });
+    const lage = await aboLage();
+    const modell = waehleModell({ ...auftrag, text: nachrichten.map((n) => n.text).join(" ") }, { versuch, gruppenName: gruppe.name, abo: lage });
     await db.from("ws_auftraege").update({ stand: "laeuft", werkstatt_pc: pcId, modell, zweig }).eq("id", auftrag.id);
-    await log(auftrag.id, "info", `Werkstatt-PC ${cfg.pc_name || os.hostname()} arbeitet mit Modell ${modell} auf ${zweig}`);
+    await log(auftrag.id, "info", `Werkstatt-PC ${cfg.pc_name || os.hostname()} arbeitet mit Modell ${modell} auf ${zweig}${lage === "klein" ? " (Abo-Limit wird knapp – kleineres Modell)" : ""}`);
 
     const prompt = fortsetzen
       ? `Antwort von Gerhard/Team auf deine Rückfrage:\n${nachrichten.filter((n) => n.von).slice(-1)[0]?.text || ""}\n\nArbeite weiter nach denselben Regeln.`
       : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go");
 
+    // Erlaubnis-Brücke (MCP) für Werkzeuge außerhalb der freigegebenen Liste
+    const mcp = { mcpServers: { werkstatt: { command: process.execPath, args: [path.join(HIER, "erlaubnis-mcp.mjs")], env: {
+      CS_SUPABASE_URL: cfg.supabase_url, CS_ANON_KEY: cfg.anon_key, CS_TOKEN_DATEI: tokenDatei(), CS_AUFTRAG: String(auftrag.id), CS_GRUPPE: auftrag.gruppe_id,
+    } } } };
+    const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", modell,
+      "--permission-mode", "default", "--allowedTools", ERLAUBT.join(","), "--disallowedTools", VERBOTEN.join(","),
+      "--mcp-config", JSON.stringify(mcp), "--permission-prompt-tool", "mcp__werkstatt__erlaubnis"];
+    if (fortsetzen && merk.sitzung) args.push("--resume", merk.sitzung);
+    // Ohne API-Schlüssel in der Umgebung arbeitet Claude Code mit dem eigenen Abo-Login dieser Person
+    const env = { ...process.env }; delete env.ANTHROPIC_API_KEY; delete env.ANTHROPIC_AUTH_TOKEN; delete env.CLAUDE_CODE_OAUTH_TOKEN;
+
     let ende = null; let kosten = 0; let ein = 0; let aus = 0; let sitzung = merk.sitzung;
-    for await (const m of query({
-      prompt,
-      options: {
-        cwd: ordner, model: modell, abortController: abort, resume: fortsetzen ? merk.sitzung : undefined,
-        permissionMode: "default", allowedTools: ERLAUBT, disallowedTools: VERBOTEN, settingSources: ["project"],
-        canUseTool: async (werkzeug, eingabe, { signal } = {}) =>
-          (await erlaubnis(auftrag, werkzeug, eingabe, signal))
-            ? { behavior: "allow", updatedInput: eingabe }
-            : { behavior: "deny", message: "Von Gerhard nicht erlaubt (oder keine Antwort). Suche einen anderen Weg oder stelle eine RÜCKFRAGE." },
-      },
-    })) {
-      if (m.type === "system" && m.session_id) sitzung = m.session_id;
-      await verarbeiteNachricht(auftrag, m, ordner);
-      if (m.type === "result") {
-        ende = m; sitzung = m.session_id || sitzung;
-        kosten = Number(m.total_cost_usd || 0); ein = m.usage?.input_tokens || 0; aus = m.usage?.output_tokens || 0;
-      }
-    }
+    await new Promise((fertig, fehl) => {
+      const kind = spawn(CLAUDE, args, { cwd: ordner, env, shell: process.platform === "win32", windowsHide: true });
+      laeuft.kind = kind;
+      abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
+      const rl = createInterface({ input: kind.stdout });
+      let fehlerText = "";
+      kind.stderr.on("data", (d) => { fehlerText = (fehlerText + d.toString()).slice(-2000); });
+      const offen = [];
+      rl.on("line", (zeile) => {
+        let m; try { m = JSON.parse(zeile); } catch { return; }
+        if (m.session_id) sitzung = m.session_id;
+        if (m.type === "result") { ende = m; kosten = Number(m.total_cost_usd || 0); ein = m.usage?.input_tokens || 0; aus = m.usage?.output_tokens || 0; }
+        offen.push((async () => {
+          const lim = findeAboLimits(m); if (lim) await aboMelden(lim);
+          await verarbeiteNachricht(auftrag, m, ordner);
+        })().catch(() => { /* einzelne Meldung nicht verarbeitbar */ }));
+      });
+      kind.on("error", (e) => fehl(new Error(e.code === "ENOENT" ? "Claude Code ist auf diesem PC nicht installiert." : e.message)));
+      kind.on("close", (code) => Promise.all(offen).then(() => (ende || code === 0 ? fertig() : fehl(new Error(/log ?in|login|not logged/i.test(fehlerText)
+        ? "Claude Code ist nicht angemeldet – bitte einmal „claude“ starten und mit deinem Abo anmelden."
+        : /limit/i.test(fehlerText) ? "Abo-Nutzungslimit erreicht – die Werkstatt wartet bis zur Rücksetzung." : `Claude Code beendet (${code}): ${fehlerText.slice(-300)}`)))));
+    });
     await merkeSitzung(auftrag.id, { sitzung, versuch });
     await db.from("ws_verbrauch").insert({ auftrag_id: auftrag.id, projekt_id: projekt.id, modell, kosten_usd: kosten, tokens_ein: ein, tokens_aus: aus, werkstatt_pc: pcId });
 
@@ -255,14 +261,14 @@ async function naechsterAuftrag() {
   for (const a of fragen || []) {
     const { data: n } = await db.from("ws_nachrichten").select("von, art, id").eq("auftrag_id", a.id).order("id", { ascending: false }).limit(1);
     if (n?.[0]?.von) {
-      const lim = await limitOk(); if (!lim.ok) { melde("status", lim.grund); return; }
+      if ((await aboLage()) === "pause") { melde("status", "Abo-Limit fast erreicht – Werkstatt wartet"); return; }
       return fuehreAus(a, { fortsetzen: true });
     }
   }
   // 2. Neue Aufträge (nur Gruppen ohne laufenden Auftrag, nur mit Werkstatt-Recht)
   const { data: offen } = await db.from("ws_auftraege").select("*").eq("stand", "wartet").order("id").limit(20);
   if (!offen?.length) return;
-  const lim = await limitOk(); if (!lim.ok) { melde("status", lim.grund); return; }
+  if ((await aboLage()) === "pause") { melde("status", "Abo-Limit fast erreicht – Werkstatt wartet bis zur Rücksetzung"); return; }
   for (const a of offen) {
     const { count } = await db.from("ws_auftraege").select("id", { count: "exact", head: true }).eq("gruppe_id", a.gruppe_id).in("stand", ["laeuft", "frage"]);
     if (count) continue;
@@ -276,7 +282,10 @@ async function naechsterAuftrag() {
 async function start() {
   await mkdir(cfg.daten_ordner, { recursive: true });
   verbinde();
+  await tokenSchreiben();
   await pcAnmelden();
+  try { const { data } = await db.from("ws_abo_limits").select("*").eq("benutzer_id", cfg.user_id).maybeSingle(); if (data) aboStand = data; } catch { /* noch keine Werte */ }
+  setInterval(() => aboAusStatuszeile().catch(() => {}), 60 * 1000);
   melde("status", "Werkstatt bereit");
   setInterval(() => lebenszeichen(true).catch(() => {}), 60 * 1000);
   const schleife = async () => {
@@ -289,6 +298,7 @@ async function start() {
 async function beenden() {
   stopp = true;
   laeuft?.abort.abort();
+  try { laeuft?.kind?.kill("SIGINT"); } catch { /* schon beendet */ }
   try { await lebenszeichen(false); } catch { /* egal */ }
   melde("status", "Werkstatt aus");
   setTimeout(() => process.exit(0), 300);
@@ -299,10 +309,9 @@ const rl = createInterface({ input: process.stdin });
 rl.on("line", async (zeile) => {
   let m; try { m = JSON.parse(zeile); } catch { return; }
   if (!cfg) {
-    if (!process.env.ANTHROPIC_API_KEY) { melde("fehler", "Kein API-Schlüssel – bitte im Programm hinterlegen."); process.exit(2); }
     cfg = m; token = m.access_token;
     start().catch((e) => { melde("fehler", ohneGeheimnisse(e?.message || String(e))); process.exit(1); });
-  } else if (m.token) token = m.token;
+  } else if (m.token) { token = m.token; tokenSchreiben().catch(() => {}); }
   else if (m.stop) beenden();
 });
 rl.on("close", () => beenden());

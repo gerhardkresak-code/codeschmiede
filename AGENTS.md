@@ -11,7 +11,7 @@ Widersprüche, Risiken, Empfehlung melden → Fragen stellen → ab NORMAL Freig
 
 ## Was ist die Codeschmiede?
 Gerhards Programmierumgebung für **alle** seine Apps (Projekte): ein Programm für Windows und Mac mit Projektwechsel, Auftrags-Zentrale,
-Werkstatt (Claude über API-Schlüssel), Live-Vorschau, Freigabe, Zusammenführen, Sicherheitsprüfung, Wissen. Konzept: `docs/KONZEPT.md`.
+Werkstatt (offizielles Claude Code mit eigenem Abo-Login), Live-Vorschau, Freigabe, Zusammenführen, Sicherheitsprüfung, Wissen. Konzept: `docs/KONZEPT.md`.
 
 ## Projektregeln (Anweisungen von Gerhard)
 - Erst prüfen, ob eine Anweisung Sinn macht, alle Details erfragen, dann bauen. Sichtbare Neuerungen zuerst als klickbarer Entwurf.
@@ -31,7 +31,10 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Die Codeschmiede verarbeitet **keine** Daten von Vereinsmitgliedern, Kunden oder Kindern – nur Aufträge, Code und Mitglieder des Teams.
   In Aufträge, Live-Log und Nachrichten gehören keine Personendaten Dritter.
 - Jede Tabelle mit Row-Level-Security; Rechte nur über geprüfte Datenbank-Funktionen mit Protokoll (`ws_protokoll`).
-- **API-Schlüssel** nur im Tresor des Werkstatt-PCs (Windows-Anmeldeinformationsverwaltung / Mac-Schlüsselbund), nie in Datenbank, Code, Chat oder Log.
+- **Keine Claude-Zugangsdaten** in der Codeschmiede: Die Werkstatt startet das offizielle Claude Code, das jede Person selbst mit ihrem Abo anmeldet
+  (Entscheidung 2026-10-22 14:22). Nur für die interne Nutzung; Weitergabe des Programms an Dritte bräuchte API-Schlüssel.
+- **Abo-Limits beachten:** vor jedem Auftrag Stand prüfen; ab Schwelle „klein“ eine Modellstufe kleiner, ab Schwelle „Pause“ keine neuen Aufträge bis zur Rücksetzung.
+- Geheimnisse (GitHub-, Supabase-Token) nie in Datenbank, Code, Chat oder Log.
   Der Werkstatt-Dienst filtert Geheimnisse aus dem Live-Log.
 - Keine Dritt-Server ohne Eintrag in `docs/DATENSCHUTZ.md`. Schriften und Bibliotheken selbst hosten.
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.

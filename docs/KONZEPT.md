@@ -14,17 +14,19 @@ seit 13:16 eigenes Programm für alle Projekte. Entwurf: `docs/entwurf-0.4.html`
 | 12:27 | Rollen Admin/Entwickler/Texter/Leser; Löschen = Ausblenden oder Ausbauen; Einladung per E-Mail; Live-Vorschau (eigenes Fenster) mit „Zeigen & kommentieren“ |
 | 12:29/12:31 | Neue Features und Gruppen anlegen; live mitsehen; Erlaubnis-Anfragen im Programm bestätigen |
 | 12:37 | Entwurf 0.4 freigegeben („lege los“) |
-| 13:14 | Claude über **API-Schlüssel** (nicht Abo-Anmeldung); beide Admin-Konten (office@ und Gmail) bleiben |
+| 13:14 | ~~Claude über API-Schlüssel~~ (ersetzt 14:22); beide Admin-Konten (office@ und Gmail) bleiben |
 | 13:16 | **Ein Programm mit Projektwechsel** für alle Apps; eigenes Repository; Name **Codeschmiede** |
 | 13:18 | Nutzungslimits immer sichtbar und live; Modellwahl nach Aufwand und Komplexität |
 | 13:19 | Eigene Datenbank in Frankfurt – **vorerst** im Supabase-Testprojekt von Trainer to go (kostenloser Platz belegt); Umzug, sobald ein Platz frei ist |
+| 13:5x | Platz frei geworden: eigenes Supabase-Projekt `codeschmiede` in Frankfurt (eu-central-1) |
+| 14:22 | **Werkstatt über das offizielle Claude Code mit dem eigenen Abo-Login** (kein API-Schlüssel); „Nutzungslimits“ = **Abo-Limits** (5-Stunden-Fenster und Woche), immer sichtbar; Werkstatt richtet sich danach. Nur interne Nutzung |
 
 ## Aufbau
 | Teil | Wo | Aktualisierung |
 |---|---|---|
 | Oberfläche | `web/`, gehostet (Cloudflare Pages), im Programmfenster live geladen | sofort nach Veröffentlichung |
 | Programm-Hülle | `desktop/src-tauri` (Tauri 2), Windows + Mac | Selbst-Update beim Start |
-| Werkstatt-Dienst | `desktop/dienst` (Node, Claude Agent SDK, API-Schlüssel aus dem Tresor) | mit dem Programm |
+| Werkstatt-Dienst | `desktop/dienst` (Node; startet das offizielle Claude Code mit dem Abo-Login der Person) | mit dem Programm |
 | Daten | Supabase, Tabellen `ws_*` mit RLS und Live-Abgleich | live |
 | Code der Projekte | GitHub-Repository je Projekt | Pull Request je Auftrag |
 
@@ -37,11 +39,11 @@ stellt beim ersten Auftrag eines neuen Projekts zuerst ihre Fragen (Pflicht-Star
 ## Rollen und Rechte
 | Rolle | Aufträge | Freigeben / Erlauben | Löschen | Claude | GitHub |
 |---|---|---|---|---|---|
-| Admin (Gerhard) | alle | alle | alle | API-Schlüssel auf seinem PC | ja |
-| Entwickler (je Projekt) | je Bereich | nur wenn vergeben | nur wenn vergeben | eigener API-Schlüssel auf seinem PC | ja |
+| Admin (Gerhard) | alle | alle | alle | Claude Code mit seinem Abo | ja |
+| Entwickler (je Projekt) | je Bereich | nur wenn vergeben | nur wenn vergeben | Claude Code mit eigenem Abo | ja |
 | Texter (je Projekt) | nur Text-Aufträge | nie | nie | nein | nein |
 | Leser (je Projekt) | nein | nein | nein | nein | nein |
-Neue Projekte, Gruppen, Mitglieder, Limits: nur Admin.
+Neue Projekte, Gruppen, Mitglieder, Abo-Schwellen: nur Admin.
 
 ## Weg eines Auftrags
 Auftrag (Zentrale) → In Arbeit (Werkstatt-PC, eigener Zweig) → Freigabe (PR mit grüner Prüfung; Admin oder Recht) → Zusammenführen →
@@ -49,12 +51,15 @@ Sicherheitsprüfung → Wissen & veröffentlicht (die letzten drei auf dem Admin
 
 ## Werkstatt (Schritt 2)
 - Läuft im Programm, wenn „Werkstatt an“; holt den nächsten wartenden Auftrag aus Gruppen, in denen der Benutzer Auftragsrecht hat.
-- Arbeitet mit dem Claude Agent SDK und dem API-Schlüssel aus dem Tresor; im Arbeitsordner `<Daten>/projekte/<projekt>/auftrag-<nr>` (git worktree)
+- Startet das offizielle Claude Code (`claude -p … --output-format stream-json`) mit dem Abo-Login der Person; Umgebungsschlüssel
+  (`ANTHROPIC_API_KEY` u. a.) werden entfernt. Erlaubnis-Anfragen laufen über ein eigenes MCP-Werkzeug (`erlaubnis-mcp.mjs`) in die Zentrale. Im Arbeitsordner `<Daten>/projekte/<projekt>/auftrag-<nr>` (git worktree)
   auf Zweig `feature/cs-<nr>-<kurz>`; Regeln aus dem Projekt (AGENTS.md/CLAUDE.md) gelten.
 - **Modellwahl:** Text-Auftrag oder kleine Änderung → kleines Modell; normale Funktion → mittleres; Datenbank, Rechte, Login, Migration,
   Ausbau oder Risiko HOCH → großes Modell; Fehlschlag → eine Stufe höher. Gewähltes Modell steht am Auftrag.
-- **Limits:** Vor jedem Auftrag Abgleich mit Monatslimit; ab Warnschwelle Hinweis, am Limit keine neuen Aufträge (wenn „Stopp am Limit“).
-  Kosten jedes Laufs → `ws_verbrauch`; Anzeige je Projekt und gesamt, live.
+- **Abo-Limits:** Claude Code meldet den Stand (5-Stunden-Fenster, Woche, Rücksetzzeit) im Lauf bzw. über die optionale Statuszeile
+  (`werkzeuge/abo-statuszeile.mjs`, schreibt `~/.codeschmiede/abo.json`). Werkstatt speichert ihn in `ws_abo_limits` (live für alle im Projekt).
+  Ab `abo_klein_ab_prozent` (Standard 75) eine Modellstufe kleiner, ab `abo_pause_ab_prozent` (95) keine neuen Aufträge bis zur Rücksetzung.
+  Rechnerischer Wert jedes Laufs → `ws_verbrauch` (nur Information, keine Extrakosten).
 - Live-Log (Lesen, Ändern mit Ausschnitt, Befehle, Tests) ohne Geheimnisse; Erlaubnis-Anfragen für Befehle außerhalb der freigegebenen Liste;
   Rückfrage beendet den Lauf mit `RÜCKFRAGE:` und setzt beim Antworten fort; Ergebnis: Pull Request → Stand „Freigabe“.
 
@@ -62,7 +67,7 @@ Sicherheitsprüfung → Wissen & veröffentlicht (die letzten drei auf dem Admin
 | Schritt | Inhalt | Stand |
 |---|---|---|
 | 1 | Datenbank v1, Zentrale, Benutzer & Rechte (in Trainer to go gebaut und getestet) | erledigt 2026-10-22 |
-| 1b | Umzug ins Repository `codeschmiede`, Datenbank v2 (Projekte, Verbrauch, Limits), Oberfläche mit Projektwechsel und Verbrauchsanzeige | in Arbeit |
+| 1b | Umzug ins Repository `codeschmiede`, Datenbank v2 (Projekte, Verbrauch) und v3 (Abo-Limits), Oberfläche mit Projektwechsel und Verbrauchsanzeige | in Arbeit |
 | 2 | Programm (Tauri) + Werkstatt-Dienst | in Arbeit |
 | 3 | Live-Vorschau mit „Zeigen & kommentieren“ | offen |
 | 4 | Zusammenführen / Sicherheitsprüfung / Wissen auf dem Admin-PC; Woche Parallelbetrieb | offen |

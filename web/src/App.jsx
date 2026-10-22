@@ -46,12 +46,12 @@ function Dialog({ title, onClose, children }) {
 // ---------------- Daten ----------------
 const usd = (n) => (n == null ? "–" : new Intl.NumberFormat("de-AT", { style: "currency", currency: "USD" }).format(Number(n)));
 function useWerkstattDaten(me, projektId) {
-  const leer = { projekte: [], mitglieder: [], bereiche: [], gruppen: [], features: [], auftraege: [], benutzer: [], rechte: [], pcs: [], verbrauch: [], gesamt: 0, einstellungen: null };
+  const leer = { projekte: [], mitglieder: [], bereiche: [], gruppen: [], features: [], auftraege: [], benutzer: [], rechte: [], pcs: [], verbrauch: [], gesamt: 0, einstellungen: null, abo: [] };
   const [d, setD] = useState(leer);
   const [laden, setLaden] = useState(true);
   const timer = useRef(null);
   const holen = useCallback(async () => {
-    const [pj, mg, u, r, p, e, vm, vg] = await Promise.all([
+    const [pj, mg, u, r, p, e, vm, vg, ab] = await Promise.all([
       supabase.from("ws_projekte").select("*").eq("archiviert", false).order("name"),
       supabase.from("ws_projekt_mitglieder").select("*"),
       supabase.from("ws_benutzer").select("*").order("name"),
@@ -60,6 +60,7 @@ function useWerkstattDaten(me, projektId) {
       supabase.from("ws_einstellungen").select("*").maybeSingle(),
       supabase.rpc("ws_verbrauch_monat"),
       supabase.rpc("ws_verbrauch_gesamt_monat"),
+      supabase.from("ws_abo_limits").select("*"),
     ]);
     const pid = projektId || pj.data?.[0]?.id;
     let b = [], g = [], f = [], a = [];
@@ -74,14 +75,14 @@ function useWerkstattDaten(me, projektId) {
       }
     }
     setD({ projekte: pj.data || [], mitglieder: mg.data || [], bereiche: b, gruppen: g, features: f, auftraege: a, benutzer: u.data || [], rechte: r.data || [],
-      pcs: p.data || [], einstellungen: e.data || null, verbrauch: vm.data || [], gesamt: Number(vg.data || 0), projektId: pid });
+      pcs: p.data || [], einstellungen: e.data || null, verbrauch: vm.data || [], gesamt: Number(vg.data || 0), abo: ab.data || [], projektId: pid });
     setLaden(false);
   }, [projektId]);
   useEffect(() => {
     if (!me) return undefined;
     setLaden(true); holen();
     const ch = supabase.channel("cs-zentrale-" + (projektId || "start"));
-    ["ws_projekte", "ws_projekt_mitglieder", "ws_gruppen", "ws_features", "ws_auftraege", "ws_benutzer", "ws_rechte", "ws_werkstatt_pcs", "ws_verbrauch", "ws_einstellungen"].forEach((t) =>
+    ["ws_projekte", "ws_projekt_mitglieder", "ws_gruppen", "ws_features", "ws_auftraege", "ws_benutzer", "ws_rechte", "ws_werkstatt_pcs", "ws_verbrauch", "ws_einstellungen", "ws_abo_limits"].forEach((t) =>
       ch.on("postgres_changes", { event: "*", schema: "public", table: t }, () => { clearTimeout(timer.current); timer.current = setTimeout(holen, 300); }));
     ch.subscribe();
     return () => { supabase.removeChannel(ch); clearTimeout(timer.current); };
@@ -183,7 +184,7 @@ export default function App() {
           <span className="text-sm text-slate-500">{aktuell?.name}</span>
           <span className="inline-flex items-center gap-1.5 text-xs text-slate-500"><i className="w-2 h-2 rounded-full bg-green-600" />Live synchronisiert</span>
           <div className="ml-auto flex items-center gap-3 flex-wrap">
-            <VerbrauchKurz d={daten} onClick={() => setAnsicht("verbrauch")} />
+            <VerbrauchKurz d={daten} ich={ich} onClick={() => setAnsicht("verbrauch")} />
             <WerkstattSchalter ich={ich} sitzung={sitzung} d={daten} toast={setToast} />
           </div>
         </div>
@@ -569,7 +570,7 @@ function Einladen({ ich, projekt, toast, onClose, onFertig }) {
     <Dialog title="Benutzer einladen" onClose={onClose}>
       <label className="flex flex-col gap-1 text-sm text-slate-500">E-Mail-Adresse<input id="ws-mail" type="email" className={input} value={mail} onChange={(e) => setMail(e.target.value)} autoFocus /></label>
       <label className="flex flex-col gap-1 text-sm text-slate-500">Rolle<select id="ws-rolle" className={input} value={rolle} onChange={(e) => setRolle(e.target.value)}>{["entwickler", "texter", "leser"].map((r) => <option key={r} value={r}>{ROLLEN[r]}</option>)}</select></label>
-      <p className="text-xs text-slate-500">So geht es weiter: Die Person öffnet die Codeschmiede, registriert sich mit genau dieser Adresse, bestätigt die E-Mail und nimmt die Einladung an. Entwickler brauchen zusätzlich einen eigenen Claude-API-Schlüssel und Zugriff auf das GitHub-Repository des Projekts.</p>
+      <p className="text-xs text-slate-500">So geht es weiter: Die Person öffnet die Codeschmiede, registriert sich mit genau dieser Adresse, bestätigt die E-Mail und nimmt die Einladung an. Entwickler brauchen zusätzlich ein eigenes Claude-Abo (Claude Code auf ihrem PC angemeldet) und Zugriff auf das GitHub-Repository des Projekts.</p>
       <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={onClose}><X className="w-4 h-4" />Abbrechen</button><button type="button" className={btn} disabled={busy || !gueltig} onClick={los}>Einladung anlegen</button></div>
     </Dialog>
   );
@@ -615,54 +616,82 @@ function Anmelden() {
 }
 
 // ---------------- Verbrauch & Limits ----------------
-function VerbrauchKurz({ d, onClick }) {
-  const limit = d.einstellungen?.monatslimit_usd;
-  const anteil = limit ? Math.min(100, (d.gesamt / Number(limit)) * 100) : 0;
-  const warn = limit && anteil >= (d.einstellungen?.warnung_prozent || 80);
+const uhr = (t) => (t ? new Date(t).toLocaleString("de-AT", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "–");
+const abgelaufen = (t) => t && Date.parse(t) < Date.now();
+function Balken({ wert, warn, pause }) {
+  const w = wert == null ? 0 : Math.min(100, wert);
+  const farbe = wert >= pause ? "bg-red-600" : wert >= warn ? "bg-amber-500" : "bg-emerald-600";
+  return <span className="w-16 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden inline-block align-middle"><i className={`block h-full ${farbe}`} style={{ width: `${w}%` }} /></span>;
+}
+function aboWerte(a) {
+  if (!a) return { f: null, w: null };
+  return { f: abgelaufen(a.fuenf_std_reset) ? 0 : a.fuenf_std_prozent, w: abgelaufen(a.woche_reset) ? 0 : a.woche_prozent };
+}
+
+function VerbrauchKurz({ d, ich, onClick }) {
+  const a = d.abo.find((x) => x.benutzer_id === ich.id);
+  const { f, w } = aboWerte(a);
+  const warn = d.einstellungen?.abo_klein_ab_prozent ?? 75; const pause = d.einstellungen?.abo_pause_ab_prozent ?? 95;
+  const hoch = Math.max(f ?? 0, w ?? 0) >= warn;
+  const p = (x) => (x == null ? "–" : `${Math.round(x)} %`);
   return (
-    <button type="button" onClick={onClick} className={`flex items-center gap-2.5 rounded-xl border px-3 py-1.5 text-sm ${warn ? "border-amber-500 bg-amber-50 dark:bg-amber-950/40" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"}`} title="Verbrauch der Claude-Schnittstelle in diesem Monat">
-      <Gauge className={`w-4 h-4 ${warn ? "text-amber-600" : "text-emerald-700"}`} />
-      <span className="tabular-nums"><b>{usd(d.gesamt)}</b>{limit ? <span className="text-slate-500"> von {usd(limit)}</span> : <span className="text-slate-500"> · kein Limit</span>}</span>
-      {limit && <span className="w-16 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><i className={`block h-full ${warn ? "bg-amber-500" : "bg-emerald-600"}`} style={{ width: `${anteil}%` }} /></span>}
+    <button type="button" onClick={onClick} className={`flex items-center gap-2.5 rounded-xl border px-3 py-1.5 text-sm ${hoch ? "border-amber-500 bg-amber-50 dark:bg-amber-950/40" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"}`} title="Nutzungslimits deines Claude-Abos (laut Claude Code)">
+      <Gauge className={`w-4 h-4 ${hoch ? "text-amber-600" : "text-emerald-700"}`} />
+      {a ? <span className="flex items-center gap-2 tabular-nums"><span>5 Std. <b>{p(f)}</b></span><Balken wert={f} warn={warn} pause={pause} /><span>Woche <b>{p(w)}</b></span><Balken wert={w} warn={warn} pause={pause} /></span>
+        : <span className="text-slate-500">Abo-Limits: noch keine Werte</span>}
     </button>
   );
 }
 
 function Verbrauch({ d, ich, toast }) {
   const e = d.einstellungen || {};
-  const [limit, setLimit] = useState(e.monatslimit_usd ?? ""); const [warn, setWarn] = useState(e.warnung_prozent ?? 80); const [stopp, setStopp] = useState(e.stopp_am_limit ?? true);
-  useEffect(() => { setLimit(e.monatslimit_usd ?? ""); setWarn(e.warnung_prozent ?? 80); setStopp(e.stopp_am_limit ?? true); }, [e.monatslimit_usd, e.warnung_prozent, e.stopp_am_limit]);
+  const [klein, setKlein] = useState(e.abo_klein_ab_prozent ?? 75); const [pause, setPause] = useState(e.abo_pause_ab_prozent ?? 95);
+  useEffect(() => { setKlein(e.abo_klein_ab_prozent ?? 75); setPause(e.abo_pause_ab_prozent ?? 95); }, [e.abo_klein_ab_prozent, e.abo_pause_ab_prozent]);
   const admin = ich.rolle === "admin";
   const speichern = async () => {
-    const { error } = await supabase.rpc("ws_limit_setzen", { p_limit: limit === "" ? null : Number(limit), p_warnung: Number(warn), p_stopp: stopp });
-    toast(error ? fehler(error) : "Limit gespeichert");
+    const { error } = await supabase.rpc("ws_abo_schwellen_setzen", { p_klein: Number(klein), p_pause: Number(pause) });
+    toast(error ? fehler(error) : "Schwellen gespeichert");
   };
+  const statuszeile = async () => { try { toast(await tauri("ws_statuszeile")); } catch (x) { toast(fehler(x)); } };
   const name = (pid) => d.projekte.find((p) => p.id === pid)?.name || pid;
-  const lim = Number(e.monatslimit_usd || 0);
+  const wer = (uid) => d.benutzer.find((u) => u.id === uid)?.name || "Mitglied";
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] items-start">
-      <div className={card}>
-        <div className="p-4 font-display font-semibold text-xs uppercase tracking-widest text-slate-500">Diesen Monat</div>
-        <div className="px-4 pb-4">
-          <div className="font-display font-bold text-4xl tabular-nums">{usd(d.gesamt)}</div>
-          <div className="text-sm text-slate-500">{lim ? `von ${usd(lim)} Monatslimit · ${Math.round((d.gesamt / lim) * 100)} %` : "Noch kein Monatslimit festgelegt – die Werkstatt startet erst mit Limit."}</div>
-          {lim > 0 && <div className="mt-3 h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><i className="block h-full bg-emerald-600" style={{ width: `${Math.min(100, (d.gesamt / lim) * 100)}%` }} /></div>}
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
+      <div className="flex flex-col gap-5">
+        <div className={card}>
+          <div className="p-4 font-display font-semibold text-xs uppercase tracking-widest text-slate-500">Abo-Nutzungslimits (Claude)</div>
+          {d.abo.length === 0 ? <p className="px-4 pb-4 text-sm text-slate-500">Noch keine Werte. Sie kommen, sobald auf einem Werkstatt-PC Claude Code mit dem Abo arbeitet oder die Statuszeile eingerichtet ist.</p> : (
+            <div className="overflow-x-auto"><table className="w-full text-sm">
+              <thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-t border-slate-200 dark:border-slate-800"><th className="px-4 py-2">Mitglied</th><th className="px-4 py-2">5-Stunden-Fenster</th><th className="px-4 py-2">Woche</th><th className="px-4 py-2">Stand</th></tr></thead>
+              <tbody>{d.abo.map((a) => { const { f, w } = aboWerte(a); return (
+                <tr key={a.benutzer_id} className="border-t border-slate-100 dark:border-slate-800">
+                  <td className="px-4 py-2.5">{wer(a.benutzer_id)}</td>
+                  <td className="px-4 py-2.5 tabular-nums"><b>{f == null ? "–" : `${Math.round(f)} %`}</b> <Balken wert={f} warn={klein} pause={pause} /><div className="text-xs text-slate-500">zurück: {uhr(a.fuenf_std_reset)}</div></td>
+                  <td className="px-4 py-2.5 tabular-nums"><b>{w == null ? "–" : `${Math.round(w)} %`}</b> <Balken wert={w} warn={klein} pause={pause} /><div className="text-xs text-slate-500">zurück: {uhr(a.woche_reset)}</div></td>
+                  <td className="px-4 py-2.5 text-xs text-slate-500">{fmt(a.aktualisiert)}<br />{a.quelle === "statuszeile" ? "Statuszeile" : "Werkstatt"}</td>
+                </tr>); })}</tbody></table></div>)}
+          <p className="p-4 text-xs text-slate-500">Die Werte meldet Claude Code auf dem PC des Mitglieds; sie gelten für das ganze Abo (Chats in claude.ai und Claude Code zusammen) und sind so aktuell wie die letzte Nutzung von Claude Code.</p>
         </div>
-        <table className="w-full text-sm border-t border-slate-200 dark:border-slate-800">
-          <thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500"><th className="px-4 py-2">Projekt</th><th className="px-4 py-2 text-right">Aufträge</th><th className="px-4 py-2 text-right">Kosten</th></tr></thead>
-          <tbody>{d.verbrauch.length === 0 ? <tr><td colSpan={3} className="px-4 py-4 text-slate-500">Noch kein Verbrauch in diesem Monat.</td></tr>
-            : d.verbrauch.map((v) => <tr key={v.projekt_id} className="border-t border-slate-100 dark:border-slate-800"><td className="px-4 py-2">{name(v.projekt_id)}</td><td className="px-4 py-2 text-right tabular-nums">{v.auftraege}</td><td className="px-4 py-2 text-right tabular-nums">{usd(v.kosten_usd)}</td></tr>)}</tbody>
-        </table>
-        <p className="p-4 text-xs text-slate-500">Die Werkstatt wählt das Modell nach Aufwand: Texte und kleine Änderungen klein, normale Funktionen mittel, Datenbank, Rechte und Risiko HOCH groß; bei Fehlschlag eine Stufe höher. Die Werte sind Schätzungen der Werkstatt; maßgeblich ist die Abrechnung in der Claude Console.</p>
+        <div className={card}>
+          <div className="p-4 font-display font-semibold text-xs uppercase tracking-widest text-slate-500">Arbeit der Werkstatt diesen Monat</div>
+          <table className="w-full text-sm border-t border-slate-200 dark:border-slate-800">
+            <thead><tr className="text-left text-xs uppercase tracking-wide text-slate-500"><th className="px-4 py-2">Projekt</th><th className="px-4 py-2 text-right">Aufträge</th><th className="px-4 py-2 text-right">Rechnerischer Wert</th></tr></thead>
+            <tbody>{d.verbrauch.length === 0 ? <tr><td colSpan={3} className="px-4 py-4 text-slate-500">Noch keine Arbeit in diesem Monat.</td></tr>
+              : d.verbrauch.map((v) => <tr key={v.projekt_id} className="border-t border-slate-100 dark:border-slate-800"><td className="px-4 py-2">{name(v.projekt_id)}</td><td className="px-4 py-2 text-right tabular-nums">{v.auftraege}</td><td className="px-4 py-2 text-right tabular-nums">{usd(v.kosten_usd)}</td></tr>)}</tbody>
+          </table>
+          <p className="p-4 text-xs text-slate-500">Die Werkstatt arbeitet über dein Abo – es entstehen keine Extrakosten. Der rechnerische Wert zeigt, was die Arbeit über die Schnittstelle gekostet hätte.</p>
+        </div>
       </div>
       <div className={card}>
-        <div className="p-4 font-display font-semibold text-xs uppercase tracking-widest text-slate-500">Limit</div>
-        <div className="px-4 pb-4 flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm text-slate-500">Monatslimit in US-Dollar<input id="cs-limit" type="number" min="0" step="1" className={input} value={limit} onChange={(x) => setLimit(x.target.value)} disabled={!admin} /></label>
-          <label className="flex flex-col gap-1 text-sm text-slate-500">Warnung ab (Prozent)<input id="cs-warn" type="number" min="10" max="100" className={input} value={warn} onChange={(x) => setWarn(x.target.value)} disabled={!admin} /></label>
-          <label className="flex items-start gap-2 text-sm"><input id="cs-stopp" type="checkbox" className="mt-1 accent-emerald-700" checked={stopp} onChange={(x) => setStopp(x.target.checked)} disabled={!admin} />Am Limit keine neuen Aufträge starten</label>
-          {admin ? <button type="button" className={btn} onClick={speichern}>Speichern</button> : <p className="text-xs text-slate-500">Das Limit setzt der Admin.</p>}
-          <p className="text-xs text-slate-500">Lege dasselbe Limit zusätzlich in der Claude Console fest (Limits deiner Organisation) – dann ist es doppelt abgesichert.</p>
+        <div className="p-4 font-display font-semibold text-xs uppercase tracking-widest text-slate-500">So achtet die Werkstatt auf dein Abo</div>
+        <div className="px-4 pb-4 flex flex-col gap-3 text-sm">
+          <p className="text-slate-600 dark:text-slate-300">Modell nach Aufwand: Texte und kleine Änderungen klein, normale Funktionen mittel, Datenbank, Rechte und Risiko HOCH groß; bei Fehlschlag eine Stufe höher.</p>
+          <label className="flex flex-col gap-1 text-slate-500">Ab diesem Stand eine Modellstufe kleiner (Prozent)<input id="cs-klein" type="number" min="10" max="100" className={input} value={klein} onChange={(x) => setKlein(x.target.value)} disabled={!admin} /></label>
+          <label className="flex flex-col gap-1 text-slate-500">Ab diesem Stand keine neuen Aufträge bis zur Rücksetzung (Prozent)<input id="cs-pause" type="number" min="10" max="100" className={input} value={pause} onChange={(x) => setPause(x.target.value)} disabled={!admin} /></label>
+          {admin ? <button type="button" className={btn} onClick={speichern}>Speichern</button> : <p className="text-xs text-slate-500">Die Schwellen setzt der Admin.</p>}
+          {isDesktop() && <div className="border-t border-slate-200 dark:border-slate-800 pt-3 flex flex-col gap-2">
+            <p className="text-xs text-slate-500">Damit die Werte auch aktuell sind, wenn du selbst mit Claude Code arbeitest: Statuszeile einrichten (ändert ~/.claude/settings.json, eine vorhandene eigene Statuszeile bleibt).</p>
+            <button type="button" className={ghost} onClick={statuszeile}>Statuszeile in Claude Code einrichten</button></div>}
         </div>
       </div>
     </div>
@@ -671,7 +700,7 @@ function Verbrauch({ d, ich, toast }) {
 
 // ---------------- Werkstatt (nur im Programm) ----------------
 function WerkstattSchalter({ ich, sitzung, d, toast }) {
-  const [st, setSt] = useState(null); const [schluessel, setSchluessel] = useState(false); const [busy, setBusy] = useState(false);
+  const [st, setSt] = useState(null); const [busy, setBusy] = useState(false);
   const desk = isDesktop();
   const darfWerkstatt = ich.rolle === "admin" || d.mitglieder.some((m) => m.benutzer_id === ich.id && m.rolle === "entwickler");
   useEffect(() => {
@@ -690,11 +719,10 @@ function WerkstattSchalter({ ich, sitzung, d, toast }) {
     try {
       if (an) { await tauri("ws_stop"); toast("Werkstatt aus: dieser PC übernimmt keine Aufträge mehr"); return; }
       const v = await tauri("ws_check");
-      const fehlt = ["node", "git", "gh"].filter((k) => !v[k]);
-      if (fehlt.length) { toast(`Auf diesem PC fehlt: ${fehlt.join(", ")} – siehe Einrichtung im Handbuch`); return; }
-      if (!v.gh_angemeldet) { toast("GitHub ist auf diesem PC nicht angemeldet (gh auth login)"); return; }
-      if (!(await tauri("ws_api_key_status"))) { setSchluessel(true); return; }
-      if (!d.einstellungen?.monatslimit_usd) { toast("Bitte zuerst unter Verbrauch & Limits ein Monatslimit festlegen"); return; }
+      const namen = { claude: "Claude Code", node: "Node.js", git: "Git", gh: "GitHub CLI" };
+      const fehlt = ["claude", "node", "git", "gh"].filter((k) => !v[k]);
+      if (fehlt.length) { toast(`Auf diesem PC fehlt: ${fehlt.map((k) => namen[k]).join(", ")}`); return; }
+      if (!v.gh_angemeldet) { toast("GitHub ist auf diesem PC nicht angemeldet (einmal „gh auth login“)"); return; }
       await tauri("ws_start", { config: { supabase_url: import.meta.env.VITE_SUPABASE_URL, anon_key: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, access_token: sitzung.access_token, user_id: ich.id, admin: ich.rolle === "admin" } });
       toast("Werkstatt an: dieser PC übernimmt Aufträge");
     } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
@@ -705,24 +733,7 @@ function WerkstattSchalter({ ich, sitzung, d, toast }) {
         <span className={`relative w-9 h-5 rounded-full transition ${an ? "bg-green-600" : "bg-slate-300 dark:bg-slate-700"}`}><i className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${an ? "left-[18px]" : "left-0.5"}`} /></span>
         Werkstatt {an ? "an" : "aus"}{st?.auftrag ? <span className="text-xs text-slate-500">· Auftrag #{st.auftrag}</span> : null}
       </button>
-      {schluessel && <ApiSchluessel toast={toast} onClose={() => setSchluessel(false)} onFertig={() => { setSchluessel(false); umschalten(); }} />}
     </>
-  );
-}
-
-function ApiSchluessel({ toast, onClose, onFertig }) {
-  const [k, setK] = useState(""); const [busy, setBusy] = useState(false);
-  const los = async () => {
-    setBusy(true);
-    try { await tauri("ws_api_key_set", { key: k.trim() }); setK(""); toast("API-Schlüssel sicher im Tresor dieses PCs gespeichert"); onFertig(); }
-    catch (e) { toast(fehler(e)); } finally { setBusy(false); }
-  };
-  return (
-    <Dialog title="Claude-API-Schlüssel für diesen PC" onClose={onClose}>
-      <p className="text-sm text-slate-600 dark:text-slate-300">Den Schlüssel erstellst du in der Claude Console unter „API Keys“. Er wird nur im Tresor dieses PCs gespeichert (Windows-Anmeldeinformationsverwaltung bzw. Mac-Schlüsselbund) – nie in der Datenbank und nie im Protokoll.</p>
-      <label className="flex flex-col gap-1 text-sm text-slate-500">API-Schlüssel<input id="cs-apikey" type="password" autoComplete="off" className={input} value={k} onChange={(e) => setK(e.target.value)} placeholder="sk-ant-…" /></label>
-      <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={onClose}>Abbrechen</button><button type="button" className={btn} disabled={busy || !k.trim().startsWith("sk-ant-")} onClick={los}>Speichern</button></div>
-    </Dialog>
   );
 }
 
