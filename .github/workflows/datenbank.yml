@@ -1,0 +1,46 @@
+name: Datenbank einspielen
+
+# Spielt eine SQL-Datei aus supabase/migrations/ oder supabase/admin/ in die Codeschmiede-Datenbank (Supabase, EU – Irland) ein.
+# Start: von Hand („Run workflow“, sobald der Ablauf in main ist) oder durch eine Änderung an supabase/einspielen.txt
+# auf einem Zweig (eine Datei je Zeile, in Reihenfolge) – Anweisung Gerhard 2026-10-22 („richte alles ein“).
+on:
+  push:
+    paths: ["supabase/einspielen.txt"]
+  workflow_dispatch:
+    inputs:
+      datei:
+        description: "Pfad ab supabase/ (z. B. migrations/0002_projekte_verbrauch.sql)"
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  SUPABASE_PROJECT_REF: mvzlbpijdvsjnemubofy   # codeschmiede (EU, eu-west-1) – fest eingetragen
+
+jobs:
+  einspielen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SQL ausführen
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          DATEIEN: ${{ inputs.datei }}
+        run: |
+          set -euo pipefail
+          [ -n "${DATEIEN:-}" ] || DATEIEN=$(grep -v '^\s*#' supabase/einspielen.txt | sed '/^\s*$/d')
+          for DATEI in $DATEIEN; do
+          case "$DATEI" in migrations/*.sql|admin/*.sql) ;; *) echo "::error::Nur Dateien aus supabase/migrations/ oder supabase/admin/"; exit 1;; esac
+          case "$DATEI" in *..*) echo "::error::Ungültiger Pfad"; exit 1;; esac
+          f="supabase/$DATEI"
+          test -f "$f" || { echo "::error::$f nicht gefunden"; exit 1; }
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "::error::Geheimnis SUPABASE_ACCESS_TOKEN fehlt (Repository-Einstellungen → Secrets)"; exit 1; }
+          body=$(jq -Rs '{query: .}' < "$f")
+          res=$(curl -sS -w '\n%{http_code}' -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" --data "$body")
+          code=$(echo "$res" | tail -n1); out=$(echo "$res" | sed '$d')
+          echo "::notice title=$DATEI::$(echo "$out" | head -c 900)"
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || { echo "::error::Fehler $code bei $DATEI: $(echo "$out" | head -c 600)"; exit 1; }
+          echo "OK: $DATEI"
+          done

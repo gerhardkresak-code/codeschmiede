@@ -1,0 +1,19 @@
+{
+  "name": "ttg-werkstatt-dienst",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Werkstatt-Dienst der Codeschmiede: holt Aufträge, arbeitet sie mit dem offiziellen Claude Code (eigener Abo-Login) ab und meldet Live-Log, Rückfragen, Erlaubnis-Anfragen und Abo-Limits.",
+  "type": "module",
+  "main": "index.mjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/lib.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "zod": "^3.23.8"
+  }
+}

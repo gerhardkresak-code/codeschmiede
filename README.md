@@ -3,9 +3,9 @@
 Programmierumgebung für alle Apps von Gerhard Kresak – ein Programm für Windows und Mac.
 
 - **Auftrags-Zentrale:** Projekte › Bereiche › Gruppen › Features; Aufträge geben, Rückfragen beantworten, live mitsehen, Erlaubnisse bestätigen.
-- **Werkstatt:** arbeitet Aufträge mit Claude ab (API-Schlüssel, Modell nach Aufwand), immer auf eigenem Zweig mit Pull Request.
+- **Werkstatt:** arbeitet Aufträge mit dem offiziellen Claude Code und dem eigenen Claude-Abo ab (Modell nach Aufwand und Abo-Stand), immer auf eigenem Zweig mit Pull Request.
 - **Weg eines Auftrags:** Auftrag → In Arbeit → Freigabe → Zusammenführen → Sicherheitsprüfung → Wissen & veröffentlicht.
-- **Verbrauch:** Kosten je Projekt und gesamt, live gegen das Monatslimit.
+- **Verbrauch:** Abo-Nutzungslimits (5-Stunden-Fenster und Woche) je Mitglied live; Arbeit je Projekt.
 
 | Ordner | Inhalt |
 |---|---|

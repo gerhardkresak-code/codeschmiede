@@ -1,0 +1,75 @@
+name: Programm bauen
+
+# Baut die Codeschmiede für Windows (.exe-Installation) und Mac (.dmg, unsigniert).
+# Zweige: Datei zum Herunterladen (30 Tage). main: zusätzlich GitHub-Release „programm-v<Version>“.
+on:
+  push:
+    branches: [main, 'feature/**']
+    paths: ['desktop/**', '.github/workflows/programm.yml']
+  workflow_dispatch:
+    inputs:
+      start_url:
+        description: 'Start-Adresse (leer = https://codeschmiede.pages.dev/)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: programm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bauen:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            ziel: windows
+          - os: macos-15-intel
+            ziel: mac
+    runs-on: ${{ matrix.os }}
+    defaults: { run: { shell: bash, working-directory: desktop } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.ziel == 'mac' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: desktop/src-tauri -> target }
+      - name: Start-Adresse setzen (nur wenn angegeben)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.start_url != '' }}
+        env: { START_URL: '${{ inputs.start_url }}' }
+        run: |
+          [[ "$START_URL" =~ ^https://([a-z0-9-]+\.)?codeschmiede\.pages\.dev/ ]] || { echo "Nur *.codeschmiede.pages.dev erlaubt"; exit 1; }
+          printf 'window.TTG_START_URL = "%s";\n' "$START_URL" > ui/config.js
+      - name: Werkstatt-Dienst mit Abhängigkeiten für dieses System
+        working-directory: desktop/dienst
+        run: npm install --omit=dev --no-audit --no-fund
+      - name: Programm-Symbole
+        run: npx --yes @tauri-apps/cli@^2 icon app-icon.png
+      - name: Tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --release
+      - name: Programm bauen
+        run: |
+          if [ "${{ matrix.ziel }}" = "mac" ]; then npx --yes @tauri-apps/cli@^2 build --target universal-apple-darwin --bundles dmg
+          else npx --yes @tauri-apps/cli@^2 build --bundles nsis; fi
+      - name: Datei einsammeln
+        id: datei
+        run: |
+          v=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "${{ matrix.ziel }}" = "mac" ]; then f=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -1); n="Codeschmiede-$v-Mac.dmg"
+          else f=$(ls src-tauri/target/release/bundle/nsis/*.exe | head -1); n="Codeschmiede-Setup-$v.exe"; fi
+          cp "$f" "$n"
+          echo "pfad=desktop/$n" >> $GITHUB_OUTPUT; echo "name=$n" >> $GITHUB_OUTPUT; echo "version=$v" >> $GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with: { name: '${{ steps.datei.outputs.name }}', path: '${{ steps.datei.outputs.pfad }}', retention-days: 30 }
+      - name: Release (nur main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        env: { GH_TOKEN: '${{ github.token }}', TAG: 'programm-v${{ steps.datei.outputs.version }}', DATEI: '${{ steps.datei.outputs.name }}' }
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 && gh release upload "$TAG" "$DATEI" --clobber || gh release create "$TAG" "$DATEI" --title "Codeschmiede $TAG" --notes "Installieren, anmelden, Werkstatt einschalten."

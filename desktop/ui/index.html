@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codeschmiede</title>
+<style>
+  :root { --bg:#022c22; --fg:#ecfdf5; --muted:#a7f3d0; --btn:#047857; --btnh:#065f46; }
+  html,body { height:100%; margin:0; }
+  body { background:var(--bg); color:var(--fg); font-family:"Segoe UI", system-ui, sans-serif;
+         display:flex; align-items:center; justify-content:center; text-align:center; }
+  .box { max-width:420px; padding:24px; }
+  img { width:88px; height:88px; border-radius:20px; }
+  h1 { font-size:24px; margin:20px 0 6px; font-weight:700; }
+  p { color:var(--muted); margin:0; line-height:1.5; }
+  .spin { width:28px; height:28px; margin:28px auto 0; border:3px solid rgba(167,243,208,.25);
+          border-top-color:#34d399; border-radius:50%; animation:r 0.9s linear infinite; }
+  @keyframes r { to { transform:rotate(360deg); } }
+  button { margin-top:24px; height:44px; padding:0 22px; border:0; border-radius:12px; background:var(--btn);
+           color:#fff; font:600 15px "Segoe UI", system-ui, sans-serif; cursor:pointer; }
+  button:hover { background:var(--btnh); }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <img src="logo.png" alt="">
+    <h1>Codeschmiede</h1>
+    <p id="status">Verbindung wird aufgebaut …</p>
+    <div id="spin" class="spin" aria-hidden="true"></div>
+    <div id="offline" class="hidden">
+      <p style="margin-top:14px">Keine Verbindung zum Internet. Die Codeschmiede arbeitet immer mit den aktuellen Daten und braucht deshalb Internet.</p>
+      <button id="retry" type="button">Erneut versuchen</button>
+    </div>
+  </div>
+<script src="config.js"></script>
+<script>
+  // Startseite: prüft die Verbindung und öffnet dann die Plattform-Seite der Codeschmiede.
+  // Keine Daten werden lokal gespeichert – alles läuft live über den Server (docs/DESKTOP.md).
+  (function () {
+    var START = window.TTG_START_URL || "https://codeschmiede.pages.dev/";
+    var origin = new URL(START).origin;
+    var timer = null;
+    function show(offline) {
+      document.getElementById("spin").className = offline ? "spin hidden" : "spin";
+      document.getElementById("offline").className = offline ? "" : "hidden";
+      document.getElementById("status").textContent = offline ? "Offline" : "Verbindung wird aufgebaut …";
+    }
+    function attempt() {
+      show(false);
+      var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+      var t = setTimeout(function () { if (ctrl) ctrl.abort(); }, 8000);
+      fetch(origin + "/manifest.json?ping=" + Date.now(), { mode: "no-cors", cache: "no-store", signal: ctrl ? ctrl.signal : undefined })
+        .then(function () { clearTimeout(t); window.location.replace(START); })
+        .catch(function () {
+          clearTimeout(t);
+          show(true);
+          clearTimeout(timer);
+          timer = setTimeout(attempt, 15000);
+        });
+    }
+    document.getElementById("retry").addEventListener("click", function () { clearTimeout(timer); attempt(); });
+    attempt();
+  })();
+</script>
+</body>
+</html>
