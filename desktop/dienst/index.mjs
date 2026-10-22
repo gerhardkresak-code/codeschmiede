@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
 import { createClient } from "@supabase/supabase-js";
-import { ohneGeheimnisse, kuerzen } from "./lib/geheim.mjs";
+import { ohneGeheimnisse, kuerzen, heikleDatei } from "./lib/geheim.mjs";
 import { waehleModell } from "./lib/modell.mjs";
 import { werteAus, zweigName } from "./lib/ergebnis.mjs";
 import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
@@ -40,12 +40,19 @@ const ERLAUBT = [
   "Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "TodoWrite", "Task",
   "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)", "Bash(git add *)", "Bash(git commit *)", "Bash(git fetch*)",
   "Bash(git checkout -b feature/cs-*)", "Bash(git switch -c feature/cs-*)", "Bash(git push -u origin feature/cs-*)", "Bash(git push origin feature/cs-*)",
-  "Bash(gh pr create *)", "Bash(gh pr view*)", "Bash(gh pr checks*)", "Bash(ls*)", "Bash(cat *)", "Bash(npm run build*)", "Bash(npm test*)",
-  "Bash(node --check *)", "Bash(python3 tools/*)",
+  "Bash(gh pr create *)", "Bash(gh pr view*)", "Bash(gh pr checks*)", "Bash(ls*)", "Bash(node --check *)",
+  // Bewusst NICHT frei: npm test / npm run build / python3 tools/* / cat – führen Code bzw. Dateien aus, die die Werkstatt selbst
+  // ändern kann (Prüfung 2026-10-22, Befund ROT). Diese Befehle laufen über eine Erlaubnis-Anfrage im Programm.
 ];
 const VERBOTEN = [
   "Bash(git push origin main*)", "Bash(git push -f*)", "Bash(git push --force*)", "Bash(git reset --hard origin*)",
   "Bash(rm -rf /*)", "Bash(rm -rf ~*)", "Bash(gh repo delete*)", "Bash(gh secret*)", "Bash(curl * | sh*)",
+  // Einstellungen, Hooks und Abläufe darf die Werkstatt nicht selbst ändern (sonst Umgehung der Erlaubnis-Brücke)
+  "Edit(.claude/**)", "Write(.claude/**)", "Edit(**/.claude/**)", "Write(**/.claude/**)", "Edit(.mcp.json)", "Write(.mcp.json)",
+  "Edit(.github/**)", "Write(.github/**)", "Edit(**/package.json)", "Write(**/package.json)",
+  // Anmeldedaten auf dem PC sind tabu
+  "Read(~/.claude/**)", "Read(~/.ssh/**)", "Read(~/.codeschmiede/**)", "Read(~/.config/gh/**)", "Read(~/.aws/**)",
+  "Read(**/zugriff.token)", "Read(**/.env*)", "Read(**/*.pem)", "Read(**/*.key)",
 ];
 
 // ---------- Hilfen ----------
@@ -136,9 +143,9 @@ async function verarbeiteNachricht(auftrag, m, ordner) {
     const datei = i.file_path ? path.relative(ordner, i.file_path) || i.file_path : "";
     if (b.name === "Read") await log(auftrag.id, "lesen", `Liest ${datei}`);
     else if (b.name === "Grep" || b.name === "Glob") await log(auftrag.id, "lesen", `Sucht ${i.pattern || ""}`);
-    else if (b.name === "Edit") await log(auftrag.id, "aendern", `Ändert ${datei}`,
+    else if (b.name === "Edit") await log(auftrag.id, "aendern", `Ändert ${datei}`, heikleDatei(datei) ? null :
       [...String(i.old_string || "").split("\n").slice(0, 12).map((z) => "- " + z), ...String(i.new_string || "").split("\n").slice(0, 12).map((z) => "+ " + z)].join("\n"));
-    else if (b.name === "Write") await log(auftrag.id, "neu", `Schreibt ${datei}`, String(i.content || "").split("\n").slice(0, 12).map((z) => "+ " + z).join("\n"));
+    else if (b.name === "Write") await log(auftrag.id, "neu", `Schreibt ${datei}`, heikleDatei(datei) ? null : String(i.content || "").split("\n").slice(0, 12).map((z) => "+ " + z).join("\n"));
     else if (b.name === "Bash") await log(auftrag.id, /test|build|check/.test(i.command || "") ? "test" : "info", `Führt aus: ${kuerzen(i.command, 200)}`);
     else await log(auftrag.id, "info", `Werkzeug: ${b.name}`);
   }
@@ -194,10 +201,14 @@ async function fuehreAus(auftrag, { fortsetzen = false } = {}) {
     } } } };
     const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", modell,
       "--permission-mode", "default", "--allowedTools", ERLAUBT.join(","), "--disallowedTools", VERBOTEN.join(","),
-      "--mcp-config", JSON.stringify(mcp), "--permission-prompt-tool", "mcp__werkstatt__erlaubnis"];
+      "--mcp-config", JSON.stringify(mcp), "--strict-mcp-config", "--permission-prompt-tool", "mcp__werkstatt__erlaubnis",
+      // nur die Benutzer-Einstellungen laden: ein Projekt-Repository kann so keine Freigaben, Hooks oder apiKeyHelper mitbringen
+      "--setting-sources", "user"];
     if (fortsetzen && merk.sitzung) args.push("--resume", merk.sitzung);
     // Ohne API-Schlüssel in der Umgebung arbeitet Claude Code mit dem eigenen Abo-Login dieser Person
-    const env = { ...process.env }; delete env.ANTHROPIC_API_KEY; delete env.ANTHROPIC_AUTH_TOKEN; delete env.CLAUDE_CODE_OAUTH_TOKEN;
+    const env = { ...process.env };
+    // Abo-Login erzwingen: keine Schlüssel, fremden Server oder Cloud-Anbieter aus der Umgebung (auch Windows-Schreibweisen)
+    for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE_CODE_USE_|CLAUDE_CODE_OAUTH)/i.test(k)) delete env[k];
 
     let ende = null; let kosten = 0; let ein = 0; let aus = 0; let sitzung = merk.sitzung;
     await new Promise((fertig, fehl) => {

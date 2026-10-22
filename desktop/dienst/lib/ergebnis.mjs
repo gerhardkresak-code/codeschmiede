@@ -17,9 +17,12 @@ export function zweigName(id, titel) {
 }
 
 // „Immer erlauben“: gleiche Werkzeug-Art und bei Befehlen gleicher Anfang (erste zwei Wörter)
+// „Immer erlauben“ gilt nur für genau denselben Befehl bzw. dieselbe Eingabe (Prüfung 2026-10-22, Befund ROT):
+// verkettete Befehle (; && || | ` $( ) und Umleitungen werden nie über eine Regel erlaubt.
 export function passtRegel(regel, werkzeug, eingabe) {
   if (regel.werkzeug !== werkzeug) return false;
-  if (werkzeug !== "Bash") return true;
-  const anfang = (x) => String(x || "").trim().split(/\s+/).slice(0, 2).join(" ");
-  return anfang(regel.eingabe) === anfang(eingabe);
+  const norm = (x) => String(x ?? "").trim().replace(/\s+/g, " ");
+  if (!norm(eingabe) || !norm(regel.eingabe)) return false;
+  if (werkzeug === "Bash" && /[;&|`<>\n]|\$\(/.test(String(eingabe))) return false;
+  return norm(regel.eingabe) === norm(eingabe);
 }
