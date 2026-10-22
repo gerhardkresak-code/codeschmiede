@@ -9,7 +9,7 @@ const MUSTER = [
   /AKIA[0-9A-Z]{16}/g,                                // AWS
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
   /\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{10,}/g,   // Stripe
-  /sk-(?:proj-)?[A-Za-z0-9_-]{20,}/g,                  // OpenAI u. Ä.
+  /(?<![A-Za-z0-9])sk-(?:proj-)?[A-Za-z0-9_-]{20,}/g,                  // OpenAI u. Ä.
   /Bearer\s+[A-Za-z0-9._~+\/-]{16,}=*/g,
 ];
 // Zugangsdaten in Adressen (postgres://name:passwort@…) – Name bleibt, Passwort fällt weg

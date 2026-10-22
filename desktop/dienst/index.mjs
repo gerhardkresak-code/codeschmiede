@@ -38,15 +38,20 @@ let stopp = false;
 // ---------- Erlaubte Werkzeuge ohne Rückfrage (alles andere fragt Gerhard im Programm) ----------
 const ERLAUBT = [
   "Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "TodoWrite", "Task",
-  "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)", "Bash(git add *)", "Bash(git commit *)", "Bash(git fetch*)",
+  // feste Lese-Befehle statt Freigabe nach Anfang (git log/diff --output= schreibt Dateien – Prüfung 2026-10-22)
+  "Bash(git status)", "Bash(git status --short)", "Bash(git diff)", "Bash(git diff --stat)", "Bash(git diff --cached)",
+  "Bash(git log --oneline -20)", "Bash(git log -5)", "Bash(git add *)", "Bash(git commit -m *)", "Bash(git fetch origin)",
   "Bash(git checkout -b feature/cs-*)", "Bash(git switch -c feature/cs-*)", "Bash(git push -u origin feature/cs-*)", "Bash(git push origin feature/cs-*)",
-  "Bash(gh pr create *)", "Bash(gh pr view*)", "Bash(gh pr checks*)", "Bash(ls*)", "Bash(node --check *)",
-  // Bewusst NICHT frei: npm test / npm run build / python3 tools/* / cat – führen Code bzw. Dateien aus, die die Werkstatt selbst
+  "Bash(gh pr create *)", "Bash(gh pr view*)", "Bash(gh pr checks*)", "Bash(ls*)",
+  // Bewusst NICHT frei: node (auch --check: --require lädt Code), npm test / npm run build / python3 tools/* / cat – führen Code bzw. Dateien aus, die die Werkstatt selbst
   // ändern kann (Prüfung 2026-10-22, Befund ROT). Diese Befehle laufen über eine Erlaubnis-Anfrage im Programm.
 ];
 const VERBOTEN = [
   "Bash(git push origin main*)", "Bash(git push -f*)", "Bash(git push --force*)", "Bash(git reset --hard origin*)",
   "Bash(rm -rf /*)", "Bash(rm -rf ~*)", "Bash(gh repo delete*)", "Bash(gh secret*)", "Bash(curl * | sh*)",
+  // Dateien über Git/gh schreiben oder einlesen (umgeht Read/Write-Verbote)
+  "Bash(git *--output*)", "Bash(git commit *-F*)", "Bash(git commit *--file*)", "Bash(git commit *--template*)", "Bash(git commit *-t *)",
+  "Bash(git add *--pathspec-from-file*)", "Bash(gh pr create *--body-file*)", "Bash(gh pr create *-F*)", "Bash(git config*)",
   // Einstellungen, Hooks und Abläufe darf die Werkstatt nicht selbst ändern (sonst Umgehung der Erlaubnis-Brücke)
   "Edit(.claude/**)", "Write(.claude/**)", "Edit(**/.claude/**)", "Write(**/.claude/**)", "Edit(.mcp.json)", "Write(.mcp.json)",
   "Edit(.github/**)", "Write(.github/**)", "Edit(**/package.json)", "Write(**/package.json)",

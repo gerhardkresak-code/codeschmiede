@@ -407,7 +407,7 @@ function ErlaubnisKarte({ e, g, kann, onEntscheid }) {
       {e.grund && <div>{e.grund}</div>}
       {kann ? <div className="flex gap-2 flex-wrap">
         <button type="button" className={`${btn} h-8 text-sm`} onClick={() => onEntscheid(e, "einmal")}>Einmal erlauben</button>
-        <button type="button" className={`${ghost} h-8`} onClick={() => onEntscheid(e, "immer")}>Immer erlauben in {g.name}</button>
+        {!String(e.grund || "").startsWith("Führt Code aus") && <button type="button" className={`${ghost} h-8`} onClick={() => onEntscheid(e, "immer")}>Immer erlauben in {g.name}</button>}
         <button type="button" className={`${ghost} h-8`} onClick={() => onEntscheid(e, "abgelehnt")}>Ablehnen</button>
       </div> : <div className="text-xs text-slate-500">Erlauben darf der Admin oder wer das Recht „Freigeben“ hat.</div>}
     </div>

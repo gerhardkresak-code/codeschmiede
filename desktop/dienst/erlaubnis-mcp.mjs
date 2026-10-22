@@ -3,12 +3,14 @@
 // Die Anfrage landet in der Codeschmiede (ws_erlaubnisse); Gerhard oder wer das Recht hat, entscheidet im Programm.
 // Umgebung: CS_SUPABASE_URL, CS_ANON_KEY, CS_TOKEN_DATEI (aktuelles Zugriffstoken), CS_AUFTRAG, CS_GRUPPE
 import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { ohneGeheimnisse, kuerzen } from "./lib/geheim.mjs";
-import { passtRegel } from "./lib/ergebnis.mjs";
+import { passtRegel, fuehrtCodeAus } from "./lib/ergebnis.mjs";
 
 const AUFTRAG = Number(process.env.CS_AUFTRAG);
 const GRUPPE = process.env.CS_GRUPPE;
@@ -29,8 +31,17 @@ async function entscheide(werkzeug, eingabe) {
   const { data: regeln } = await db.from("ws_erlaubnisse").select("werkzeug, eingabe, ws_auftraege!inner(gruppe_id)")
     .eq("status", "immer").eq("ws_auftraege.gruppe_id", GRUPPE);
   if ((regeln || []).some((r) => passtRegel(r, werkzeug, text))) return true;
+  // Bei Befehlen, die Code ausführen: zeigen, welche Dateien die Werkstatt geändert hat (der Befehl führt sie ggf. aus)
+  let grund = "Die Werkstatt braucht das für diesen Auftrag.";
+  if (werkzeug === "Bash" && fuehrtCodeAus(text)) {
+    try {
+      const { stdout } = await promisify(execFile)("git", ["status", "--porcelain"], { cwd: process.cwd() });
+      const dateien = stdout.trim().split("\n").filter(Boolean).slice(0, 20).map((z) => z.slice(3)).join(", ");
+      grund = `Führt Code aus. Kein „Immer erlauben“ möglich. ${dateien ? `Von der Werkstatt geänderte Dateien: ${dateien}` : "Keine geänderten Dateien."}`;
+    } catch { grund = "Führt Code aus. Kein „Immer erlauben“ möglich."; }
+  }
   const { data: anf, error } = await db.from("ws_erlaubnisse")
-    .insert({ auftrag_id: AUFTRAG, werkzeug, eingabe: kuerzen(text, 1000), grund: "Die Werkstatt braucht das für diesen Auftrag." }).select().single();
+    .insert({ auftrag_id: AUFTRAG, werkzeug, eingabe: kuerzen(text, 1000), grund: kuerzen(ohneGeheimnisse(grund), 1000) }).select().single();
   if (error) return false;
   await db.from("ws_live_log").insert({ auftrag_id: AUFTRAG, art: "erlaubnis", text: kuerzen(`Wartet auf deine Erlaubnis: ${werkzeug} ${text}`, 300) });
   const bis = Date.now() + 30 * 60 * 1000;
