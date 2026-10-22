@@ -128,7 +128,7 @@ select,input[type=text],input[type=number]{border:1px solid var(--rand2);border-
 
 <div class="kopf">
   <h1>Entwurf 0.9 · App-Designer</h1>
-  <p>Stand 22.10.2026 22:20 · Grunddesign einer App (hier: Trainer to go). Links die Struktur des Gerüsts, Mitte Gerüst, echte Testseite oder Vergleich, rechts Eigenschaften und der Chat mit Claude. Beispielwerte; im Programm kommen sie aus dem Code der App.</p>
+  <p>Stand 22.10.2026 22:30 (mit Seiten-Vorlagen) · Grunddesign einer App (hier: Trainer to go). Links die Struktur des Gerüsts, Mitte Gerüst, echte Testseite oder Vergleich, rechts Eigenschaften und der Chat mit Claude. Beispielwerte; im Programm kommen sie aus dem Code der App.</p>
 </div>
 
 <div class="rahmen">
@@ -151,6 +151,7 @@ select,input[type=text],input[type=number]{border:1px solid var(--rand2);border-
     <div class="arbeit">
       <aside class="links" aria-label="Struktur">
         <div class="kasten"><h4>Struktur</h4><ul class="baum" id="baum"></ul></div>
+        <div class="kasten"><h4>Seiten-Vorlagen</h4><ul class="baum" id="vorlagen"></ul></div>
         <div class="kasten"><h4>Grundlagen</h4><ul class="baum" id="grundlagen"></ul></div>
         <div class="kasten"><h4>Prüfungen</h4><div class="pruef" id="pruef"></div></div>
       </aside>
@@ -184,6 +185,7 @@ select,input[type=text],input[type=number]{border:1px solid var(--rand2);border-
   <div><h3>Was zum Grunddesign gehört</h3>Aus Material Design, Apple HIG, Carbon und WCAG 2.2 zusammengetragen:
     <ul><li>Geräteklassen mit festen Umbruchpunkten (Handy &lt;600, Tablet 600–1023, PC ≥1024, breit ≥1440 px)</li><li>Navigation je Klasse: Leiste unten (max. 5) · schmale Leiste · Seitenleiste mit Gruppen (max. 2 Ebenen), einklappbar</li><li>Kopfband: Logo, Vereinswechsel, Suche (Strg+K), „+ Neu“, Benachrichtigungen, Hilfe, Profil</li><li>Seitenkopf, Inhaltsraster, Detail-Panel, Dialoge, Meldungen</li><li>Grundlagen: Farbrollen hell/dunkel, Schrift-Skala, Abstands-Skala, Rundungen, Schatten, Symbole, Bewegung</li><li>Zustände: Laden, leer, Fehler, offline</li><li>Barrierefreiheit: Kontrast ≥4,5:1, Ziele ≥24 px (Touch 44 px), Fokus sichtbar und nicht verdeckt</li></ul></div>
   <div><h3>So arbeitest du</h3><ul><li>Links einen Bereich wählen oder in der Mitte darauf klicken</li><li>Rechts einstellen oder im Chat mit Claude besprechen – Claude macht Vorschläge, die du übernimmst oder ablehnst</li><li>Ziehen im Gerüst (z. B. Navigation nach oben) – immer auch per Auswahlfeld möglich</li><li>Entwürfe kopieren, vergleichen; „Als Auftrag senden“ → Werkstatt baut → echte Testseite → Freigabe → Prüfungen → live</li></ul></div>
+  <div><h3>Seiten-Vorlagen</h3>Übersicht, Liste mit Filter, Detail, Formular, Einstellungen. Jedes neue Feature baut auf einer Vorlage, dem Gerüst und den Grundwerten auf – ändert sich das Grunddesign, ändern sich alle Seiten mit. Bestehende Seiten werden einmalig je Bereich umgestellt (eigene Aufträge mit Prüfung).</div>
   <div><h3>Abgrenzung</h3>Ein Grunddesign für die ganze App, nicht je Rolle. Vereine stellen im Design-Studio der App nur Vereinsfarbe und Logo ein; die Grundfarben kommen von hier.</div>
 </div>
 
@@ -198,13 +200,15 @@ const basis=()=>({
   nav:{handy:{art:"unten",punkte:5},tablet:{art:"leiste",breite:72,ausklapp:true},pc:{art:"seite",breite:240,einklapp:true,gruppen:true},breit:{art:"seite",breite:260,einklapp:true,gruppen:true}},
   seitenkopf:{bruch:true,aktion:true,reiter:true},
   inhalt:{handy:{spalten:1,rand:12,maxb:600},tablet:{spalten:2,rand:20,maxb:960},pc:{spalten:3,rand:24,maxb:1200},breit:{spalten:4,rand:32,maxb:1400}},
-  panel:{pc:"rechts",handy:"vollbild",breite:400},meldung:"unten",laden:"platzhalter"});
+  panel:{pc:"rechts",handy:"vollbild",breite:400},meldung:"unten",laden:"platzhalter",
+  vorlagen:{uebersicht:{kacheln:4,hinweis:true},liste:{filter:"oben",ansicht:"tabelle",suche:true,mehrfach:true},detail:{art:"panel",reiter:true,kopfbild:false},formular:{spalten:1,speichern:"fest",schritte:false},einstellungen:{reiter:"links"}}});
 const ENT=[{name:"A · Seitenleiste links (live v1.31.0)",d:basis()},{name:"B · Kopfband dunkel, Navigation oben (PC)",d:(()=>{const d=basis();d.nav.pc={art:"oben",breite:0,einklapp:false,gruppen:true};d.nav.breit={...d.nav.pc};d.kopf.logo="mitte";d.farben.hell.akzent="#1d4ed8";return d;})()}];
-let ai=0,klasse="pc",auswahl="nav",mitte="geruest",gitter=false,gesendet=false;
+let ai=0,klasse="pc",auswahl="nav",mitte="geruest",gitter=false,gesendet=false,vorlage="uebersicht";
 const hist=[],zukunft=[];
 const D=()=>ENT[ai].d;
 function aendern(f){hist.push(JSON.stringify(D()));zukunft.length=0;f(D());alles();}
 const STRUKTUR=[["rahmen","App-Rahmen",1],["kopf","Kopfband",2],["logo","Logo & Name",3],["suche","Suche (Strg+K)",3],["aktionen","Neu · Glocke · Hilfe · Profil",3],["nav","Navigation",2],["seitenkopf","Seitenkopf",2],["inhalt","Inhaltsbereich & Raster",2],["panel","Detail-Panel",2],["meldung","Meldungen & Zustände",2]];
+const VORLAGEN=[["uebersicht","Übersicht / Startseite"],["liste","Liste mit Filter"],["detail","Detail"],["formular","Formular"],["einstellungen","Einstellungen"]];
 const GRUNDLAGEN=[["farben","Farbrollen (hell/dunkel)"],["schrift","Schrift & Größen"],["abstand","Abstände & Raster"],["form","Rundungen & Schatten"],["symbole","Symbole"],["bewegung","Bewegung"],["zugang","Barrierefreiheit"]];
 
 function lum(h){const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255).map(v=>v<=.03928?v/12.92:((v+.055)/1.055)**2.4);return .2126*c[0]+.7152*c[1]+.0722*c[2];}
@@ -213,7 +217,8 @@ function kontrast(a,b){const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.
 function baum(){
   $("#baum").innerHTML=STRUKTUR.map(([id,n,e])=>`<li><button type="button" class="e${e}" aria-current="${auswahl===id}" data-a="${id}"><span class="punkt ${["kopf","nav","inhalt","panel"].includes(id)?"p":""}"></span>${n}${id==="nav"?`<i>${navArt()}</i>`:""}</button></li>`).join("");
   $("#grundlagen").innerHTML=GRUNDLAGEN.map(([id,n])=>`<li><button type="button" aria-current="${auswahl===id}" data-a="${id}"><span class="punkt p"></span>${n}</button></li>`).join("");
-  $$("[data-a]").forEach(b=>b.addEventListener("click",()=>{auswahl=b.dataset.a;alles();}));
+  $("#vorlagen").innerHTML=VORLAGEN.map(([id,n])=>`<li><button type="button" aria-current="${auswahl==="v-"+id}" data-a="v-${id}"><span class="punkt p"></span>${n}${vorlage===id?"<i>gezeigt</i>":""}</button></li>`).join("");
+  $$("[data-a]").forEach(b=>b.addEventListener("click",()=>{auswahl=b.dataset.a;if(auswahl.startsWith("v-"))vorlage=auswahl.slice(2);alles();}));
 }
 const navArt=()=>({unten:"unten",leiste:"Leiste",seite:"Seite",oben:"oben"})[D().nav[klasse].art];
 function pruef(){
@@ -238,9 +243,19 @@ function app(d,k,interaktiv){
   const navLinks=(n.art==="seite"||n.art==="leiste")?z("nav",`<div class="a-nav" style="width:${n.breite}px;height:100%">${n.art==="seite"&&n.gruppen?menue.map(([m,g],i)=>`${i===0||menue[i-1][1]!==g?`<span class="gr">${["","Übersicht","Sport","Verein"][g]}</span>`:""}<span class="${i===0?"akt":""}"><b></b>${m}</span>`).join(""):menue.map(([m],i)=>`<span class="${i===0?"akt":""}" title="${m}"><b></b>${n.art==="leiste"?"":m}</span>`).join("")}</div>`,"height:100%"):"";
   const navOben=n.art==="oben"?z("nav",`<div class="a-nav" style="flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--a-linie);padding:6px 10px">${menue.map(([m],i)=>`<span class="${i===0?"akt":""}">${m}</span>`).join("")}</div>`):"";
   const navUnten=n.art==="unten"?z("nav",`<div class="a-unten">${["Start","Kalender","Mannschaft","Chat","Mehr"].slice(0,n.punkte).map((m,i)=>`<span class="${i===0?"akt":""}"><b></b>${m}</span>`).join("")}</div>`):"";
-  const sk=d.seitenkopf;
-  const inhalt=`<div class="a-haupt">${z("seitenkopf",`<div class="a-seitenkopf"><div style="flex:1;min-width:0">${sk.bruch&&k!=="handy"?"<small>Start › Übersicht</small>":""}<h3>Guten Abend, Gerhard</h3></div>${sk.aktion?'<span class="a-neu">Training planen</span>':""}</div>`)}
-    ${z("inhalt",`<div class="a-inhalt">${[["Nächstes Training","Fr 17:30","U11 · Platz 2"],["Zusagen Samstag","14 / 18","Heimspiel"],["Offene Beiträge","3","Oktober"],["Neue Nachrichten","5","Kommunikation"]].map(([t,b,u])=>`<div class="a-karte">${t}<b>${b}</b>${u}</div>`).join("")}</div>`)}</div>`;
+  const sk=d.seitenkopf;const V=d.vorlagen;const vl=interaktiv?vorlage:"uebersicht";
+  const kopfText={uebersicht:["Start › Übersicht","Guten Abend, Gerhard","Training planen"],liste:["Mannschaft › Kader","Kader U11","+ Spieler"],detail:["Mannschaft › Kader › Lena M.","Lena M.","Bearbeiten"],formular:["Training › Neu","Training planen","Speichern"],einstellungen:["Verein › Einstellungen","Einstellungen",""]}[vl];
+  const zeilen=[["Lena M.","2014","Sturm","✓"],["Jonas K.","2014","Tor","✓"],["Mia S.","2015","Abwehr","–"],["Ben R.","2014","Mittelfeld","✓"]];
+  const filterLeiste=`<div class="a-karte" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;${V.liste.filter==="links"?"flex-direction:column;align-items:stretch;min-width:150px":""}">${V.liste.suche?'<span class="a-such" style="max-width:none;flex:1">Suchen …</span>':""}<span class="a-ic" style="width:auto;padding:0 10px;border-radius:999px">Jahrgang ▾</span><span class="a-ic" style="width:auto;padding:0 10px;border-radius:999px">Position ▾</span></div>`;
+  const liste=V.liste.ansicht==="tabelle"&&k!=="handy"?`<div class="a-karte" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:12px">${zeilen.map(r=>`<tr style="border-top:1px solid var(--a-linie)">${V.liste.mehrfach?'<td style="padding:7px 8px">☐</td>':""}${r.map(c=>`<td style="padding:7px 8px">${c}</td>`).join("")}</tr>`).join("")}</table></div>`:`<div style="display:grid;gap:8px">${zeilen.map(r=>`<div class="a-karte"><b style="font-size:15px">${r[0]}</b>${r[1]} · ${r[2]}</div>`).join("")}</div>`;
+  const inhalte={
+    uebersicht:`<div class="a-inhalt">${[["Nächstes Training","Fr 17:30","U11 · Platz 2"],["Zusagen Samstag","14 / 18","Heimspiel"],["Offene Beiträge","3","Oktober"],["Neue Nachrichten","5","Kommunikation"],["Spieler","18","Kader U11"],["Übungen","42","Bibliothek"]].slice(0,V.uebersicht.kacheln).map(([t,b,u])=>`<div class="a-karte">${t}<b>${b}</b>${u}</div>`).join("")}${V.uebersicht.hinweis?'<div class="a-karte" style="grid-column:1/-1;border-color:var(--a-akzent)">Hinweis: 2 Eltern haben noch nicht zugesagt.</div>':""}</div>`,
+    liste:`<div class="a-inhalt" style="grid-template-columns:${V.liste.filter==="links"&&k!=="handy"?"auto 1fr":"1fr"}">${filterLeiste}${liste}</div>`,
+    detail:`<div class="a-inhalt" style="grid-template-columns:1fr">${V.detail.kopfbild?'<div class="a-karte" style="height:70px;background:var(--a-akzent-h)"></div>':""}${V.detail.reiter?'<div style="display:flex;gap:14px;font-size:12px;border-bottom:1px solid var(--a-linie);padding-bottom:6px"><b style="color:var(--a-akzent)">Profil</b><span>Anwesenheit</span><span>Leistung</span><span>Notfallkontakt</span></div>':""}<div class="a-karte">Jahrgang 2014 · Sturm · Rückennummer 9<br>Eltern: verbunden ✓</div><div class="a-karte">Anwesenheit Oktober<b>92 %</b></div><div style="font-size:11px;opacity:.6">${V.detail.art==="panel"?"Am PC als Panel rechts neben der Liste, am Handy als eigene Seite":"Immer als eigene Seite"}</div></div>`,
+    formular:`<div class="a-inhalt" style="grid-template-columns:repeat(${k==="handy"?1:V.formular.spalten},minmax(0,1fr))">${V.formular.schritte?'<div style="grid-column:1/-1;display:flex;gap:6px;font-size:11px"><b style="color:var(--a-akzent)">1 Grunddaten</b> › 2 Übungen › 3 Teilnehmer</div>':""}${["Datum","Uhrzeit","Platz","Mannschaft","Schwerpunkt","Notiz"].map(f=>`<div style="font-size:11px">${f}<div class="a-karte" style="padding:8px;margin-top:2px"></div></div>`).join("")}<div style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:6px;${V.formular.speichern==="fest"?"position:sticky;bottom:0;background:var(--a-bg);padding:8px 0;border-top:1px solid var(--a-linie)":""}"><span class="a-ic" style="width:auto;padding:0 12px;border-radius:var(--a-rund)">Abbrechen</span><span class="a-neu">Speichern</span></div></div>`,
+    einstellungen:`<div class="a-inhalt" style="grid-template-columns:${V.einstellungen.reiter==="links"&&k!=="handy"?"170px 1fr":"1fr"}"><div style="display:flex;${V.einstellungen.reiter==="links"&&k!=="handy"?"flex-direction:column":"flex-wrap:wrap"};gap:2px;font-size:12px">${["Verein","Mannschaften","Module","Rechte","Benachrichtigungen"].map((t,i)=>`<span style="padding:6px 8px;border-radius:var(--a-rund);${i===0?"background:var(--a-akzent-h);color:var(--a-akzent);font-weight:600":""}">${t}</span>`).join("")}</div><div class="a-karte">Vereinsname, Logo, Vereinsfarbe<br><span style="opacity:.6">Speichert sofort, Meldung „Gespeichert“</span></div></div>`};
+  const inhalt=`<div class="a-haupt">${z("seitenkopf",`<div class="a-seitenkopf"><div style="flex:1;min-width:0">${sk.bruch&&k!=="handy"?`<small>${kopfText[0]}</small>`:""}<h3>${kopfText[1]}</h3></div>${sk.aktion&&kopfText[2]?`<span class="a-neu">${kopfText[2]}</span>`:""}</div>`)}
+    ${z("inhalt",inhalte[vl])}</div>`;
   const panel=auswahl==="panel"&&interaktiv?z("panel",`<div class="a-panel"><b>Detail-Panel</b><br>${d.panel[k==="handy"?"handy":"pc"]==="vollbild"&&k==="handy"?"Am Handy als Vollbild":"Rechts, "+d.panel.breite+" px"} – Details erst per Klick.</div>`):"";
   const toast=auswahl==="meldung"&&interaktiv?'<div class="a-toast">Gespeichert ✓ · Meldung '+d.meldung+'</div>':"";
   const rows=`auto ${n.art==="oben"?"auto ":""}minmax(${k==="handy"?380:440}px,1fr) ${n.art==="unten"?"auto":""}`;
@@ -251,7 +266,7 @@ function app(d,k,interaktiv){
 function flaeche(){
   const f=$("#flaeche");
   if(mitte==="geruest"){
-    f.innerHTML=`<div class="geraet ${gitter?"gitter":""}" style="width:${BREITE[klasse]}px"><div class="massband">${KLASSEN.find(x=>x[0]===klasse)[1]} · ${BREITE[klasse]} px · Entwurf ${ENT[ai].name.split(" · ")[0]}</div>${app(D(),klasse,true)}</div>`;
+    f.innerHTML=`<div class="geraet ${gitter?"gitter":""}" style="width:${BREITE[klasse]}px"><div class="massband">${KLASSEN.find(x=>x[0]===klasse)[1]} · ${BREITE[klasse]} px · Vorlage „${VORLAGEN.find(v=>v[0]===vorlage)[1]}“ · Entwurf ${ENT[ai].name.split(" · ")[0]}</div>${app(D(),klasse,true)}</div>`;
     $$("#flaeche .zone").forEach(z=>z.addEventListener("click",e=>{e.stopPropagation();auswahl=z.dataset.z;alles();}));
   } else if(mitte==="test"){
     f.innerHTML=`<div class="testseite"><span class="adr">${gesendet?"feature-cs-21-grunddesign.trainer-to-go.pages.dev/home · Auftrag #21":"trainer-to-go.pages.dev/home · live v1.31.0"}</span><div style="position:relative;width:${BREITE[klasse]}px;max-width:100%">${app(gesendet?D():ENT[0].d,klasse,false)}${gesendet&&$("#status").classList.contains("bau")?'<div class="bauhinweis">Werkstatt baut Auftrag #21 … Testseite in 1–3 Min.</div>':""}</div><span style="font-size:12px;color:var(--mut)">${gesendet?"Echte Testseite des Entwurfs (hier nachgebildet). „Zeigen &amp; kommentieren“ wie im Arbeitsplatz.":"Noch nicht gesendet – zu sehen ist der Live-Stand. „Als Auftrag senden“ baut den Entwurf."}</span></div>`;
@@ -268,8 +283,9 @@ function cb(id,wert){return `<input type="checkbox" id="${id}" ${wert?"checked":
 function zahl(id,wert,min,max,schritt=1){return `<input type="number" id="${id}" value="${wert}" min="${min}" max="${max}" step="${schritt}">`;}
 function eig(){
   const d=D(),k=klasse,n=d.nav[k],i=d.inhalt[k],f=d.farben[d.modus];
-  const titel=(STRUKTUR.find(s=>s[0]===auswahl)||GRUNDLAGEN.find(s=>s[0]===auswahl)||[0,auswahl])[1];
+  const titel=(STRUKTUR.find(s=>s[0]===auswahl)||GRUNDLAGEN.find(s=>s[0]===auswahl)||VORLAGEN.map(([a,b])=>["v-"+a,b]).find(s=>s[0]===auswahl)||[0,auswahl])[1];
   const proGeraet=["nav","inhalt"].includes(auswahl)?` · <b>${KLASSEN.find(x=>x[0]===k)[1]}</b>`:"";
+  const vRegel='<div class="hinweis">Jedes neue Feature beginnt auf einer dieser Vorlagen und nutzt nur die Standard-Bausteine und Grundwerte. Die Feature-Prüfung meldet Abweichungen (z. B. eigene Farben) als rot.</div>';
   let h=`<div><div class="pfad">Trainer to go › Grunddesign › ${titel}</div><h3>${titel}${proGeraet}</h3></div>`;
   const ab=(t,inner)=>`<div class="abschnitt"><h4>${t}</h4><div class="feld">${inner}</div></div>`;
   const map={
@@ -285,6 +301,11 @@ function eig(){
     inhalt:()=>ab("Raster",feld("Spalten",sel("i-sp",i.spalten,[[1,"1"],[2,"2"],[3,"3"],[4,"4"]]),"i-sp")+feld("Rand (px)",zahl("i-rand",i.rand,8,48,4),"i-rand")+feld("Max. Breite",zahl("i-maxb",i.maxb,480,1920,40),"i-maxb")),
     panel:()=>ab("Detail-Panel",feld("PC/Tablet",sel("p-pc",d.panel.pc,[["rechts","rechts einblenden"],["mitte","als Dialog"]]),"p-pc")+feld("Handy",sel("p-h",d.panel.handy,[["vollbild","Vollbild"],["blatt","Blatt von unten"]]),"p-h")+feld("Breite (px)",zahl("p-b",d.panel.breite,320,640,20),"p-b")),
     meldung:()=>ab("Meldungen",feld("Erfolg/Info",sel("m-pos",d.meldung,[["unten","unten Mitte"],["oben","oben rechts"]]),"m-pos")+feld("Laden",sel("m-laden",d.laden,[["platzhalter","Platzhalter-Karten"],["kreis","Ladekreis"]]),"m-laden")+'<span class="l">Leer</span><span>Symbol, Satz, ein Knopf</span><span class="l">Fehler</span><span>verständlich + „Nochmal“</span><span class="l">Offline</span><span>Hinweisband oben</span>'),
+    "v-uebersicht":()=>ab("Übersicht / Startseite",feld("Kacheln",sel("v-kach",d.vorlagen.uebersicht.kacheln,[[2,"2"],[4,"4"],[6,"6"]]),"v-kach")+feld("Hinweis-Band",cb("v-hinw",d.vorlagen.uebersicht.hinweis),"v-hinw"))+vRegel,
+    "v-liste":()=>ab("Liste mit Filter",feld("Filter",sel("v-filter",d.vorlagen.liste.filter,[["oben","oben"],["links","links"]]),"v-filter")+feld("Ansicht",sel("v-ans",d.vorlagen.liste.ansicht,[["tabelle","Tabelle (am Handy Karten)"],["karten","Karten"]]),"v-ans")+feld("Suche",cb("v-suche",d.vorlagen.liste.suche),"v-suche")+feld("Mehrfachauswahl",cb("v-mehr",d.vorlagen.liste.mehrfach),"v-mehr"))+vRegel,
+    "v-detail":()=>ab("Detail",feld("Öffnet als",sel("v-dart",d.vorlagen.detail.art,[["panel","Panel neben der Liste"],["seite","eigene Seite"]]),"v-dart")+feld("Reiter",cb("v-reiter",d.vorlagen.detail.reiter),"v-reiter")+feld("Kopfbild",cb("v-bild",d.vorlagen.detail.kopfbild),"v-bild"))+vRegel,
+    "v-formular":()=>ab("Formular",feld("Spalten",sel("v-fsp",d.vorlagen.formular.spalten,[[1,"1"],[2,"2"]]),"v-fsp")+feld("Speichern",sel("v-speich",d.vorlagen.formular.speichern,[["fest","Leiste unten, bleibt stehen"],["ende","am Ende des Formulars"]]),"v-speich")+feld("Schritte",cb("v-schr",d.vorlagen.formular.schritte),"v-schr")+'<span class="l">Fehler</span><span>direkt am Feld, verständlich</span>')+vRegel,
+    "v-einstellungen":()=>ab("Einstellungen",feld("Bereiche",sel("v-ereit",d.vorlagen.einstellungen.reiter,[["links","Liste links"],["oben","Reiter oben"]]),"v-ereit")+'<span class="l">Speichern</span><span>sofort, mit Meldung</span>')+vRegel,
     rahmen:()=>ab("App-Rahmen",'<span class="l">Umbruchpunkte</span><span>600 · 1024 · 1440 px</span><span class="l">Systemränder</span><span>Handy-Ränder (Notch) frei</span><span class="l">Hell/Dunkel</span><span>'+d.modus+'</span>')+'<div class="hinweis">Wähle links einen Bereich oder klicke im Gerüst darauf.</div>',
     farben:()=>ab("Modus",feld("Bearbeiten",sel("f-modus",d.modus,[["hell","Hell"],["dunkel","Dunkel"]]),"f-modus"))+ab("Rollen",[["bg","Hintergrund"],["flaeche","Flächen"],["nav","Navigation"],["text","Text"],["linie","Linien"],["akzent","Akzent"]].map(([r,t])=>`<span class="l">${t}</span><span class="swatches">${({bg:["#f4f6f5","#f8fafc","#fbf8f2","#0b1411"],flaeche:["#ffffff","#f8fafc","#111d18"],nav:["#ffffff","#f4f6f5","#0f2a22","#0e1814"],text:["#13211a","#0f172a","#e2eee8"],linie:["#e2e8e4","#e5e7eb","#22332c"],akzent:["#047857","#1d4ed8","#b45309","#be123c","#34d399"]})[r].map(c=>`<button type="button" class="sw" aria-pressed="${f[r]===c}" style="background:${c}" data-sw="${r}" data-c="${c}" aria-label="${t} ${c}"></button>`).join("")}</span>`).join(""))+'<div class="hinweis">Farben nach Zweck benannt (Hintergrund, Fläche, Text …), nicht nach Aussehen. Erfolg/Warnung/Fehler sind feste Signalfarben. Vereine überschreiben nur den Akzent.</div>',
     schrift:()=>ab("Schriften",feld("Text",sel("t-text",d.schrift.text,[["Barlow","Barlow"],["Source Sans 3","Source Sans 3"],["Inter","Inter"]]),"t-text")+feld("Überschriften",sel("t-titel",d.schrift.titel,[["Barlow Condensed","Barlow Condensed"],["Barlow","Barlow"]]),"t-titel")+feld("Grundgröße",zahl("t-basis",d.schrift.basis,14,18),"t-basis"))+ab("Skala",'<span class="l">Stufen</span><span class="skala">'+[0,1,2,3,4].map(s=>`<span style="width:10px;height:${Math.round(d.schrift.basis*d.schrift.skala**s)}px"></span>`).join("")+`</span>`+feld("Faktor",sel("t-skala",d.schrift.skala,[[1.125,"1,125 (ruhig)"],[1.2,"1,2"],[1.25,"1,25 (kräftig)"]]),"t-skala")),
@@ -299,7 +320,9 @@ function eig(){
     "k-h":v=>d.kopf.hoehe=+v,"k-fest":v=>d.kopf.fest=v==="1","k-logo":v=>d.kopf.logo=v,"k-suche":v=>d.kopf.suche=v,"k-neu":v=>d.kopf.neu=v,"k-glocke":v=>d.kopf.glocke=v,"k-hilfe":v=>d.kopf.hilfe=v,"k-verein":v=>d.kopf.verein=v,
     "s-bruch":v=>d.seitenkopf.bruch=v,"s-akt":v=>d.seitenkopf.aktion=v,"s-reiter":v=>d.seitenkopf.reiter=v,"i-sp":v=>d.inhalt[k].spalten=+v,"i-rand":v=>d.inhalt[k].rand=+v,"i-maxb":v=>d.inhalt[k].maxb=+v,
     "p-pc":v=>d.panel.pc=v,"p-h":v=>d.panel.handy=v,"p-b":v=>d.panel.breite=+v,"m-pos":v=>d.meldung=v,"m-laden":v=>d.laden=v,"f-modus":v=>d.modus=v,
-    "t-text":v=>d.schrift.text=v,"t-titel":v=>d.schrift.titel=v,"t-basis":v=>d.schrift.basis=+v,"t-skala":v=>d.schrift.skala=+v,"a-ein":v=>d.abstand=+v,"r-rund":v=>d.rund=+v,"r-schatten":v=>d.schatten=v,"y-strich":v=>d.symbole.strich=+v,"b-st":v=>d.bewegung=v};
+    "t-text":v=>d.schrift.text=v,"t-titel":v=>d.schrift.titel=v,"t-basis":v=>d.schrift.basis=+v,"t-skala":v=>d.schrift.skala=+v,"a-ein":v=>d.abstand=+v,"r-rund":v=>d.rund=+v,"r-schatten":v=>d.schatten=v,"y-strich":v=>d.symbole.strich=+v,"b-st":v=>d.bewegung=v,
+    "v-kach":v=>d.vorlagen.uebersicht.kacheln=+v,"v-hinw":v=>d.vorlagen.uebersicht.hinweis=v,"v-filter":v=>d.vorlagen.liste.filter=v,"v-ans":v=>d.vorlagen.liste.ansicht=v,"v-suche":v=>d.vorlagen.liste.suche=v,"v-mehr":v=>d.vorlagen.liste.mehrfach=v,
+    "v-dart":v=>d.vorlagen.detail.art=v,"v-reiter":v=>d.vorlagen.detail.reiter=v,"v-bild":v=>d.vorlagen.detail.kopfbild=v,"v-fsp":v=>d.vorlagen.formular.spalten=+v,"v-speich":v=>d.vorlagen.formular.speichern=v,"v-schr":v=>d.vorlagen.formular.schritte=v,"v-ereit":v=>d.vorlagen.einstellungen.reiter=v};
   $$("#eig select,#eig input").forEach(el=>el.addEventListener(el.type==="range"?"input":"change",()=>{const v=el.type==="checkbox"?el.checked:el.value;if(setz[el.id])aendern(()=>setz[el.id](v));}));
   $$("#eig [data-sw]").forEach(b=>b.addEventListener("click",()=>aendern(dd=>{dd.farben[dd.modus][b.dataset.sw]=b.dataset.c;})));
   $("#frag").addEventListener("click",()=>{zeigeChat();$("#chattext").focus();});
