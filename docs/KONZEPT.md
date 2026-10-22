@@ -26,7 +26,7 @@ seit 13:16 eigenes Programm für alle Projekte. Entwurf: `docs/entwurf-0.4.html`
 | Teil | Wo | Aktualisierung |
 |---|---|---|
 | Oberfläche | `web/`, gehostet (Cloudflare Pages), im Programmfenster live geladen | sofort nach Veröffentlichung |
-| Programm-Hülle | `desktop/src-tauri` (Tauri 2), Windows + Mac | Selbst-Update beim Start |
+| Programm-Hülle | `desktop/src-tauri` (Tauri 2), Windows + Mac | automatisches Update (signiert) über `codeschmiede-updates.pages.dev`: im Hintergrund geladen, beim nächsten Start aktiv |
 | Werkstatt-Dienst | `desktop/dienst` (Node; startet das offizielle Claude Code mit dem Abo-Login der Person) | mit dem Programm |
 | Daten | Supabase, Tabellen `ws_*` mit RLS und Live-Abgleich | live |
 | Code der Projekte | GitHub-Repository je Projekt | Pull Request je Auftrag |

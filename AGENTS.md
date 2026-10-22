@@ -38,3 +38,8 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
   Der Werkstatt-Dienst filtert Geheimnisse aus dem Live-Log.
 - Keine Dritt-Server ohne Eintrag in `docs/DATENSCHUTZ.md`. Schriften und Bibliotheken selbst hosten.
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
+
+## Neue Anweisungen
+- **2026-10-22 16:25 – Automatische Updates:** Jede neue Version des Programms wird automatisch eingespielt (im Hintergrund laden,
+  beim nächsten Start aktiv, Knopf „Jetzt neu starten“, nie mitten in einem Auftrag). Jede Programmänderung in `main` erhöht die Version
+  in `desktop/src-tauri/tauri.conf.json`, `Cargo.toml` und `desktop/dienst/package.json`; der Ablauf „Programm bauen“ veröffentlicht sie signiert.

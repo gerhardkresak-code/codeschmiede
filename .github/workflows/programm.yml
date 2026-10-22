@@ -1,7 +1,9 @@
 name: Programm bauen
 
 # Baut die Codeschmiede für Windows (.exe-Installation) und Mac (.dmg, unsigniert).
-# Zweige: Datei zum Herunterladen (30 Tage). main: zusätzlich GitHub-Release „programm-v<Version>“.
+# Zweige: Datei zum Herunterladen (30 Tage). main: zusätzlich GitHub-Release „programm-v<Version>“ und
+# automatisches Update über https://codeschmiede-updates.pages.dev/latest.json (signiert; Anweisung Gerhard 2026-10-22 16:25).
+# Geheimnisse: TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD) zum Signieren, CLOUDFLARE_API_TOKEN (nur „Cloudflare Pages: Bearbeiten“).
 on:
   push:
     branches: [main, 'feature/**']
@@ -54,9 +56,13 @@ jobs:
         run: npx --yes @tauri-apps/cli@^2 icon app-icon.png
       - name: Tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --release
-      - name: Programm bauen
+      - name: Programm bauen (signiert für automatische Updates)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          if [ "${{ matrix.ziel }}" = "mac" ]; then npx --yes @tauri-apps/cli@^2 build --target universal-apple-darwin --bundles dmg
+          [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] || { echo "::error::Geheimnis TAURI_SIGNING_PRIVATE_KEY fehlt (Repository → Settings → Secrets → Actions)"; exit 1; }
+          if [ "${{ matrix.ziel }}" = "mac" ]; then npx --yes @tauri-apps/cli@^2 build --target universal-apple-darwin --bundles app,dmg
           else npx --yes @tauri-apps/cli@^2 build --bundles nsis; fi
       - name: Datei einsammeln
         id: datei
@@ -68,8 +74,49 @@ jobs:
           echo "pfad=desktop/$n" >> $GITHUB_OUTPUT; echo "name=$n" >> $GITHUB_OUTPUT; echo "version=$v" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
         with: { name: '${{ steps.datei.outputs.name }}', path: '${{ steps.datei.outputs.pfad }}', retention-days: 30 }
+      - name: Update-Dateien einsammeln
+        run: |
+          mkdir -p update
+          if [ "${{ matrix.ziel }}" = "mac" ]; then b=src-tauri/target/universal-apple-darwin/release/bundle/macos
+            cp "$b/Codeschmiede.app.tar.gz" update/Codeschmiede-mac.app.tar.gz; cp "$b/Codeschmiede.app.tar.gz.sig" update/Codeschmiede-mac.app.tar.gz.sig
+          else f=$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -1)
+            cp "$f" update/Codeschmiede-windows-setup.exe; cp "$f.sig" update/Codeschmiede-windows-setup.exe.sig; fi
+      - uses: actions/upload-artifact@v4
+        with: { name: 'update-${{ matrix.ziel }}', path: desktop/update/, retention-days: 7 }
       - name: Release (nur main)
         if: ${{ github.ref == 'refs/heads/main' }}
         env: { GH_TOKEN: '${{ github.token }}', TAG: 'programm-v${{ steps.datei.outputs.version }}', DATEI: '${{ steps.datei.outputs.name }}' }
         run: |
           gh release view "$TAG" >/dev/null 2>&1 && gh release upload "$TAG" "$DATEI" --clobber || gh release create "$TAG" "$DATEI" --title "Codeschmiede $TAG" --notes "Installieren, anmelden, Werkstatt einschalten."
+
+  updates:
+    # Veröffentlicht die neue Version für das automatische Update (nur main)
+    needs: bauen
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { pattern: 'update-*', path: upd, merge-multiple: true }
+      - name: latest.json schreiben
+        run: |
+          set -euo pipefail
+          v=$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")
+          mkdir -p site/$v; mv upd/* site/$v/
+          basis="https://codeschmiede-updates.pages.dev/$v"
+          win_sig=$(cat site/$v/Codeschmiede-windows-setup.exe.sig); mac_sig=$(cat site/$v/Codeschmiede-mac.app.tar.gz.sig)
+          jq -n --arg v "$v" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg ws "$win_sig" --arg wu "$basis/Codeschmiede-windows-setup.exe" \
+                --arg ms "$mac_sig" --arg mu "$basis/Codeschmiede-mac.app.tar.gz" \
+            '{version:$v, notes:"Neue Version der Codeschmiede", pub_date:$d, platforms:{
+              "windows-x86_64":{signature:$ws,url:$wu}, "windows-aarch64":{signature:$ws,url:$wu},
+              "darwin-aarch64":{signature:$ms,url:$mu}, "darwin-x86_64":{signature:$ms,url:$mu}}}' > site/latest.json
+          printf '/latest.json\n  Cache-Control: no-cache\n' > site/_headers
+          cat site/latest.json | head -c 400
+      - name: Auf Cloudflare Pages veröffentlichen (codeschmiede-updates)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: a20e5ea4c61fb0156e241c29f99fac93
+        run: |
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "::error::Geheimnis CLOUDFLARE_API_TOKEN fehlt"; exit 1; }
+          npx --yes wrangler@4 pages project create codeschmiede-updates --production-branch main 2>/dev/null || true
+          npx --yes wrangler@4 pages deploy site --project-name codeschmiede-updates --branch main --commit-dirty=true
