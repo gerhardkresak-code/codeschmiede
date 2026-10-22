@@ -79,6 +79,27 @@ button{font:inherit;cursor:pointer}
 .zettel{position:fixed;z-index:20;background:var(--fl);border:1px solid var(--rand);border-radius:12px;padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.2);width:min(320px,calc(100vw - 32px));display:flex;flex-direction:column;gap:8px;font-size:14px}
 .zettel textarea{border:1px solid var(--rand);border-radius:8px;padding:6px 8px;font:inherit;background:var(--bg);color:var(--fg);min-height:60px}
 .neu-stand{position:absolute;right:16px;top:58px;z-index:5}
+/* Weg eines Auftrags: Stationsleiste + Übersicht + Schrittanzeige im Chat */
+.stationen{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--rand);background:var(--fl)}
+.station{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--rand);border-radius:999px;padding:4px 6px 4px 12px;background:var(--fl);color:var(--fg);font-size:13px;font-weight:600}
+.station .zahl{min-width:24px;text-align:center;border-radius:999px;padding:1px 7px;background:var(--bg);font-variant-numeric:tabular-nums}
+.station.hat .zahl{background:var(--warn);color:#fff}.station.akt{border-color:var(--gruen);background:var(--gruen-h)}
+.station:hover{border-color:var(--gruen)}
+.uebersicht{padding:16px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+.uebersicht .kopfz{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.gruppe-f{border:1px solid var(--rand);border-radius:12px;overflow:hidden}
+.gruppe-f h3{font-size:17px;padding:8px 12px;background:var(--bg);display:flex;gap:8px;align-items:baseline}
+.auftr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:10px 12px;border-top:1px solid var(--rand);align-items:center}
+.auftr .t{font-weight:600}.auftr .d{font-size:13px;color:var(--mut)}
+.leer{color:var(--mut);font-size:14px;padding:12px;border:1px dashed var(--rand);border-radius:12px}
+.schritte{display:flex;gap:4px;flex-wrap:wrap;margin:6px 0 2px}
+.schritt{font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;border:1px solid var(--rand);color:var(--mut)}
+.schritt.fertig{background:var(--gruen-h);color:var(--gruen);border-color:transparent}
+.schritt.jetzt{background:var(--gruen);color:#fff;border-color:var(--gruen)}
+:root:not([data-theme="light"]) .schritt.jetzt{color:#05271b}
+.schritt.rot{background:var(--rot-h);color:var(--rot);border-color:var(--rot)}
+.auftragkarte{border:1px solid var(--rand);border-radius:12px;padding:8px 12px;background:var(--fl);font-size:13px}
+.zu{opacity:.7}.zu .meta::after{content:"abgeschlossen";margin-left:auto;font-weight:600;color:var(--gruen)}
 .erkl{max-width:1400px;margin:14px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 .erkl div{background:var(--fl);border:1px solid var(--rand);border-radius:12px;padding:12px 14px;font-size:14px}
 .erkl h3{font-size:18px;margin-bottom:4px}
@@ -90,8 +111,8 @@ button{font:inherit;cursor:pointer}
 </style>
 
 <div class="kopf">
-  <h1>Entwurf 0.5 · Feature-Arbeitsplatz</h1>
-  <p>Klickbarer Entwurf, Stand 22.10.2026 16:50. Einfach klicken zeigt die Kurzinfo, doppelt klicken öffnet den Arbeitsplatz mit Chat und Live-Vorschau. Beispieldaten aus Trainer to go.</p>
+  <h1>Entwurf 0.6 · Feature-Arbeitsplatz &amp; Stationen</h1>
+  <p>Klickbarer Entwurf, Stand 22.10.2026 20:50. Oben die Stationen anklicken (z. B. „Zusammenführen“). Einfach klicken zeigt die Kurzinfo, doppelt klicken öffnet den Arbeitsplatz mit Chat und Live-Vorschau. Beispieldaten aus Trainer to go.</p>
 </div>
 
 <div class="app">
@@ -101,8 +122,10 @@ button{font:inherit;cursor:pointer}
   </nav>
 
   <section class="haupt" id="ansicht-zentrale">
-    <div class="zeile"><span class="krumen">Trainer to go › Plattform › <strong>ERP &amp; Vertrieb</strong></span><span class="pill p-live">8 Funktionen</span></div>
-    <div class="zentrale">
+    <div class="stationen" id="stationen" role="toolbar" aria-label="Weg eines Auftrags"></div>
+    <div class="uebersicht" id="uebersicht" hidden></div>
+    <div class="zeile" id="zeile-z"><span class="krumen">Trainer to go › Plattform › <strong>ERP &amp; Vertrieb</strong></span><span class="pill p-live">8 Funktionen</span></div>
+    <div class="zentrale" id="zentrale-raster">
       <div class="raster" id="raster"></div>
       <aside class="info" id="info" aria-live="polite"></aside>
     </div>
@@ -155,6 +178,8 @@ button{font:inherit;cursor:pointer}
   <div><h3>Einfach &amp; doppelt klicken</h3>Ein Klick zeigt rechts Stand, letzten Auftrag und wer gerade arbeitet. Ein Doppelklick (am Handy: „Öffnen“ in der Kurzinfo) öffnet den Arbeitsplatz.</div>
   <div><h3>Live-Vorschau</h3>Jeder Auftrag hat eine eigene Testseite bei Cloudflare. Nach jeder Änderung baut Cloudflare neu (1–3 Min.). Dann erscheint „Neuer Stand da“, und die Vorschau lädt neu. Vor dem ersten Auftrag zeigt sie die aktuelle App.</div>
   <div><h3>Zeigen &amp; kommentieren</h3>Einschalten, auf ein Element in der Vorschau klicken, Kommentar schreiben. Die Nachricht nennt den Baustein (z. B. „PaketKarte (Verein)“) und landet im Chat dieses Features.</div>
+  <div><h3>Stationen oben</h3>Die Zahlen zeigen, wie viele Aufträge an jeder Station warten. Ein Klick öffnet die Übersicht nach Feature: alle auf einmal oder einzeln freigeben, zusammenführen, prüfen. Nach dem Zusammenführen ist die Änderung live; die Sicherheitsprüfung läuft automatisch danach und schließt mit „Wissen &amp; veröffentlicht“ ab. Rot geht als Nacharbeit zurück an die Werkstatt.</div>
+  <div><h3>Schritte im Chat</h3>Jeder Auftrag zeigt im Chat seinen Weg; die aktuelle Station ist grün hervorgehoben und wechselt live. Erledigte Aufträge und beantwortete Fragen werden als „abgeschlossen“ markiert.</div>
   <div><h3>Alles landet beim Feature</h3>Nachrichten aus dem Gruppen-Chat und aus dem Claude-Chat erscheinen hier mit Herkunft (Abzeichen „Gruppe“ bzw. „Claude-Chat“). Was Claude dort baut, steht ebenfalls hier.</div>
 </div>
 
@@ -169,11 +194,39 @@ const FEATURES=[
  {nr:"F-157",nm:"Testphase 30 Tage",st:"live",info:"Kein offener Auftrag"},
  {nr:"F-158",nm:"Umsatz-Übersicht",st:"live",info:"Kein offener Auftrag"}];
 const VERLAUF=[
+ {karte:true},
  {wer:"Gerhard",ich:true,kanal:"Claude-Chat",z:"16:38",t:"Ich möchte alle Features als eigene Module haben, jedem einen Preis geben und daraus den Paketpreis berechnen. Der soll in Echtzeit auf die Webseite."},
- {wer:"Werkstatt",kanal:"",z:"16:39",t:"Rückfrage: Sollen Preise netto oder brutto gepflegt werden, und gilt der Paketpreis als Summe der Module oder mit Paketrabatt?"},
+ {wer:"Werkstatt",kanal:"",z:"16:39",zu:true,t:"Rückfrage: Sollen Preise netto oder brutto gepflegt werden, und gilt der Paketpreis als Summe der Module oder mit Paketrabatt?"},
  {wer:"Gerhard",ich:true,kanal:"Gruppe",z:"16:41",t:"Netto pflegen, brutto anzeigen. Paket = Summe minus 15 %."},
  {wer:"Werkstatt",kanal:"",z:"16:44",t:"Erledigt auf Zweig feature/cs-12-module-preise: Tabelle „Module“, Preisfeld je Feature, Paketpreis wird live berechnet. Testseite wird gebaut …"}];
 const $=s=>document.querySelector(s);
+const STATIONEN=[["auftrag","Auftrag"],["arbeit","In Arbeit"],["freigabe","Freigabe"],["zusammen","Zusammenführen"],["sicherheit","Sicherheitsprüfung"],["wissen","Wissen & veröffentlicht"]];
+const AUFTRAEGE=[
+ {nr:3,f:"F-154",fn:"Module & Preise je Feature",t:"Testanfrage",st:"zusammen",pr:15,wer:"Gerhard"},
+ {nr:4,f:"F-005",fn:"Mehrere Vereine mit einem Konto",t:"Mehrere Vereine in die Einstellungen umziehen",st:"zusammen",pr:16,wer:"Gerhard"},
+ {nr:7,f:"F-150",fn:"Abo-Pakete",t:"Testphase im Paket anzeigen",st:"freigabe",pr:17,wer:"Werkstatt"},
+ {nr:12,f:"F-154",fn:"Module & Preise je Feature",t:"Module mit Preis, Paketpreis live",st:"arbeit",pr:null,wer:"Werkstatt SFGK"}];
+let offen=null;
+function zeichneStationen(){
+  $("#stationen").innerHTML=STATIONEN.map(([k,n])=>{const z=AUFTRAEGE.filter(a=>a.st===k).length;
+    return `<button type="button" class="station ${z&&["freigabe","zusammen"].includes(k)?"hat":""} ${offen===k?"akt":""}" data-st="${k}">${n}<span class="zahl">${z}</span></button>`;}).join("");
+  document.querySelectorAll(".station").forEach(b=>b.addEventListener("click",()=>{offen=offen===b.dataset.st?null:b.dataset.st;zeigeUebersicht();}));
+}
+const AKTION={freigabe:["Freigeben","Alle freigeben","zusammen"],zusammen:["Zusammenführen","Alle zusammenführen","sicherheit"],sicherheit:["Prüfung neu starten","",""],arbeit:["","",""],auftrag:["","",""],wissen:["","",""]};
+function zeigeUebersicht(){
+  zeichneStationen();
+  const u=$("#uebersicht");u.hidden=!offen;$("#zeile-z").hidden=!!offen;$("#zentrale-raster").hidden=!!offen;
+  if(!offen)return;
+  const name=STATIONEN.find(s=>s[0]===offen)[1];const liste=AUFTRAEGE.filter(a=>a.st===offen);const [einz,alle,nach]=AKTION[offen];
+  const proF={};liste.forEach(a=>(proF[a.f]=proF[a.f]||{fn:a.fn,l:[]}).l.push(a));
+  u.innerHTML=`<div class="kopfz"><h2 style="font-size:24px">${name}</h2><span class="pill p-arbeit">${liste.length} Aufträge</span><span style="flex:1"></span>${alle&&liste.length>1?`<button class="knopf voll" type="button" id="alle">${alle}</button>`:""}<button class="knopf" type="button" id="schliessen">Schließen</button></div>`+
+   (liste.length?Object.entries(proF).map(([f,g])=>`<div class="gruppe-f"><h3><span class="code">${f}</span>${g.fn}</h3>${g.l.map(a=>`<div class="auftr"><div><div class="t">#${a.nr} ${a.t}</div><div class="d">${a.pr?`Pull Request #${a.pr} · `:""}${offen==="zusammen"?"Freigegeben von Gerhard · Prüfung am PC: grün":offen==="freigabe"?"Prüfung am PC: grün · wartet auf deine Freigabe":"Werkstatt arbeitet"}</div></div>${einz?`<button class="knopf voll" type="button" data-nr="${a.nr}">${einz}</button>`:""}</div>`).join("")}</div>`).join(""):`<div class="leer">An dieser Station wartet gerade nichts.</div>`);
+  $("#schliessen").addEventListener("click",()=>{offen=null;zeigeUebersicht();});
+  const weiter=nrs=>{nrs.forEach(n=>{const a=AUFTRAEGE.find(x=>x.nr===n);a.st=nach;if(nach==="sicherheit")setTimeout(()=>{a.st="wissen";zeichneStationen();if(offen)zeigeUebersicht();},3000);});zeigeUebersicht();};
+  u.querySelectorAll("[data-nr]").forEach(b=>b.addEventListener("click",()=>nach&&weiter([+b.dataset.nr])));
+  $("#alle")?.addEventListener("click",()=>weiter(liste.map(a=>a.nr)));
+}
+function schritteHtml(st,rot){const i=STATIONEN.findIndex(s=>s[0]===st);return `<div class="schritte">${STATIONEN.map(([k,n],j)=>`<span class="schritt ${j<i?"fertig":j===i?(rot?"rot":"jetzt"):""}">${n}</span>`).join("")}</div>`;}
 let gew=null;
 function zeichneRaster(){
   $("#raster").innerHTML="";
@@ -193,8 +246,9 @@ function zeigeInfo(){
   $("#oeffnen").addEventListener("click",()=>oeffne(gew));
 }
 function msgHtml(m){
+  if(m.karte)return `<div class="auftragkarte"><b>Auftrag #12 · Module mit Preis, Paketpreis live</b>${schritteHtml("arbeit")}<span style="color:var(--mut)">Wechselt live, sobald du freigibst oder zusammenführst.</span></div>`;
   const k=m.kanal?`<span class="pill ${m.kanal==="Claude-Chat"?"p-claude":"p-gruppe"}">aus ${m.kanal}</span>`:"";
-  return `<div class="msg ${m.ich?"ich":""} ${m.bau?"baustein":""}"><div class="meta"><b>${m.wer}</b>${k}<span>${m.z}</span></div>${m.bau?`<div style="margin-bottom:4px">Baustein <span class="code">${m.bau}</span></div>`:""}${m.t}</div>`;
+  return `<div class="msg ${m.ich?"ich":""} ${m.bau?"baustein":""} ${m.zu?"zu":""}"><div class="meta"><b>${m.wer}</b>${k}<span>${m.z}</span></div>${m.bau?`<div style="margin-bottom:4px">Baustein <span class="code">${m.bau}</span></div>`:""}${m.t}</div>`;
 }
 function oeffne(i){
   gew=i;const f=FEATURES[i];
@@ -230,5 +284,5 @@ $("#geraet").addEventListener("click",e=>{
  t.addEventListener("pointerdown",e=>{zieh=true;t.setPointerCapture(e.pointerId);});
  t.addEventListener("pointermove",e=>{if(!zieh)return;const r=p.getBoundingClientRect();const pr=Math.min(70,Math.max(25,(e.clientX-r.left)/r.width*100));p.style.setProperty("--links",pr+"%");});
  t.addEventListener("pointerup",()=>zieh=false);})();
-zeichneRaster();zeigeInfo();
+zeichneRaster();zeigeInfo();zeichneStationen();
 </script>
