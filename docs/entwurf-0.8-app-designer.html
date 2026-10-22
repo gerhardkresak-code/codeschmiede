@@ -1,0 +1,231 @@
+<title>Codeschmiede App-Designer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Layout: Codeschmiede-Rahmen; App-Designer = links Werkzeug (Ziehen | Einstellungen | Chat), rechts Live-Vorschau der echten Testseite */
+:root{
+  --bg:#f4f7f5; --fl:#ffffff; --fg:#122019; --mut:#5d6f66; --rand:#dbe4df;
+  --gruen:#047857; --gruen-h:#ecfdf5; --leiste:#0f2a22; --leiste-fg:#d1fae5; --orange:#f97316; --warn:#b45309; --warn-h:#fffbeb;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif; --text:"Barlow",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1411;--fl:#111d18;--fg:#e3efe8;--mut:#93a89d;--rand:#22332c;--gruen:#34d399;--gruen-h:#0f2d22;--warn:#fbbf24;--warn-h:#2a2110;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0b1411;--fl:#111d18;--fg:#e3efe8;--mut:#93a89d;--rand:#22332c;--gruen:#34d399;--gruen-h:#0f2d22;--warn:#fbbf24;--warn-h:#2a2110;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--text);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance}
+button,input,select{font:inherit}
+.kopf{max-width:1440px;margin:0 auto 12px;display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;justify-content:space-between}
+.kopf h1{font-size:28px}.kopf p{margin:0;color:var(--mut);font-size:14px;max-width:72ch}
+.app{max-width:1440px;margin:0 auto;display:grid;grid-template-columns:190px minmax(0,1fr);border:1px solid var(--rand);border-radius:14px;overflow:hidden;background:var(--fl)}
+.leiste{background:var(--leiste);color:var(--leiste-fg);padding:14px 10px;display:flex;flex-direction:column;gap:3px;font-size:14px}
+.leiste b{font-family:var(--display);font-size:20px;color:#fff;padding:0 6px 10px}.leiste span{padding:6px 8px;border-radius:8px;opacity:.85}.leiste span.akt{background:rgba(255,255,255,.12);opacity:1;font-weight:600}
+.leiste i{font-style:normal;font-size:11px;text-transform:uppercase;letter-spacing:.1em;opacity:.6;padding:10px 8px 2px}
+.haupt{min-width:0;display:flex;flex-direction:column}
+.zeile{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--rand)}
+.knopf{border:1px solid var(--rand);background:var(--fl);color:var(--fg);border-radius:10px;padding:6px 12px;font-size:14px;font-weight:600;cursor:pointer}
+.knopf.voll{background:var(--gruen);border-color:var(--gruen);color:#fff}:root:not([data-theme="light"]) .knopf.voll{color:#05271b}
+.knopf.an{background:var(--gruen-h);border-color:var(--gruen);color:var(--gruen)}
+.knopf:focus-visible{outline:3px solid var(--gruen);outline-offset:2px}
+select,input[type=text]{border:1px solid var(--rand);border-radius:8px;padding:5px 8px;background:var(--bg);color:var(--fg)}
+.pill{display:inline-flex;gap:6px;align-items:center;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;background:var(--warn-h);color:var(--warn)}
+.platz{display:grid;grid-template-columns:minmax(340px,44%) minmax(0,1fr);min-height:620px}
+.werk{border-right:1px solid var(--rand);display:flex;flex-direction:column;min-width:0}
+.reiter{display:flex;border-bottom:1px solid var(--rand)}.reiter button{flex:1;border:0;background:none;padding:9px;font-weight:600;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent}
+.reiter button[aria-selected=true]{color:var(--fg);border-bottom-color:var(--gruen)}
+.inhalt{padding:12px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:12px}
+.geraete{display:flex;gap:6px}
+/* Ziehen-Fläche: schematisches Gerät mit Zonen */
+.schema{border:2px solid var(--rand);border-radius:14px;background:var(--bg);margin:0 auto;width:100%;display:grid;gap:4px;padding:6px;transition:max-width .2s}
+.zone{border:2px dashed var(--rand);border-radius:8px;min-height:30px;display:flex;align-items:center;gap:6px;padding:4px;color:var(--mut);font-size:12px}
+.zone.drueber{border-color:var(--orange);background:rgba(249,115,22,.08)}
+.block{background:var(--fl);border:1px solid var(--gruen);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;color:var(--fg);cursor:grab;user-select:none}
+.block.gew{outline:3px solid var(--orange)}
+.eig{border:1px solid var(--rand);border-radius:12px;padding:10px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 12px;align-items:center;font-size:14px}
+.eig h3{grid-column:1/-1;font-size:18px}
+.gruppe{border:1px solid var(--rand);border-radius:12px;padding:10px 12px}
+.gruppe summary{cursor:pointer;font-family:var(--display);font-weight:700;font-size:18px}
+.gruppe .felder{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 12px;align-items:center;margin-top:8px;font-size:14px}
+.farben{display:flex;gap:6px;flex-wrap:wrap}.farbe{width:28px;height:28px;border-radius:8px;border:2px solid var(--rand);cursor:pointer}
+.farbe.gew{outline:3px solid var(--orange);outline-offset:1px}
+.chat{display:flex;flex-direction:column;gap:8px}
+.msg{border-radius:12px;padding:8px 12px;font-size:14px;background:var(--bg);max-width:92%}.msg.ich{align-self:flex-end;background:var(--gruen-h)}
+.senden{display:flex;gap:8px}.senden input{flex:1;min-width:0}
+.vorschau{display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+.adr{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--rand);background:var(--fl)}
+.url{flex:1;min-width:150px;font:12px var(--mono);color:var(--mut);background:var(--bg);border-radius:8px;padding:6px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.buehne{flex:1;padding:14px;display:flex;justify-content:center;align-items:flex-start;overflow:auto;position:relative}
+.bau{position:absolute;inset:14px;display:grid;place-items:center;background:rgba(244,247,245,.75);border-radius:16px;font-weight:600;color:#122019;z-index:2}
+/* simulierte echte Testseite der App (im Entwurf nachgebildet) */
+.dev{width:100%;transition:max-width .25s;background:var(--a-bg);color:var(--a-text);border-radius:14px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.14);display:grid;min-height:420px;font-family:var(--a-font)}
+.a-kopf{background:var(--a-kopf);color:#fff;display:flex;align-items:center;gap:10px;padding:0 14px;height:var(--a-kopfh)}
+.a-logo{width:30px;height:30px;border-radius:8px;background:#fff;color:var(--a-akzent);display:grid;place-items:center;font-weight:800;font-family:var(--display)}
+.a-such{flex:1;max-width:260px;height:30px;border-radius:999px;background:rgba(255,255,255,.18)}
+.a-nav{background:var(--a-flaeche);border-right:1px solid rgba(0,0,0,.08);padding:10px;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.a-nav span{padding:6px 8px;border-radius:var(--a-rund)}.a-nav span.akt{background:var(--a-akzent);color:#fff}
+.a-inhalt{padding:var(--a-rand);display:flex;flex-direction:column;gap:12px;max-width:var(--a-maxb);width:100%;margin:0 auto}
+.a-inhalt h3{font-size:22px;color:var(--a-text);font-family:var(--display)}
+.a-karten{display:grid;grid-template-columns:repeat(var(--a-spalten),minmax(0,1fr));gap:10px}
+.a-karte{background:var(--a-flaeche);border-radius:var(--a-rund);padding:12px;border:1px solid rgba(0,0,0,.08);font-size:13px}
+.a-karte b{display:block;font-size:20px;color:var(--a-akzent);font-family:var(--display)}
+.a-unten{display:flex;justify-content:space-around;background:var(--a-flaeche);border-top:1px solid rgba(0,0,0,.08);padding:8px;font-size:12px}
+.a-zu{width:36px;height:36px;border-radius:8px;border:0;background:rgba(255,255,255,.2);color:#fff;cursor:pointer}
+.entwuerfe{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.vergleich{display:grid;grid-template-columns:1fr 1fr;gap:10px}.vergleich .dev{min-height:300px;font-size:12px}
+.erkl{max-width:1440px;margin:14px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.erkl div{background:var(--fl);border:1px solid var(--rand);border-radius:12px;padding:12px 14px;font-size:14px}.erkl h3{font-size:18px;margin-bottom:4px}
+@media (max-width:980px){.app{grid-template-columns:1fr}.leiste{display:none}.platz{grid-template-columns:1fr}.werk{border-right:0;border-bottom:1px solid var(--rand)}}
+</style>
+
+<div class="kopf">
+  <h1>Entwurf 0.8 · App-Designer</h1>
+  <p>Klickbarer Entwurf, Stand 22.10.2026 22:05. Grunddesign einer App festlegen – ziehen, einstellen oder im Chat beschreiben. Die Vorschau rechts ist im echten Programm die Testseite der App (hier nachgebildet).</p>
+</div>
+
+<div class="app">
+  <nav class="leiste" aria-label="Navigation">
+    <b>Codeschmiede</b><span>Auftrags-Zentrale</span><span class="akt">App-Designer</span><span>Live-Vorschau</span>
+    <i>Ablauf</i><span>Zweige &amp; Versionen</span><span>Prüfstand</span><span>Wissensdatenbank</span><i>Verwaltung</i><span>Benutzer &amp; Rechte</span>
+  </nav>
+  <section class="haupt">
+    <div class="zeile">
+      <h2 style="font-size:22px">App-Designer · Trainer to go</h2>
+      <div class="entwuerfe" role="group" aria-label="Entwürfe">
+        <label for="entwurf" style="font-size:13px;color:var(--mut)">Entwurf</label>
+        <select id="entwurf"><option value="a">A · Menü links (aktuell live)</option><option value="b">B · Menü oben, einklappbar</option></select>
+        <button class="knopf" type="button" id="neuEntwurf">+ Neuer Entwurf</button>
+        <button class="knopf" type="button" id="vergl">Vergleichen</button>
+      </div>
+      <span style="flex:1"></span>
+      <span class="pill" id="status" hidden>Auftrag #21 · Testseite wird gebaut …</span>
+      <button class="knopf voll" type="button" id="senden">Als Auftrag senden</button>
+    </div>
+    <div class="platz">
+      <div class="werk">
+        <div class="reiter" role="tablist">
+          <button role="tab" aria-selected="true" data-tab="ziehen" type="button">Ziehen</button>
+          <button role="tab" aria-selected="false" data-tab="einst" type="button">Einstellungen</button>
+          <button role="tab" aria-selected="false" data-tab="chat" type="button">Chat</button>
+        </div>
+        <div class="inhalt" id="t-ziehen">
+          <div class="geraete" role="group" aria-label="Gerät"><button class="knopf an" data-g="pc" type="button">PC</button><button class="knopf" data-g="tablet" type="button">Tablet</button><button class="knopf" data-g="handy" type="button">Handy</button></div>
+          <div class="schema" id="schema"></div>
+          <div class="eig" id="eig"></div>
+          <p style="font-size:13px;color:var(--mut);margin:0">Bausteine in eine Zone ziehen (Kopf, links, oben, unten, Inhalt). Klick auf einen Baustein zeigt seine Eigenschaften. Jedes Gerät hat eigene Lagen.</p>
+        </div>
+        <div class="inhalt" id="t-einst" hidden></div>
+        <div class="inhalt" id="t-chat" hidden>
+          <div class="chat" id="chat">
+            <div class="msg">Beschreib, was am Grunddesign anders sein soll. Ich stelle es im Entwurf ein; mit „Als Auftrag senden“ baut die Werkstatt es, und rechts erscheint die Testseite.</div>
+          </div>
+          <form class="senden" id="chatform"><input type="text" id="chattext" placeholder="z. B. Menü am Tablet einklappbar und Logo in die Mitte"><button class="knopf voll" type="submit">Senden</button></form>
+        </div>
+      </div>
+      <div class="vorschau">
+        <div class="adr">
+          <span class="url" id="url">trainer-to-go.pages.dev/home · aktueller Stand (live)</span>
+          <button class="knopf an" data-v="100%" type="button">PC</button><button class="knopf" data-v="820px" type="button">Tablet</button><button class="knopf" data-v="390px" type="button">Handy</button>
+          <button class="knopf" type="button">Zeigen &amp; kommentieren</button>
+        </div>
+        <div class="buehne" id="buehne"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="erkl">
+  <div><h3>Drei Wege, ein Entwurf</h3>Ziehen (Bausteine in Zonen je Gerät), Einstellungen (alle Werte als Liste) und Chat (in Worten beschreiben) ändern denselben Entwurf.</div>
+  <div><h3>Echte Vorschau</h3>„Als Auftrag senden“ macht aus dem Entwurf einen Auftrag. Die Werkstatt baut ihn auf einem eigenen Zweig; rechts erscheint die echte Testseite (1–3 Min.). Danach: Freigabe → Sicherheitsprüfung → Zusammenführen → Feature-Prüfung → live.</div>
+  <div><h3>Entwürfe &amp; Versionen</h3>Mehrere benannte Entwürfe, nebeneinander vergleichbar. Jede live gegangene Fassung bleibt als Version zum Zurückholen.</div>
+  <div><h3>Grunddesign für die ganze App</h3>Nicht je Rolle: ein Gerüst für alle. Vereine stellen im Design-Studio der App weiter nur ihre Vereinsfarbe und ihr Logo ein.</div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const STANDARD={
+  pc:{nav:"links",navKlapp:true,navBreite:220,logo:"links",kopfh:56,suche:true,spalten:3,maxb:1200,rand:20},
+  tablet:{nav:"links",navKlapp:true,navBreite:180,logo:"links",kopfh:52,suche:true,spalten:2,maxb:900,rand:16},
+  handy:{nav:"unten",navKlapp:false,navBreite:0,logo:"mitte",kopfh:52,suche:false,spalten:1,maxb:600,rand:12},
+  farben:{bg:"#f4f7f5",flaeche:"#ffffff",akzent:"#047857",kopf:"#0f2a22",text:"#122019"},
+  schrift:"Barlow",rund:10,modus:"hell"};
+const ENTWURF={a:structuredClone(STANDARD),b:structuredClone(STANDARD)};
+Object.assign(ENTWURF.b.pc,{nav:"oben",navKlapp:true,logo:"mitte"});Object.assign(ENTWURF.b.tablet,{nav:"oben",logo:"mitte"});ENTWURF.b.farben.akzent="#1d4ed8";
+let akt="a",geraet="pc",gewaehlt="nav",vBreite="100%";
+const E=()=>ENTWURF[akt];
+const BLOECKE={nav:"Navigation",logo:"Logo",suche:"Suche",inhalt:"Inhaltsbereich"};
+
+function schema(){
+  const g=E()[geraet];const s=$("#schema");s.style.maxWidth=geraet==="pc"?"100%":geraet==="tablet"?"420px":"240px";
+  s.style.gridTemplateAreas=`"kopf kopf" "${g.nav==="oben"?"oben oben":"oben oben"}" "${g.nav==="links"?"links":"links"} inhalt" "unten unten"`;
+  s.style.gridTemplateColumns=g.nav==="links"?"90px 1fr":"0 1fr";
+  const zonen={kopf:[],oben:[],links:[],inhalt:["inhalt"],unten:[]};
+  zonen[g.nav].push("nav");zonen.kopf.push("logo");if(g.suche)zonen.kopf.push("suche");
+  s.innerHTML=Object.entries(zonen).map(([z,b])=>`<div class="zone" data-zone="${z}" style="grid-area:${z};${z==="inhalt"?"min-height:120px;align-items:flex-start":""}${z==="links"&&g.nav!=="links"?";display:none":""}">${z==="kopf"?"Kopfband":z==="inhalt"?"":z==="unten"?"unten":z==="oben"?"oben":"links"}${b.map(x=>`<span class="block ${gewaehlt===x?"gew":""}" draggable="${x==="nav"||x==="logo"}" data-b="${x}">${BLOECKE[x]}${x==="logo"?` · ${g.logo}`:""}</span>`).join("")}</div>`).join("");
+  if(g.nav!=="links"){ s.querySelector('[data-zone="links"]').style.display="flex"; s.querySelector('[data-zone="links"]').style.minWidth="0"; }
+  s.querySelectorAll(".block").forEach(b=>{b.addEventListener("click",()=>{gewaehlt=b.dataset.b;schema();eig();});
+    b.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",b.dataset.b);});});
+  s.querySelectorAll(".zone").forEach(z=>{z.addEventListener("dragover",e=>{e.preventDefault();z.classList.add("drueber");});z.addEventListener("dragleave",()=>z.classList.remove("drueber"));
+    z.addEventListener("drop",e=>{e.preventDefault();const b=e.dataTransfer.getData("text/plain");const zone=z.dataset.zone;
+      if(b==="nav"&&["links","oben","unten"].includes(zone))E()[geraet].nav=zone;
+      if(b==="logo"&&zone==="kopf"){const r=z.getBoundingClientRect();const x=(e.clientX-r.left)/r.width;E()[geraet].logo=x<.33?"links":x<.66?"mitte":"rechts";}
+      gewaehlt=b;alles();});});
+}
+function eig(){
+  const g=E()[geraet];const el=$("#eig");
+  const auswahl=(id,wert,opts)=>`<select id="${id}">${opts.map(o=>`<option ${o===wert?"selected":""}>${o}</option>`).join("")}</select>`;
+  const f={nav:`<h3>Navigation · ${geraet.toUpperCase()}</h3><label for="e-lage">Lage</label>${auswahl("e-lage",g.nav,["links","oben","unten"])}<label for="e-klapp">Einklappbar</label><input type="checkbox" id="e-klapp" ${g.navKlapp?"checked":""}><label for="e-breite">Breite (px)</label><input type="text" id="e-breite" value="${g.navBreite}">`,
+   logo:`<h3>Logo · ${geraet.toUpperCase()}</h3><label for="e-logo">Platz</label>${auswahl("e-logo",g.logo,["links","mitte","rechts"])}<span>Logo</span><span style="color:var(--mut)">App-Logo, bei Einladungslink Vereinslogo</span>`,
+   suche:`<h3>Suche</h3><label for="e-suche">Im Kopfband</label><input type="checkbox" id="e-suche" ${g.suche?"checked":""}>`,
+   inhalt:`<h3>Inhaltsbereich · ${geraet.toUpperCase()}</h3><label for="e-sp">Spalten</label>${auswahl("e-sp",String(g.spalten),["1","2","3","4"])}<label for="e-maxb">Max. Breite</label><input type="text" id="e-maxb" value="${g.maxb}"><label for="e-rand">Rand</label><input type="text" id="e-rand" value="${g.rand}">`}[gewaehlt];
+  el.innerHTML=f;
+  el.querySelectorAll("select,input").forEach(i=>i.addEventListener("change",()=>{
+    const v=i.type==="checkbox"?i.checked:i.value;
+    ({"e-lage":()=>g.nav=v,"e-klapp":()=>g.navKlapp=v,"e-breite":()=>g.navBreite=+v||0,"e-logo":()=>g.logo=v,"e-suche":()=>g.suche=v,"e-sp":()=>g.spalten=+v,"e-maxb":()=>g.maxb=+v||900,"e-rand":()=>g.rand=+v||12})[i.id]?.();alles();}));
+}
+function einstellungen(){
+  const e=E();const farbFeld=(k,n,opts)=>`<span>${n}</span><span class="farben">${opts.map(c=>`<button type="button" class="farbe ${e.farben[k]===c?"gew":""}" style="background:${c}" data-k="${k}" data-c="${c}" aria-label="${n} ${c}"></button>`).join("")}</span>`;
+  const geraetFelder=g=>{const x=e[g];return `<details class="gruppe" ${g==="pc"?"open":""}><summary>Gerüst · ${g==="pc"?"PC":g==="tablet"?"Tablet":"Handy"}</summary><div class="felder">
+    <span>Navigation</span><span>${x.nav}${x.navKlapp?", einklappbar":""}${x.navBreite?`, ${x.navBreite} px`:""}</span><span>Kopfband</span><span>${x.kopfh} px, Logo ${x.logo}${x.suche?", Suche":""}</span>
+    <span>Inhalt</span><span>${x.spalten} Spalte(n), max. ${x.maxb} px, Rand ${x.rand} px</span></div></details>`;};
+  $("#t-einst").innerHTML=`<details class="gruppe" open><summary>Grundfarben</summary><div class="felder">
+    ${farbFeld("bg","Hintergrund",["#f4f7f5","#f8fafc","#fbf7ef","#0b1411"])}${farbFeld("flaeche","Flächen",["#ffffff","#f1f5f9","#111d18"])}
+    ${farbFeld("akzent","Akzent",["#047857","#1d4ed8","#b45309","#be123c"])}${farbFeld("kopf","Kopfband",["#0f2a22","#0f172a","#047857"])}
+    <span>Modus</span><span><select id="s-modus"><option ${e.modus==="hell"?"selected":""}>hell</option><option ${e.modus==="dunkel"?"selected":""}>dunkel</option><option>beide (Nutzer wählt)</option></select></span>
+    <span>Kontrast</span><span style="color:var(--gruen);font-weight:600">Text auf Hintergrund 12,6 : 1 · erfüllt</span></div></details>
+    <details class="gruppe"><summary>Schrift, Rundungen, Abstände</summary><div class="felder"><span>Schrift</span><span><select id="s-schrift"><option>Barlow</option><option>Inter</option><option>Source Sans 3</option></select></span>
+    <span>Rundungen</span><span><input type="range" id="s-rund" min="0" max="20" value="${e.rund}"> ${e.rund} px</span><span>Dichte</span><span>Normal (Kompakt wählt der Nutzer)</span></div></details>
+    ${["pc","tablet","handy"].map(geraetFelder).join("")}
+    <details class="gruppe"><summary>Versionen</summary><div class="felder"><span>v1.31.0</span><span>22.10. · Menü links · live</span><span>v1.30.0</span><span>21.10. · <button class="knopf" type="button">Zurückholen</button></span></div></details>`;
+  $("#t-einst").querySelectorAll(".farbe").forEach(b=>b.addEventListener("click",()=>{e.farben[b.dataset.k]=b.dataset.c;alles();}));
+  $("#s-rund")?.addEventListener("input",ev=>{e.rund=+ev.target.value;vorschau();});
+  $("#s-modus")?.addEventListener("change",ev=>{e.modus=ev.target.value.startsWith("dunkel")?"dunkel":"hell";if(e.modus==="dunkel"){e.farben.bg="#0b1411";e.farben.flaeche="#111d18";e.farben.text="#e3efe8";}else{e.farben.bg="#f4f7f5";e.farben.flaeche="#ffffff";e.farben.text="#122019";}alles();});
+}
+function appHtml(e,g){
+  const nav=e[g==="390px"?"handy":g==="820px"?"tablet":"pc"];const f=e.farben;
+  const vars=`--a-bg:${f.bg};--a-flaeche:${f.flaeche};--a-akzent:${f.akzent};--a-kopf:${f.kopf};--a-text:${f.text};--a-kopfh:${nav.kopfh}px;--a-rund:${e.rund}px;--a-spalten:${nav.spalten};--a-maxb:${nav.maxb}px;--a-rand:${nav.rand}px;--a-font:${e.schrift},system-ui,sans-serif`;
+  const menue=["Start","Kalender","Mannschaft","Training","Spiele","Kommunikation","Verein"];
+  const kopfInhalt=`${nav.navKlapp&&nav.nav!=="unten"?'<button class="a-zu" type="button" aria-label="Menü">☰</button>':""}${nav.logo==="links"?'<span class="a-logo">T</span><b>Trainer to go</b>':""}<span style="flex:1"></span>${nav.logo==="mitte"?'<span class="a-logo">T</span><b>Trainer to go</b><span style="flex:1"></span>':""}${nav.suche?'<span class="a-such"></span>':""}${nav.logo==="rechts"?'<span class="a-logo">T</span>':""}`;
+  const navLinks=nav.nav==="links"?`<div class="a-nav" style="width:${nav.navBreite}px">${menue.map((m,i)=>`<span class="${i===0?"akt":""}">${m}</span>`).join("")}</div>`:"";
+  const navOben=nav.nav==="oben"?`<div class="a-nav" style="flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid rgba(0,0,0,.08)">${menue.map((m,i)=>`<span class="${i===0?"akt":""}">${m}</span>`).join("")}</div>`:"";
+  const navUnten=nav.nav==="unten"?`<div class="a-unten">${["Start","Kalender","Mannschaft","Chat","Mehr"].map(m=>`<span>${m}</span>`).join("")}</div>`:"";
+  return `<div class="dev" style="${vars};max-width:${g};grid-template-rows:auto ${nav.nav==="oben"?"auto ":""}1fr ${nav.nav==="unten"?"auto":""}">
+    <div class="a-kopf">${kopfInhalt}</div>${navOben}
+    <div style="display:flex;min-height:0">${navLinks}<div class="a-inhalt"><h3>Guten Abend, Gerhard</h3>
+    <div class="a-karten"><div class="a-karte">Nächstes Training<b>Fr 17:30</b>U11 · Platz 2</div><div class="a-karte">Zusagen<b>14 / 18</b>Samstag Heimspiel</div><div class="a-karte">Offene Beiträge<b>3</b>Oktober</div><div class="a-karte">Nachrichten<b>5</b>neu</div></div></div></div>${navUnten}</div>`;
+}
+function vorschau(){ $("#buehne").innerHTML=appHtml(E(),vBreite)+($("#status").hidden?"":'<div class="bau">Testseite wird gebaut … (im echten Programm 1–3 Minuten)</div>'); }
+function alles(){schema();eig();einstellungen();vorschau();}
+document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll("[data-tab]").forEach(x=>x.setAttribute("aria-selected",x===b));
+  ["ziehen","einst","chat"].forEach(t=>$("#t-"+t).hidden=t!==b.dataset.tab);}));
+document.querySelectorAll("[data-g]").forEach(b=>b.addEventListener("click",()=>{geraet=b.dataset.g;document.querySelectorAll("[data-g]").forEach(x=>x.classList.toggle("an",x===b));
+  vBreite=geraet==="pc"?"100%":geraet==="tablet"?"820px":"390px";document.querySelectorAll("[data-v]").forEach(x=>x.classList.toggle("an",x.dataset.v===vBreite));alles();}));
+document.querySelectorAll("[data-v]").forEach(b=>b.addEventListener("click",()=>{vBreite=b.dataset.v;document.querySelectorAll("[data-v]").forEach(x=>x.classList.toggle("an",x===b));vorschau();}));
+$("#entwurf").addEventListener("change",e=>{akt=e.target.value;alles();});
+$("#neuEntwurf").addEventListener("click",()=>{const k="n"+Date.now();ENTWURF[k]=structuredClone(E());const o=document.createElement("option");o.value=k;o.textContent=`${String.fromCharCode(65+$("#entwurf").options.length)} · Kopie`;$("#entwurf").appendChild(o);$("#entwurf").value=k;akt=k;alles();});
+$("#vergl").addEventListener("click",()=>{const v=$("#buehne");const keys=Object.keys(ENTWURF).slice(0,2);v.innerHTML=`<div class="vergleich" style="width:100%">${keys.map(k=>`<div><div style="font-weight:600;margin-bottom:4px">Entwurf ${$("#entwurf").querySelector(`option[value="${k}"]`).textContent}</div>${appHtml(ENTWURF[k],"100%")}</div>`).join("")}</div>`;});
+$("#senden").addEventListener("click",()=>{$("#status").hidden=false;$("#url").textContent="feature-cs-21-grunddesign.trainer-to-go.pages.dev/home · Auftrag #21";vorschau();setTimeout(()=>{$("#status").textContent="Auftrag #21 · Testseite fertig – Freigabe in der Zentrale";$("#status").hidden=false;$("#buehne").querySelector(".bau")?.remove();},3000);});
+$("#chatform").addEventListener("submit",e=>{e.preventDefault();const t=$("#chattext").value.trim();if(!t)return;
+  $("#chat").insertAdjacentHTML("beforeend",`<div class="msg ich">${t.replace(/</g,"&lt;")}</div>`);$("#chattext").value="";
+  if(/tablet/i.test(t)&&/einklapp/i.test(t))E().tablet.navKlapp=true;if(/logo/i.test(t)&&/mitte/i.test(t)){E().pc.logo="mitte";E().tablet.logo="mitte";}if(/oben/i.test(t)&&/men/i.test(t))E().pc.nav="oben";
+  setTimeout(()=>{$("#chat").insertAdjacentHTML("beforeend",`<div class="msg">Eingestellt im Entwurf ${$("#entwurf").selectedOptions[0].textContent.split(" · ")[0]}. Sieh dir Ziehen/Einstellungen an; „Als Auftrag senden“, wenn es passt.</div>`);alles();},400);});
+alles();
+</script>
