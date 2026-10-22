@@ -648,12 +648,12 @@ function LiveVorschau({ projekt, a, toast, onBaustein, baustein }) {
         <button type="button" title="Neu laden" onClick={neuLaden} className="p-2 rounded-lg border border-slate-200 dark:border-slate-800"><RefreshCw className="w-4 h-4" /></button>
         <button type="button" aria-pressed={zeigen} disabled={!helfer} title={helfer ? "Auf ein Element in der Vorschau klicken und kommentieren" : "Die Testseite hat den Vorschau-Helfer noch nicht (kommt mit dem nächsten Stand der App)"} onClick={() => setZeigen(!zeigen)}
           className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-semibold disabled:opacity-50 ${zeigen ? "border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300" : "border-slate-200 dark:border-slate-800"}`}><MousePointerClick className="w-4 h-4" />Zeigen & kommentieren</button>
-        <button type="button" title="Im eigenen Fenster öffnen" onClick={() => oeffneExtern(url)} className="p-2 rounded-lg border border-slate-200 dark:border-slate-800"><ExternalLink className="w-4 h-4" /></button>
+        <button type="button" title="Im eigenen Fenster öffnen" onClick={() => oeffneExtern(`${url}${projekt?.vorschau_pfad || "/"}`)} className="p-2 rounded-lg border border-slate-200 dark:border-slate-800"><ExternalLink className="w-4 h-4" /></button>
       </div>
       {neu && <button type="button" onClick={neuLaden} className="m-2 self-end inline-flex items-center gap-2 rounded-full bg-emerald-700 text-white px-3 py-1.5 text-sm font-semibold"><RefreshCw className="w-4 h-4" />Neuer Stand da · neu laden</button>}
       {baustein && <div className="mx-2 mt-2 text-xs rounded-lg border border-orange-400 bg-orange-50 dark:bg-orange-950/40 px-2.5 py-1.5 flex items-center gap-2">Gewählt: <b>{baustein.name}</b>{baustein.seite && <span className="text-slate-500">· {baustein.seite}</span>}<button type="button" className="ml-auto" onClick={() => onBaustein(null)} title="Auswahl aufheben"><X className="w-3.5 h-3.5" /></button></div>}
       <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-2 overflow-auto grid justify-items-center">
-        <iframe key={schluessel} ref={frame} title="Live-Vorschau" src={`${url}/?cs=1`} className="h-full min-h-[440px] bg-white rounded-lg border border-slate-200 dark:border-slate-800" style={{ width: breite, maxWidth: "100%" }}
+        <iframe key={schluessel} ref={frame} title="Live-Vorschau" src={`${url}${projekt?.vorschau_pfad || "/"}?cs=1`} className="h-full min-h-[440px] bg-white rounded-lg border border-slate-200 dark:border-slate-800" style={{ width: breite, maxWidth: "100%" }}
           onLoad={() => { setHelfer(false); frame.current?.contentWindow?.postMessage({ cs: "hallo" }, herkunft); }} />
       </div>
     </div>);
