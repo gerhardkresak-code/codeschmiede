@@ -48,3 +48,10 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - **2026-10-22 16:45 – Alles landet beim Feature:** Was Gerhard im Gruppen-Chat oder im Claude-Chat zu einem Feature sagt, erscheint beim Feature
   in der Codeschmiede (Herkunft „aus Gruppe“ / „aus Claude-Chat“). Claude trägt Anweisungen aus dem Claude-Chat als Nachricht
   (`kanal = 'claude-chat'`) beim passenden Auftrag bzw. als neuen Auftrag ein und meldet dort, was gebaut wurde.
+- **2026-10-22 22:26 – Codeschmiede als Produkt:** Die Codeschmiede wird verkauft. Ein Käufer betreibt alles selbst
+  (eigene Datenbank, eigenes GitHub und Cloudflare; Windows und Mac). Ein Einrichtungs-Assistent mit Prüfung erscheint beim ersten Start
+  und ist jederzeit erreichbar, dazu eine Ampel in der Statusleiste. Claude wahlweise mit Abo oder API-Schlüssel (Hinweis auf die Bedingungen
+  von Anthropic). Konzept: `docs/KONZEPT-PRODUKT.md`.
+- **2026-10-22 22:31 – Features aus dem Gespräch und Bezüge:** Features legt Gerhard selbst oder Claude aus dem Gespräch an, Claude
+  immer erst nach Ja/Nein. Beide lassen sich löschen. `@Feature` (oder erkannt + Rückfrage) setzt eine Referenz im selben Projekt. Ändert
+  sich die Referenz, fragt Claude, ob nachgezogen werden soll. Konzept: `docs/KONZEPT-FEATURE-BEZUEGE.md`.
