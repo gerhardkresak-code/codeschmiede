@@ -79,6 +79,13 @@ function useWerkstattDaten(me, projektId) {
       if (gids.length) {
         f = (await supabase.from("ws_features").select("*").in("gruppe_id", gids).order("id")).data || [];
         a = (await supabase.from("ws_auftraege").select("*").in("gruppe_id", gids).neq("stand", "abgebrochen").order("id")).data || [];
+        // Offene Rückfrage = Auftrag in „frage“ und die letzte Nachricht kommt von der Werkstatt (noch nicht beantwortet)
+        const fragIds = a.filter((x) => x.stand === "frage").map((x) => x.id);
+        if (fragIds.length) {
+          const n = (await supabase.from("ws_nachrichten").select("auftrag_id, von, id").in("auftrag_id", fragIds).order("id", { ascending: false })).data || [];
+          const letzte = {}; n.forEach((m) => { if (!(m.auftrag_id in letzte)) letzte[m.auftrag_id] = m; });
+          a = a.map((x) => (x.stand === "frage" ? { ...x, offeneFrage: !letzte[x.id]?.von } : x));
+        }
       }
     }
     setD({ projekte: pj.data || [], mitglieder: mg.data || [], bereiche: b, gruppen: g, features: f, auftraege: a, benutzer: u.data || [], rechte: r.data || [],
@@ -89,7 +96,7 @@ function useWerkstattDaten(me, projektId) {
     if (!me) return undefined;
     setLaden(true); holen();
     const ch = supabase.channel("cs-zentrale-" + (projektId || "start"));
-    ["ws_projekte", "ws_projekt_mitglieder", "ws_gruppen", "ws_features", "ws_auftraege", "ws_benutzer", "ws_rechte", "ws_werkstatt_pcs", "ws_verbrauch", "ws_einstellungen", "ws_abo_limits"].forEach((t) =>
+    ["ws_projekte", "ws_projekt_mitglieder", "ws_gruppen", "ws_features", "ws_auftraege", "ws_nachrichten", "ws_benutzer", "ws_rechte", "ws_werkstatt_pcs", "ws_verbrauch", "ws_einstellungen", "ws_abo_limits"].forEach((t) =>
       ch.on("postgres_changes", { event: "*", schema: "public", table: t }, () => { clearTimeout(timer.current); timer.current = setTimeout(holen, 300); }));
     ch.subscribe();
     return () => { supabase.removeChannel(ch); clearTimeout(timer.current); };
@@ -151,7 +158,7 @@ export default function App() {
   if (!ich) return <EinladungAnnehmen sitzung={sitzung} onFertig={ladeIch} />;
 
   const nav = [["zentrale", "Auftrags-Zentrale", Inbox], ["vorschau", "Live-Vorschau", Eye], ["_", "Ablauf"], ["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen], ["_", "Dokumentation"], ["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["_", "Verwaltung"], ["benutzer", "Benutzer & Rechte", KeyRound], ["verbrauch", "Verbrauch & Limits", Gauge]];
-  const offen = daten.auftraege.filter((a) => a.stand === "frage").length;
+  const offen = daten.auftraege.filter((a) => a.offeneFrage).length;
   const aktuell = daten.projekte.find((p) => p.id === daten.projektId);
   const PIcon = WS_ICON[aktuell?.symbol] || Layers;
 
@@ -251,14 +258,14 @@ function Zentrale({ d, ich, toast }) {
   const aufFor = (gid, fid) => d.auftraege.filter((a) => a.gruppe_id === gid && (fid === undefined || a.feature_id === fid));
   const [station, setStation] = useState(null);
   const [platz, setPlatz] = useState(null); // Feature-Arbeitsplatz (Doppelklick)
-  const fragen = d.auftraege.filter((a) => a.stand === "frage").length;
+  const fragen = d.auftraege.filter((a) => a.offeneFrage).length;
   if (!g) return <div className={`${card} p-8 text-slate-500`}>Noch keine Gruppen angelegt.</div>;
   const platzF = platz ? d.features.find((x) => x.id === platz) : null;
   const platzG = platzF ? d.gruppen.find((x) => x.id === platzF.gruppe_id) : null;
   return (
     <>
       <div className="flex flex-wrap gap-1.5 mb-4" role="toolbar" aria-label="Weg eines Auftrags">
-        {fragen > 0 && <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200 px-3 py-1.5 text-sm font-semibold"><i className="w-2 h-2 rounded-full bg-amber-500" />{fragen} Rückfrage{fragen > 1 ? "n" : ""} an dich</span>}
+        {fragen > 0 && <button type="button" aria-pressed={station === "frage"} onClick={() => { setStation(station === "frage" ? null : "frage"); setPlatz(null); }} className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200 ${station === "frage" ? "ring-2 ring-amber-500" : ""}`}><i className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />{fragen} Rückfrage{fragen > 1 ? "n" : ""} an dich</button>}
         {STEPS.map(([s, t], i) => {
           const z = d.auftraege.filter((a) => STEP_IDX[a.stand] === i && (s !== "wissen" || a.stand === "wissen") && a.stand !== "frage").length;
           const handeln = ["freigabe", "zusammen"].includes(s) && z > 0;
@@ -269,7 +276,7 @@ function Zentrale({ d, ich, toast }) {
             </button>);
         })}
       </div>
-      {station ? <StationsUebersicht station={station} d={d} darf={darf} toast={toast} onSchliessen={() => setStation(null)} onOeffne={(fid) => { setStation(null); setPlatz(fid); }} />
+      {station ? <StationsUebersicht station={station} d={d} darf={darf} toast={toast} onSchliessen={() => setStation(null)} onOeffne={(fid) => { setStation(null); setPlatz(fid); }} onGruppe={(gid) => { setStation(null); setSel({ g: gid, f: null }); }} />
       : platzF ? <FeatureArbeitsplatz f={platzF} g={platzG} d={d} ich={ich} darf={darf} toast={toast} onZurueck={() => setPlatz(null)} onLoeschen={() => setDlg({ art: "loeschen", f: platzF })} />
       : <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_400px] items-start">
         <nav className={`${card} overflow-hidden`} aria-label="Bereiche und Gruppen">
@@ -277,7 +284,7 @@ function Zentrale({ d, ich, toast }) {
             <div key={b.id} className="border-t first:border-t-0 border-slate-200 dark:border-slate-800 pb-1">
               <div className="font-display font-semibold text-xs uppercase tracking-widest text-slate-500 px-4 pt-3 pb-1">{b.name}</div>
               {d.gruppen.filter((x) => x.bereich_id === b.id).map((x) => {
-                const Icon = WS_ICON[x.symbol] || Layers; const js = aufFor(x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const fr = js.filter((a) => a.stand === "frage").length;
+                const Icon = WS_ICON[x.symbol] || Layers; const js = aufFor(x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const fr = js.filter((a) => a.offeneFrage).length;
                 return (
                   <button key={x.id} type="button" aria-current={g.id === x.id} onClick={() => setSel({ g: x.id, f: null })}
                     className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-[15px] ${g.id === x.id ? "bg-emerald-50 dark:bg-emerald-950/40 font-semibold shadow-[inset_3px_0_0_#047857]" : "hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20"}`}>
@@ -308,13 +315,13 @@ function Zentrale({ d, ich, toast }) {
           <div className="grid gap-3 p-4 grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
             {feats.length === 0 && <div className="text-sm text-slate-500 col-span-full py-6 text-center">In dieser Gruppe gibt es noch keine Features.</div>}
             {feats.map((x) => {
-              const js = aufFor(g.id, x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const neu = x.neu_bis && new Date(x.neu_bis) > new Date();
+              const js = aufFor(g.id, x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const neu = x.neu_bis && new Date(x.neu_bis) > new Date(); const frageHier = js.some((a) => a.offeneFrage);
               return (
                 <button key={x.id} type="button" aria-current={sel.f === x.id} onClick={() => setSel({ g: g.id, f: x.id })} onDoubleClick={() => setPlatz(x.id)}
                   onKeyDown={(e) => { if (e.key === "Enter" && sel.f === x.id) { e.preventDefault(); setPlatz(x.id); } }} title="Einmal klicken: Kurzinfo · doppelt klicken: Arbeitsplatz mit Chat und Live-Vorschau"
-                  className={`text-left flex flex-col gap-2 rounded-xl border p-3.5 min-w-0 ${x.ausgeblendet ? "opacity-55" : ""} ${sel.f === x.id ? "border-emerald-600 ring-1 ring-emerald-600 bg-emerald-50 dark:bg-emerald-950/40" : "border-slate-200 dark:border-slate-800 hover:border-emerald-600"} ${arbeitet ? "shadow-[inset_0_3px_0_#2563eb]" : ""}`}>
+                  className={`text-left flex flex-col gap-2 rounded-xl border p-3.5 min-w-0 ${frageHier ? "ring-1 ring-amber-400" : ""} ${x.ausgeblendet ? "opacity-55" : ""} ${sel.f === x.id ? "border-emerald-600 ring-1 ring-emerald-600 bg-emerald-50 dark:bg-emerald-950/40" : "border-slate-200 dark:border-slate-800 hover:border-emerald-600"} ${arbeitet ? "shadow-[inset_0_3px_0_#2563eb]" : ""}`}>
                   <div className="flex items-start justify-between gap-2"><h3 className="font-display font-semibold text-[17px] leading-tight">{x.name}</h3>
-                    <span className="flex gap-1 flex-wrap justify-end">{x.ausgeblendet && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md border border-dashed border-slate-400 text-slate-500">Ausgeblendet</span>}{neu && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-700 text-white">Neu</span>}<Badge stand={x.stand} /></span></div>
+                    <span className="flex gap-1 flex-wrap justify-end">{frageHier && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200">Rückfrage an dich</span>}{x.ausgeblendet && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md border border-dashed border-slate-400 text-slate-500">Ausgeblendet</span>}{neu && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-700 text-white">Neu</span>}<Badge stand={x.stand} /></span></div>
                   {x.beschreibung && <p className="text-[13px] text-slate-500 line-clamp-2">{x.beschreibung}</p>}
                   <div className="mt-auto text-xs text-slate-500 flex items-center gap-1.5">
                     {arbeitet ? <span className="inline-flex items-center gap-1.5 font-semibold text-blue-600"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />Hier wird gerade gearbeitet</span>
@@ -368,6 +375,8 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
   const freigeben = async (a) => { const { error } = await supabase.rpc("ws_freigeben", { p_auftrag: a.id }); toast(error ? fehler(error) : `Auftrag #${a.id} freigegeben – Sicherheitsprüfung startet`); };
   const zusammen = async (a) => { const { error } = await supabase.rpc("ws_zusammenfuehren", { p_auftrag: a.id }); toast(error ? fehler(error) : `Auftrag #${a.id}: Zusammenführen gestartet`); };
   const beantwortet = (m) => m.art === "frage" && nachrichten.some((x) => x.auftrag_id === m.auftrag_id && x.id > m.id && x.von);
+  const [alleFragen, setAlleFragen] = useState(false);
+  const zahlBeantwortet = nachrichten.filter(beantwortet).length;
   const erlauben = async (e, s) => { const { error } = await supabase.rpc("ws_erlaubnis_entscheiden", { p_id: e.id, p_status: s }); toast(error ? fehler(error) : s === "abgelehnt" ? "Abgelehnt" : "Erlaubt"); };
   const offeneErl = erlaubnisse.filter((e) => e.status === "offen");
 
@@ -392,12 +401,13 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 min-h-[220px]" aria-live="polite">
+          {zahlBeantwortet > 0 && <button type="button" onClick={() => setAlleFragen(!alleFragen)} className="self-center text-xs text-slate-500 underline underline-offset-2">{alleFragen ? "Beantwortete Rückfragen ausblenden" : `${zahlBeantwortet} beantwortete Rückfrage${zahlBeantwortet > 1 ? "n" : ""} (abgeschlossen) anzeigen`}</button>}
           {auftraege.length === 0 && <div className="text-sm text-slate-500 text-center py-8">{f ? `Noch kein Auftrag zu „${f.name}“.` : `Noch kein Auftrag für ${g.name}.`} Beschreibe unten, was sich ändern soll.<br /><span className="text-xs">Bitte keine Daten von Vereinsmitgliedern hineinschreiben.</span></div>}
           {auftraege.map((a) => (
             <React.Fragment key={a.id}>
               <div className="self-center text-xs text-slate-500 text-center flex items-center gap-2">Auftrag #{a.id}: {a.titel}{ABGESCHLOSSEN.includes(a.stand) && <span className="inline-flex items-center gap-1 font-semibold text-green-700 dark:text-green-400"><CircleCheck className="w-3.5 h-3.5" />abgeschlossen</span>}</div>
               <Schritte a={a} />
-              {nachrichten.filter((m) => m.auftrag_id === a.id).map((m) => {
+              {nachrichten.filter((m) => m.auftrag_id === a.id && (alleFragen || !beantwortet(m))).map((m) => {
                 const zu = beantwortet(m);
                 return (
                 <div key={m.id} className={`max-w-[88%] rounded-xl px-3 py-2 text-sm ${m.von ? "self-end bg-emerald-50 dark:bg-emerald-950/50" : m.art === "frage" && !zu ? "self-start bg-amber-50 border border-amber-400 dark:bg-amber-950/40" : m.art === "system" ? "self-center bg-transparent text-slate-500 text-xs" : "self-start bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"} ${zu ? "opacity-75" : ""}`}>
@@ -504,6 +514,7 @@ function FeatureKurzinfo({ f, g, d, onOeffnen, onGruppe }) {
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
         <dt className="text-slate-500">Stand</dt><dd><Badge stand={f.stand} /></dd>
         <dt className="text-slate-500">Letzter Auftrag</dt><dd>{letzter ? `#${letzter.id} · ${STEPS[STEP_IDX[letzter.stand]]?.[1] || letzter.stand}${letzter.stand === "nacharbeit" ? " (Nacharbeit)" : ""}` : "–"}</dd>
+        {js.some((a) => a.offeneFrage) && <><dt className="text-amber-700 font-semibold">Rückfrage</dt><dd className="text-amber-700 font-semibold">wartet auf deine Antwort – Öffnen</dd></>}
         <dt className="text-slate-500">Gerade</dt><dd>{laufend ? <span className="inline-flex items-center gap-1.5 text-blue-600 font-semibold"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />Werkstatt {pc?.name || ""} arbeitet</span> : "niemand"}</dd>
         <dt className="text-slate-500">Aufträge</dt><dd>{js.length} ({js.filter((a) => ABGESCHLOSSEN.includes(a.stand)).length} abgeschlossen)</dd>
       </dl>
@@ -514,9 +525,9 @@ function FeatureKurzinfo({ f, g, d, onOeffnen, onGruppe }) {
 }
 
 // ---------------- Stationen-Übersicht (Klick auf eine Station oben) ----------------
-function StationsUebersicht({ station, d, darf, toast, onSchliessen, onOeffne }) {
-  const name = STEPS.find((s) => s[0] === station)?.[1];
-  const liste = d.auftraege.filter((a) => (station === "laeuft" ? ["laeuft", "nacharbeit"].includes(a.stand) : a.stand === station));
+function StationsUebersicht({ station, d, darf, toast, onSchliessen, onOeffne, onGruppe }) {
+  const name = station === "frage" ? "Rückfragen an dich" : STEPS.find((s) => s[0] === station)?.[1];
+  const liste = d.auftraege.filter((a) => (station === "frage" ? a.offeneFrage : station === "laeuft" ? ["laeuft", "nacharbeit"].includes(a.stand) : a.stand === station));
   const [busy, setBusy] = useState(false);
   const gruppeVon = (a) => d.gruppen.find((x) => x.id === a.gruppe_id);
   const kann = (a) => darf(gruppeVon(a)?.bereich_id, "freigeben");
@@ -530,7 +541,7 @@ function StationsUebersicht({ station, d, darf, toast, onSchliessen, onOeffne })
   };
   const proFeature = {};
   liste.forEach((a) => { const k = a.feature_id || `gruppe:${a.gruppe_id}`; (proFeature[k] = proFeature[k] || []).push(a); });
-  const erklaerung = { wartet: "Warten auf einen freien Werkstatt-PC.", laeuft: "Die Werkstatt arbeitet (inkl. Nacharbeit nach roter Prüfung).", freigabe: "Bauen & Tests am PC sind gelaufen – deine Freigabe startet die Sicherheitsprüfung.", sicherheit: "Läuft automatisch auf dem Admin-PC.", zusammen: "Sicherheitsprüfung grün – Zusammenführen startet die Prüfung des ganzen Features, danach live.", feature: "Testfassung mit neuestem Stand wird geprüft, bei Grün automatisch live.", wissen: "Live geschaltet und in der Wissensdatenbank." }[station];
+  const erklaerung = { frage: "Die Werkstatt wartet auf deine Antwort – Arbeitsplatz öffnen und antworten.", wartet: "Warten auf einen freien Werkstatt-PC.", laeuft: "Die Werkstatt arbeitet (inkl. Nacharbeit nach roter Prüfung).", freigabe: "Bauen & Tests am PC sind gelaufen – deine Freigabe startet die Sicherheitsprüfung.", sicherheit: "Läuft automatisch auf dem Admin-PC.", zusammen: "Sicherheitsprüfung grün – Zusammenführen startet die Prüfung des ganzen Features, danach live.", feature: "Testfassung mit neuestem Stand wird geprüft, bei Grün automatisch live.", wissen: "Live geschaltet und in der Wissensdatenbank." }[station];
   return (
     <section className={`${card} p-4 flex flex-col gap-4`} aria-label={`Station ${name}`}>
       <div className="flex flex-wrap items-center gap-3">
@@ -547,7 +558,8 @@ function StationsUebersicht({ station, d, darf, toast, onSchliessen, onOeffne })
           <div key={k} className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-950 flex-wrap">
               <span className="text-xs text-slate-500">{g?.name}</span>{f && <><span className="font-mono text-xs text-slate-400">{f.id}</span><b className="font-display">{f.name}</b></>}{!f && <b className="font-display">ganze Gruppe</b>}
-              <span className="flex-1" />{f && <button type="button" className={`${ghost} h-8 text-xs`} onClick={() => onOeffne(f.id)}><Layers className="w-3.5 h-3.5" />Arbeitsplatz</button>}
+              <span className="flex-1" />{f ? <button type="button" className={`${ghost} h-8 text-xs`} onClick={() => onOeffne(f.id)}><Layers className="w-3.5 h-3.5" />Arbeitsplatz</button>
+                : onGruppe && <button type="button" className={`${ghost} h-8 text-xs`} onClick={() => onGruppe(as[0].gruppe_id)}><MessageSquare className="w-3.5 h-3.5" />Gruppen-Chat</button>}
             </div>
             {as.map((a) => {
               const p = a.pruefung?.[station];
