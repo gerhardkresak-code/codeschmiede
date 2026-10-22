@@ -1,6 +1,16 @@
 // Wertet die letzte Antwort der Werkstatt aus: Rückfrage, Pull Request oder sonstiges Ende.
 export function werteAus(text) {
-  const s = String(text || "").trim();
+  const roh = String(text || "").trim();
+  const fm = roh.match(/^\s*FEATURE:\s*(F-\d{1,4})\s*$/im);
+  const feature = fm ? fm[1].toUpperCase() : null;
+  const s = roh.replace(/^\s*FEATURE:.*$/gim, "").trim();
+  const r = werteAusOhneFeature(s);
+  return feature ? { ...r, feature } : r;
+}
+
+function werteAusOhneFeature(s) {
+  const antwort = s.match(/^\s*ANTWORT:\s*([\s\S]+)$/im);
+  if (antwort && !/ERGEBNIS-PR:/i.test(s)) return { art: "antwort", text: antwort[1].trim() };
   const frage = s.match(/^\s*R(?:Ü|UE)CKFRAGE:\s*([\s\S]+)$/im);
   if (frage) return { art: "frage", text: frage[1].trim() };
   const pr = s.match(/ERGEBNIS-PR:\s*#?(\d+)\s+(\S+)/i);
