@@ -108,3 +108,20 @@ test("Nachprüfung 0.8.0: Anmeldedateien nur mit erwartetem Aufbau, Mac ohne Sch
   const { freieArgumente } = await import("../lib/ki.mjs");
   assert.deepEqual(freieArgumente({ argumente: ["--p={prompt}"] }, "Hi", ""), { args: ["--p=Hi"], stdin: null });
 });
+
+test("Abo-Limits: Claude unifiedWindows und ChatGPT rateLimits (Gerhard 23:38)", async () => {
+  const { findeAboLimits, codexFenster } = await import("../lib/abo.mjs");
+  const c = findeAboLimits({ type: "rate_limit_event", rate_limit_info: { status: "allowed", rateLimitType: "five_hour", resetsAt: 1792800000, unifiedWindows: { five_hour: { utilization: 0.62, resetsAt: 1792800000 }, seven_day: { utilization: 0.24, resetsAt: 1793200000 } } } });
+  assert.equal(c.fuenf_std_prozent, 62); assert.equal(c.woche_prozent, 24);
+  const x = codexFenster({ result: { rateLimits: { primary: { usedPercent: 41, windowDurationMins: 300, resetsAt: 1792800000 }, secondary: { usedPercent: 12.5, windowDurationMins: 10080, resetsAt: 1793200000 } } } });
+  assert.deepEqual(x.map((f) => [f.art, f.prozent]), [["5std", 41], ["woche", 12.5]]);
+  const y = codexFenster({ payload: { type: "token_count", rate_limits: { primary: { used_percent: 7, window_minutes: 300, resets_in_seconds: 600 } } } });
+  assert.equal(y[0].art, "5std"); assert.ok(Date.parse(y[0].reset) > Date.now());
+});
+
+test("Abo-Limits: absurde Zeitwerte stürzen nicht ab (Prüfung 0.8.7)", async () => {
+  const { codexFenster, findeAboLimits } = await import("../lib/abo.mjs");
+  const x = codexFenster({ rateLimits: { primary: { usedPercent: 5, windowDurationMins: 300, resetsAt: 1e20 } } });
+  assert.equal(x[0].reset, null);
+  assert.equal(findeAboLimits({ unifiedWindows: { five_hour: { utilization: 0.5, resetsAt: "abc" } } }).fuenf_std_reset, null);
+});

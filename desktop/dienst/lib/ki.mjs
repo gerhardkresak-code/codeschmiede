@@ -4,11 +4,12 @@
 // Andere Anbieter laufen in einem LEEREN Ordner, schreibgeschützt, mit minimaler Umgebung; alles Nötige (Doku, Dateiliste) steht im Text.
 // Restrisiko (dokumentiert): Ihre eingebauten Werkzeuge könnten technisch trotzdem Dateien des PCs lesen. Darum: Standard nur Claude,
 // Prüfungen und Bauen nur Claude, Antworten mit verdächtigem Inhalt werden verworfen. Nächster Schritt: Betriebssystem-Sandbox.
-import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { spawn, execFile } from "node:child_process";
+import { existsSync, readFileSync, realpathSync, readdirSync, statSync, openSync, readSync, closeSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { sandboxLauf, sandboxArt, sicherLesen } from "./sandbox.mjs";
 import { kopiereProjekt, vergleiche } from "./ersatz.mjs";
+import { codexFenster } from "./abo.mjs";
 export { sandboxArt };
 import path from "node:path";
 import os from "node:os";
@@ -246,21 +247,96 @@ export function anmeldungStarten(anbieter) {
 // Definition kommt vom Admin (ws_ki_anbieter): Programmname + feste Argumente mit {prompt}/{modell}. Läuft nur, wenn die Person den
 // Anbieter auf IHREM PC zugelassen hat; immer im leeren Ordner, minimale Umgebung, ohne Shell; verdächtige Antworten werden verworfen.
 const PROGRAMM = /^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$/;
-export function findeFreiesProgramm(programm) {
-  if (!PROGRAMM.test(programm || "")) return null;
-  const ordner = (process.env.PATH || "").split(path.delimiter).filter((o) => o && path.isAbsolute(o));   // nur absolute Ordner (kein „.“)
-  if (process.platform !== "win32") { const f = ordner.map((o) => path.join(o, programm)).find((p) => existsSync(p)); return f ? { befehl: f, vorne: [] } : null; }
-  for (const o of ordner) { const exe = path.join(o, `${programm}.exe`); if (existsSync(exe)) return { befehl: exe, vorne: [] }; }
-  // npm-Kurzbefehl (programm.cmd): darin steht das Skript – direkt mit Node starten (ohne Shell)
-  for (const o of ordner) {
-    const cmd = path.join(o, `${programm}.cmd`);
-    if (!existsSync(cmd)) continue;
-    try {
-      const m = /"%~?dp0%?\\([^"%]+\.(?:js|mjs|cjs))"/i.exec(readFileSync(cmd, "utf8"));
-      if (m) { const js = path.join(o, m[1]); if (existsSync(js)) return { befehl: process.execPath, vorne: [js] }; }
-    } catch { /* weiter */ }
+// Ordner, in die die offiziellen Installer legen. Ein laufender Dienst sieht einen neu gesetzten PATH erst nach dem Neustart –
+// darum werden diese Ordner und (Windows) der aktuelle PATH aus der Registry immer mit durchsucht (Gerhard 22:50/23:03 „alle koppeln“).
+// Allgemeine Ordner (npm, uv/pipx, scoop, Homebrew) gelten für alle; Hersteller-Ordner NUR für das Programm dieses Herstellers
+// (Prüfung 0.8.7 B1: sonst fände z. B. ein Anbieter „agent“ Groks agent.exe statt Cursor).
+export function installOrdner({ env = process.env, home = os.homedir(), plattform = process.platform } = {}) {
+  return plattform === "win32"
+    ? [path.join(env.APPDATA || path.join(home, "AppData", "Roaming"), "npm"), path.join(home, ".local", "bin"), path.join(home, "scoop", "shims")]
+    : [path.join(home, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
+}
+export function herstellerOrdner(name, { env = process.env, home = os.homedir(), plattform = process.platform } = {}) {
+  const lokal = env.LOCALAPPDATA || path.join(home, "AppData", "Local");
+  const tabelle = plattform === "win32"
+    ? { grok: [path.join(home, ".grok", "bin")], "cursor-agent": [path.join(lokal, "cursor-agent")], agy: [path.join(lokal, "Antigravity"), path.join(lokal, "Programs", "Antigravity CLI")] }
+    : { grok: [path.join(home, ".grok", "bin")], agy: [path.join(home, ".antigravity", "bin")] };
+  return Object.hasOwn(tabelle, name) ? tabelle[name] : [];
+}
+// Windows: PATH so, wie ihn ein NEU gestartetes Programm sähe (Benutzer + System aus der Registry). reg.exe mit festem Pfad und festen
+// Argumenten, ohne Shell, im Hintergrund (blockiert den Dienst nicht, Prüfung B5); bis zur ersten Antwort gilt der alte Wert.
+let regPfad = { zeit: 0, ordner: [], laeuft: false };
+const laufwerk = (o) => /^[A-Za-z]:\\/.test(o);
+function regLies(reg, schluessel) {
+  return new Promise((fertig) => execFile(reg, ["query", schluessel, "/v", "Path"], { encoding: "utf8", timeout: 3000, windowsHide: true }, (f, aus) => {
+    const m = !f && /\sPath\s+REG_(?:EXPAND_)?SZ\s+(.*)/i.exec(aus || ""); fertig(m ? m[1].trim() : "");
+  }));
+}
+export function registryPfad({ env = process.env, plattform = process.platform } = {}) {
+  if (plattform !== "win32") return [];
+  if (Date.now() - regPfad.zeit > 60000 && !regPfad.laeuft) {
+    regPfad.laeuft = true;
+    const reg = path.join(env.SystemRoot || env.SYSTEMROOT || "C:\\Windows", "System32", "reg.exe");
+    Promise.all([regLies(reg, "HKCU\\Environment"), regLies(reg, "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment")]).then((teile) => {
+      // ungelöste %VAR% → ganzer Eintrag verworfen; nur Laufwerkspfade (kein UNC/Netzlaufwerk, Prüfung B4)
+      const ordner = teile.join(";").split(";").map((o) => o.replace(/%([A-Za-z0-9_()]+)%/g, (x, n) => env[n] ?? env[n.toUpperCase()] ?? x)).filter((o) => o && !o.includes("%") && !o.includes('"') && laufwerk(o));
+      regPfad = { zeit: Date.now(), ordner, laeuft: false };
+    }, () => { regPfad = { ...regPfad, zeit: Date.now(), laeuft: false }; });
+  }
+  return regPfad.ordner;
+}
+/** Suchordner: PATH, Registry-PATH (Windows), allgemeine Installer-Ordner, Hersteller-Ordner des Namens – nur absolute, keine Netzpfade. */
+export function suchOrdner({ env = process.env, home = os.homedir(), plattform = process.platform, mitRegistry = true, name = "" } = {}) {
+  const trenner = plattform === "win32" ? ";" : ":";
+  const ok = plattform === "win32" ? laufwerk : (o) => o.startsWith("/");
+  return [...new Set([...(env.PATH || env.Path || "").split(trenner), ...(mitRegistry ? registryPfad({ env, plattform }) : []), ...installOrdner({ env, home, plattform }), ...herstellerOrdner(name, { env, home, plattform })])].filter((o) => o && ok(o));
+}
+// Programme, die nie als KI-Anbieter laufen dürfen – Spiegel der Datenbank-Sperrliste (ws_ki_programm_ok) plus Ergänzungen (Prüfung B3).
+// Der Dienst prüft selbst, weil Datenbank-Inhalte als nicht vertrauenswürdig gelten.
+const GESPERRT = /^(sh|bash|zsh|fish|dash|ksh|csh|tcsh|busybox|cmd|command|conhost|powershell|pwsh|wsl|wmic|forfiles|python[w0-9.]*|py[w]?|node[js0-9.]*|deno|bun|bunx|npx|npm|pnpm|pnpx|yarn|tsx|ts-node|uv|uvx|pipx|perl[0-9.]*|ruby[0-9.]*|php[0-9.]*|lua[0-9.]*|tclsh[0-9.]*|wish|java|jshell|osascript|open|xdg-open|start|explorer|rundll32|regsvr32|mshta|wscript|cscript|env|sudo|doas|su|nohup|setsid|timeout|time|nice|xargs|find|awk|gawk|mawk|sed|vi|vim|nvim|emacs|nano|less|more|make|curl|wget|ssh|scp|git|gh|claude|codex|gemini|msiexec|rscript|julia|corepack|bitsadmin|certutil|schtasks|reg|regedit|installutil|msbuild)$/i;
+const ZIEL_GESPERRT = /^(sh|bash|zsh|cmd|command|conhost|powershell|pwsh|wsl|wscript|cscript|mshta|rundll32|regsvr32|msiexec|explorer|schtasks|reg|certutil|bitsadmin)$/i;
+export const programmGesperrt = (name) => GESPERRT.test(String(name || "").replace(/\.(exe|cmd|bat|com|ps1)$/i, ""));
+const zielGesperrt = (befehl) => ZIEL_GESPERRT.test(path.win32.basename(String(befehl || "")).replace(/\.(exe|com)$/i, ""));
+const echt = (p) => { try { return realpathSync.native(p); } catch { return null; } };
+/**
+ * Windows-Startdatei (.cmd von npm oder einem Installer) auflösen, OHNE sie über cmd.exe zu starten:
+ * nur „%dp0%\…\x.exe“, „%dp0%\…\x.js“ oder „"…\node.exe" "…\x.js"“ – das Ziel muss (nach Auflösen von Verknüpfungen) im Ordner
+ * der Startdatei liegen, existieren und darf keine Shell sein; kein „:“ im Ziel (Datenströme, Prüfung B2).
+ */
+export function startdateiAufloesen(cmdPfad, { lies = (p) => readFileSync(p, "utf8"), gibt = existsSync, realpath = echt } = {}) {
+  let t; try { t = lies(cmdPfad); } catch { return null; }
+  if (typeof t !== "string" || t.length > 8000) return null;
+  const o = path.win32.dirname(cmdPfad);
+  const oEcht = (realpath(o) || o).toLowerCase();
+  const drin = (p) => {
+    const n = path.win32.normalize(p);
+    if (!n.toLowerCase().startsWith(o.toLowerCase() + "\\") || !gibt(n)) return null;
+    const r = realpath(n); if (!r || !r.toLowerCase().startsWith(oEcht + "\\")) return null;
+    return n;
+  };
+  const pfade = [...t.matchAll(/"%~?dp0%?\\?([^"%<>|&:]+\.(exe|js|mjs|cjs))"/gi)].map((m) => ({ p: drin(path.win32.join(o, m[1])), art: m[2].toLowerCase() })).filter((x) => x.p);
+  const js = pfade.find((x) => x.art !== "exe"); const exe = pfade.find((x) => x.art === "exe");
+  let r = null;
+  if (js) r = exe && /\\node\.exe$/i.test(exe.p) ? { befehl: exe.p, vorne: [js.p] } : { befehl: process.execPath, vorne: [js.p] };
+  else if (exe && !/\\node\.exe$/i.test(exe.p)) r = { befehl: exe.p, vorne: [] };
+  return r && !zielGesperrt(r.befehl) ? r : null;
+}
+/** Programm finden (für eingebaute Katalog-Einträge und eigene Anbieter). */
+export function findeIn(namen, { env = process.env, home = os.homedir(), plattform = process.platform, gibt = existsSync, lies, realpath, mitRegistry = true } = {}) {
+  for (const name of namen) {
+    if (!PROGRAMM.test(name || "")) continue;
+    for (const o of suchOrdner({ env, home, plattform, mitRegistry, name })) {
+      if (plattform !== "win32") { const p = path.join(o, name); if (gibt(p)) return { befehl: p, vorne: [], pfad: p }; continue; }
+      const exe = path.win32.join(o, `${name}.exe`); if (gibt(exe)) return { befehl: exe, vorne: [], pfad: exe };
+      const cmd = path.win32.join(o, `${name}.cmd`);
+      if (gibt(cmd)) { const r = startdateiAufloesen(cmd, { gibt, ...(lies ? { lies } : {}), ...(realpath ? { realpath } : {}) }); if (r) return { ...r, pfad: cmd }; }
+    }
   }
   return null;
+}
+export function findeFreiesProgramm(programm) {
+  if (programmGesperrt(programm)) return null;
+  return findeIn([programm]);
 }
 export function freieArgumente(def, prompt, modell) {
   const m = modell && MODELL.test(modell) ? modell : "";
@@ -299,4 +375,69 @@ export async function freiPruefen(def, zugelassen = false) {
     return { gekoppelt: true, version: v || null, hinweis: def.anmelden ? `Gefunden. Falls nötig anmelden: ${def.anmelden}` : "Gefunden" };
   } catch { return { gekoppelt: true, version: null, hinweis: "Gefunden (Version unbekannt)" }; }
   finally { await rm(tmp, { recursive: true, force: true }).catch(() => {}); }
+}
+
+// ---------- Abo-Limits von ChatGPT (Codex) – Gerhard 2026-10-23 23:38 „für jede KI die Limits“ ----------
+// 1. Offizieller Weg: „codex app-server“ (JSON-RPC über stdin/stdout), Methode account/rateLimits/read – nur lesen, ohne Shell,
+//    minimale Umgebung, nach spätestens 20 Sekunden beendet. 2. Rückfall: letzte Zeile „rate_limits“ aus ~/.codex/sessions (nur Zahlen).
+export function codexLimits({ home = os.homedir() } = {}) {
+  const prog = findeProgramm("chatgpt");
+  const ausDatei = () => codexLimitsAusSitzungen(home);
+  if (!prog) return Promise.resolve(ausDatei());
+  return new Promise((fertig) => {
+    let erledigt = false; let puffer = "";
+    const gruppe = process.platform !== "win32";
+    const kind = spawn(prog.befehl, [...prog.vorne, "app-server"], { cwd: os.tmpdir(), env: minimaleUmgebung(), shell: false, windowsHide: true, detached: gruppe, stdio: ["pipe", "pipe", "ignore"] });
+    // Ganzen Prozessbaum beenden: unter Windows startet „node codex.js“ das eigentliche Programm als Kind (Prüfung L2)
+    const beenden = () => {
+      try { kind.stdin.end(); } catch { /* zu */ }
+      if (!kind.pid) return;
+      if (gruppe) { try { process.kill(-kind.pid, "SIGKILL"); } catch { /* weg */ } return; }
+      const taskkill = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "taskkill.exe");
+      execFile(taskkill, ["/pid", String(kind.pid), "/T", "/F"], { windowsHide: true }, () => {});
+    };
+    const ende = (w) => {
+      if (erledigt) return; erledigt = true; clearTimeout(t); beenden();
+      let r = w; if (!r) { try { r = ausDatei(); } catch { r = null; } }
+      fertig(r || null);
+    };
+    const t = setTimeout(() => ende(null), 20000);
+    kind.on("error", () => ende(null)); kind.on("exit", () => ende(null));
+    kind.stdin.on("error", () => {});
+    const schreib = (o) => { try { kind.stdin.write(JSON.stringify(o) + "\n"); } catch { /* zu */ } };
+    kind.stdout.on("data", (d) => {
+      if (erledigt) return;
+      puffer += d.toString("utf8"); if (puffer.length > 2e6) return ende(null);
+      let i; while ((i = puffer.indexOf("\n")) >= 0) {
+        const z = puffer.slice(0, i).trim(); puffer = puffer.slice(i + 1);
+        if (!z.startsWith("{")) continue;
+        let m; try { m = JSON.parse(z); } catch { continue; }
+        if (m.id === 0) { schreib({ jsonrpc: "2.0", method: "initialized" }); schreib({ jsonrpc: "2.0", id: 1, method: "account/rateLimits/read", params: {} }); }
+        if (m.id === 1) { let r = null; try { r = m.result ? codexFenster(m.result) : null; } catch { r = null; } return ende(r); }
+      }
+    });
+    schreib({ jsonrpc: "2.0", id: 0, method: "initialize", params: { clientInfo: { name: "codeschmiede", title: "Codeschmiede", version: "0.8.7" } } });
+  });
+}
+export function codexLimitsAusSitzungen(home = os.homedir()) {
+  try {
+    const basis = path.join(home, ".codex", "sessions");
+    // neueste Datei suchen (Jahr/Monat/Tag), höchstens 3 Ebenen, nur normale Dateien (keine Verknüpfungen)
+    let ordner = basis;
+    for (let i = 0; i < 3; i++) { const u = readdirSync(ordner, { withFileTypes: true }).filter((e) => e.isDirectory() && /^\d+$/.test(e.name)).map((e) => e.name).sort(); if (!u.length) break; ordner = path.join(ordner, u[u.length - 1]); }
+    const dateien = readdirSync(ordner, { withFileTypes: true }).filter((e) => e.isFile() && /\.jsonl$/.test(e.name)).map((e) => path.join(ordner, e.name)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+    if (!dateien.length) return null;
+    // nur das Ende der Datei lesen (höchstens 1 MB) – Prompts und Code davor kommen gar nicht erst in den Speicher (Prüfung L4)
+    const st = statSync(dateien[0]); const laenge = Math.min(st.size, 1024 * 1024);
+    const fd = openSync(dateien[0], "r"); const buf = Buffer.alloc(laenge);
+    try { readSync(fd, buf, 0, laenge, st.size - laenge); } finally { closeSync(fd); }
+    for (const z of buf.toString("utf8").split("\n").reverse()) {
+      if (!z.includes("rate_limits")) continue;
+      // Bezug für „resets_in_seconds“: Zeitpunkt der Zeile, sonst Änderungszeit der Datei (Prüfung L6)
+      let m; try { m = JSON.parse(z); } catch { continue; }
+      const t = Date.parse(m?.timestamp || ""); const bezug = Number.isFinite(t) ? t : st.mtimeMs;
+      const r = codexFenster(m, 0, bezug); if (r) return { fenster: r, stand: new Date(bezug).toISOString() };
+    }
+  } catch { /* keine Sitzungen */ }
+  return null;
 }

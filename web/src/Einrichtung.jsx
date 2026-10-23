@@ -44,7 +44,7 @@ function EinKlick({ k, titel, onLos, onBestaetigt, konto }) {
     <div className="flex flex-col gap-1.5">
       {laeuft && <div role="status" className="text-xs flex items-center gap-1.5 text-blue-700 dark:text-blue-300"><Loader2 className="w-3.5 h-3.5 animate-spin" />{k.hinweis || "Wird eingerichtet …"}</div>}
       {k?.einricht_code && laeuft && <div className="rounded-lg border border-amber-500 bg-amber-50 dark:bg-amber-950/40 p-2 text-xs">Code auf der Anmeldeseite eingeben: <b className="font-mono text-base tracking-widest select-all">{k.einricht_code}</b></div>}
-      {k?.schritt === "fehler" && <div className="text-xs text-red-700 dark:text-red-300">{k.hinweis}</div>}
+      {k?.schritt === "fehler" && <div className="text-xs text-red-700 dark:text-red-300">{k.hinweis}{k.schritt_zeit && <span className="text-slate-500"> · Stand {new Date(k.schritt_zeit).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" })} – „{titel}“ versucht es neu</span>}</div>}
       <div className="flex flex-wrap gap-2">
         {konto && <a className={ghost} href={konto} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-4 h-4" />Konto anlegen</a>}
         {k?.schritt === "bestaetigen" ? <button type="button" className={btn} onClick={onBestaetigt}><Check className="w-4 h-4" />Ich bin angemeldet</button>

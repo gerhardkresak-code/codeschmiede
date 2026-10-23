@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Table2, Shapes, ListTree, ExternalLink, Plus, Loader2, Send, Calendar, Users, Trophy, Bell, ShieldCheck, Settings, Download, Check, CircleAlert, CircleCheck, Stamp, Upload, RefreshCw, ArrowRight } from "lucide-react";
 import { supabase } from "./supabase";
 import { Logo, LogoZeichen, ZEICHEN, marke as markeAus } from "./Logo";
@@ -7,6 +7,8 @@ import { Logo, LogoZeichen, ZEICHEN, marke as markeAus } from "./Logo";
 // 2026-10-23 10:34 (Tabellen-Varianten, Zuweisung je Tabelle über eine Liste, ein Icon-Stil für alle, Chat beim Anlegen), 15:53 („fertig machen“).
 // Alle Werte laufen wie das Grunddesign: Entwurf → speichern → als Auftrag senden → Freigabe → Prüfungen → live.
 
+// Umdesign-Entwurf erst bei Bedarf laden (enthält alle Lucide-Symbole für die Auswahl)
+const Umdesign = lazy(() => import("./Umdesign"));
 const card = "rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900";
 const btn = "inline-flex items-center justify-center gap-2 h-9 px-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-display font-bold tracking-wide transition text-sm";
 const ghost = "inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50";
@@ -72,6 +74,8 @@ function TabellenMuster({ v, f, name }) {
 export function BausteineModus({ w, aendere, bearbeitbar, projekt, d, ich, toast, dunkel, Testseite, breite, onChat }) {
   const verz = useVerzeichnis(projekt.id);
   const [mitte, setMitte] = useState("vorschau"); const [vari, setVari] = useState("klar"); const [q, setQ] = useState(""); const [neu, setNeu] = useState(null);
+  const [umdesign, setUmdesign] = useState(null);   // { art: "symbol"|"baustein", name } – Rechtsklick in Galerie oder Verzeichnis
+  const kannUmdesign = bearbeitbar;
   const f = w.farben[dunkel ? "dunkel" : "hell"]; const dis = !bearbeitbar;
   const t = w.tabellen; const v = t[vari];
   const wahl = (pfad, opts, wert) => <select value={String(wert)} disabled={dis} onChange={(e) => { const x = e.target.value; aendere(pfad, x === "true" ? true : x === "false" ? false : x); }} className={`${input} w-36`}>{opts.map(([a, b]) => <option key={a} value={String(a)}>{b}</option>)}</select>;
@@ -113,21 +117,27 @@ export function BausteineModus({ w, aendere, bearbeitbar, projekt, d, ich, toast
           {[["vorschau", "Vorschau", Table2], ["galerie", "Galerie (Testseite)", ExternalLink], ["verzeichnis", "Verzeichnis", ListTree]].map(([id, tt, I]) => (
             <button key={id} type="button" role="tab" aria-selected={mitte === id} onClick={() => setMitte(id)} className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-semibold ${mitte === id ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"}`}><I className="w-4 h-4" />{tt}</button>))}
         </div>
-        <div className="p-3 bg-slate-100 dark:bg-slate-950 flex-1 overflow-auto min-h-[520px]">
+        <div className="p-3 bg-slate-100 dark:bg-slate-950 flex-1 overflow-auto min-h-[520px] flex flex-col gap-3">
+          {umdesign && <Suspense fallback={<Loader2 className="w-5 h-5 animate-spin text-emerald-700" />}>
+            <Umdesign key={`${umdesign.art}-${umdesign.name}`} projekt={projekt} d={d} ich={ich} toast={toast} ziel={umdesign} verz={verz} icons={w.icons} onSchliessen={() => setUmdesign(null)} /></Suspense>}
           {mitte === "vorschau" && (
             <div className="flex flex-col gap-4" style={{ background: f.hintergrund, color: f.text, padding: 16, borderRadius: 12 }}>
               <div className="grid gap-4 md:grid-cols-2">{VARIANTEN.map((x) => <div key={x}><div className="text-xs font-semibold mb-1" style={{ color: f.text_leise }}>{x}{t.standard === x ? " · Standard" : ""}{Object.values(t.zuweisung).filter((y) => y === x).length ? ` · ${Object.values(t.zuweisung).filter((y) => y === x).length} zugewiesen` : ""}</div><TabellenMuster v={t[x]} f={f} name={x} /></div>)}</div>
               <div><div className="text-xs font-semibold mb-1" style={{ color: f.text_leise }}>Symbole</div>
                 <div className="flex flex-wrap gap-4">{[Calendar, Users, Trophy, Bell, ShieldCheck, Settings, Download, Check].map((I, i) => <I key={i} className="w-6 h-6" strokeWidth={w.icons.strich} strokeLinejoin={w.icons.ecken === "eckig" ? "miter" : "round"} strokeLinecap={w.icons.ecken === "eckig" ? "square" : "round"} />)}</div></div>
             </div>)}
-          {mitte === "galerie" && <Testseite projekt={{ ...projekt, vorschau_pfad: "/bausteine" }} breite={breite} werte={w} modus={dunkel ? "dunkel" : "hell"} />}
+          {mitte === "galerie" && <>
+            <p className="text-xs text-slate-500">{kannUmdesign ? "Tipp: Rechtsklick auf ein Symbol oder einen Grundbaustein (Verzeichnis unten in der Galerie) öffnet den Umdesign-Entwurf." : "Umdesignen dürfen Admin und Entwickler."}</p>
+            <Testseite projekt={{ ...projekt, vorschau_pfad: "/bausteine" }} breite={breite} werte={w} modus={dunkel ? "dunkel" : "hell"} onUmdesign={kannUmdesign ? setUmdesign : undefined} /></>}
           {mitte === "verzeichnis" && (
             <div className={`${card} overflow-hidden`}>
               <div className="p-2 flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800"><label className="relative flex-1 min-w-[200px]"><Search className="w-4 h-4 absolute left-2.5 top-2 text-slate-400" /><input className={`${input} pl-8`} placeholder="Baustein suchen" value={q} onChange={(e) => setQ(e.target.value)} /></label>
                 <span className="text-xs text-slate-500">{verz?.bausteine ? `${verz.bausteine.length} Bausteine · ${verz.tabellen?.length || 0} Tabellen · Stand ${verz.stand}` : ""}</span></div>
               {!verz ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700 m-4" /> : verz.fehlt ? <p className="p-4 text-sm text-slate-500">Noch kein Baustein-Verzeichnis.</p> : (
                 <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-950"><tr><th className="text-left px-3 py-2">Baustein</th><th className="text-left px-3 py-2">Gruppe</th><th className="text-right px-3 py-2">Verwendet</th><th className="text-left px-3 py-2">Datei</th></tr></thead>
-                  <tbody>{gefiltert.slice(0, 200).map((b) => <tr key={b.id} className="border-t border-slate-100 dark:border-slate-800"><td className="px-3 py-1.5 font-semibold">{b.name}</td><td className="px-3 py-1.5 text-xs">{b.gruppe}</td><td className="px-3 py-1.5 text-right tabular-nums">{b.verwendet}</td><td className="px-3 py-1.5 font-mono text-xs break-all">{b.datei}</td></tr>)}</tbody></table></div>)}
+                  <tbody>{gefiltert.slice(0, 200).map((b) => <tr key={b.id} className={`border-t border-slate-100 dark:border-slate-800 ${b.gruppe === "grund" && kannUmdesign ? "cursor-context-menu hover:bg-emerald-50 dark:hover:bg-emerald-950/40" : ""}`}
+                    {...(b.gruppe === "grund" && kannUmdesign ? { tabIndex: 0, title: "Rechtsklick: Grundbaustein umdesignen", onContextMenu: (e) => { e.preventDefault(); setUmdesign({ art: "baustein", name: b.id }); },
+                      onKeyDown: (e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); setUmdesign({ art: "baustein", name: b.id }); } } } : {})}><td className="px-3 py-1.5 font-semibold">{b.name}</td><td className="px-3 py-1.5 text-xs">{b.gruppe}</td><td className="px-3 py-1.5 text-right tabular-nums">{b.verwendet}</td><td className="px-3 py-1.5 font-mono text-xs break-all">{b.datei}</td></tr>)}</tbody></table></div>)}
             </div>)}
         </div>
       </section>

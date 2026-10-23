@@ -426,19 +426,26 @@ function Geruest({ w, modus, geraet, name, art = "verwaltung", bsp = beispieleFu
     </div>);
 }
 
-function Testseite({ projekt, breite, werte, modus }) {
+function Testseite({ projekt, breite, werte, modus, onUmdesign }) {
   // Etappe 3: Entwurf sofort in der echten Testseite zeigen – die App (vorschauHelfer.js) übernimmt die Werte nur dort, nichts wird gespeichert
   // Nur echte https-Adressen; eine ungültige Adresse darf den Designer nicht abstürzen lassen
-  const url = /^https:\/\/[^/\s]+/i.test(projekt.live_url || "") ? `${projekt.live_url.replace(/\/$/, "")}${projekt.vorschau_pfad || "/"}?cs=1` : null;
+  // Mit „Test & Live“ (Datenbank 0024) zeigt die Testseite die Testfassung (main), sonst die App-Adresse
+  const basis = projekt.live_zweig && /^https:\/\/[^/\s]+/i.test(projekt.test_url || "") ? projekt.test_url : projekt.live_url;
+  const url = /^https:\/\/[^/\s]+/i.test(basis || "") ? `${basis.replace(/\/$/, "")}${projekt.vorschau_pfad || "/"}?cs=1` : null;
   const rahmen = React.useRef(null);
   const [bereit, setBereit] = useState(null);   // null = noch nicht, true = Testseite übernimmt Entwürfe
   const ziel = (() => { try { return url ? new URL(url).origin : null; } catch { return null; } })();
   const senden = useCallback(() => { try { rahmen.current?.contentWindow?.postMessage({ cs: "design", werte, modus }, ziel); } catch { /* egal */ } }, [werte, modus, ziel]);
   useEffect(() => { senden(); }, [senden]);
   useEffect(() => {
-    const h = (e) => { if (e.origin === ziel && e.source === rahmen.current?.contentWindow && e.data?.cs === "design-ok") setBereit(true); };
+    const h = (e) => {
+      if (e.origin !== ziel || e.source !== rahmen.current?.contentWindow || !e.data || typeof e.data !== "object") return;
+      if (e.data.cs === "design-ok") setBereit(true);
+      // Rechtsklick in der Galerie: Symbol bzw. Grundbaustein umdesignen (Datenbank 0027) – nur Art und Name, beides streng geprüft
+      if (e.data.cs === "umdesign" && onUmdesign && ["symbol", "baustein"].includes(e.data.art) && /^[A-Za-z0-9-]{1,60}$/.test(String(e.data.name || ""))) onUmdesign({ art: e.data.art, name: e.data.name });
+    };
     window.addEventListener("message", h); return () => window.removeEventListener("message", h);
-  }, [ziel]);
+  }, [ziel, onUmdesign]);
   if (!url) return <p className="text-sm text-slate-500 p-4">Die App gibt es noch nicht als Testseite – gestalte im „Gerüst“: dort siehst du das Design schon jetzt an einer Muster-App. Sobald die App eine Adresse hat, erscheint sie hier.</p>;
   return (
     <div className="mx-auto" style={{ width: breite, maxWidth: "100%" }}>
@@ -532,7 +539,10 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
   const holen = useCallback(async () => {
     let q = supabase.from("ws_design_chat").select("*").eq("projekt_id", projekt.id).order("id", { ascending: false }).limit(200);
     q = entwurf ? q.eq("entwurf_id", entwurf.id) : q.is("entwurf_id", null);
-    const { data } = await q; setListe((data || []).reverse());
+    const { data } = await q;
+    // Gespräche zum Umdesignen (Rechtsklick in der Galerie) stehen im Umdesign-Entwurf, nicht hier
+    const um = new Set((data || []).filter((m) => !m.frage_id && String(m.text).startsWith("[Umdesign ")).map((m) => m.id));
+    setListe((data || []).filter((m) => !um.has(m.id) && !um.has(m.frage_id)).reverse());
   }, [projekt.id, entwurf]);
   useEffect(() => {
     holen();
