@@ -784,7 +784,7 @@ async function designChat() {
   if (!f) return false;
   melde("status", "Designer-Chat: KI antwortet");
   try {
-    const { data: pj } = await db.from("ws_projekte").select("name, beschreibung").eq("id", f.projekt_id).maybeSingle();
+    const { data: pj } = await db.from("ws_projekte").select("name, beschreibung, app_art").eq("id", f.projekt_id).maybeSingle();
     // Noch gar kein Design (kein Entwurf, nichts live)? Dann plant Claude von Grund auf (Gerhard 2026-10-23 17:49) – gleich wie die Oberfläche
     const { count: designs, error: eD } = await db.from("ws_design_entwuerfe").select("id", { count: "exact", head: true }).eq("projekt_id", f.projekt_id).neq("stand", "verworfen");
     // Verlauf nur aus dem EIGENEN Gespräch (eigene Fragen + Antworten darauf) – Prüfung O2
@@ -793,7 +793,7 @@ async function designChat() {
     const { data: alle } = await q;
     const eigene = new Set((alle || []).filter((m) => !m.frage_id && m.von === cfg.user_id).map((m) => m.id));
     const verlauf = (alle || []).filter((m) => eigene.has(m.id) || eigene.has(m.frage_id)).slice(0, 8);
-    const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, /^\[Marke\]/.test(f.text) ? "bilder" : "design", designPrompt({ projektName: pj?.name || f.projekt_id, projektId: f.projekt_id, wissen: wissenText((await holeWissen(f.projekt_id)).filter((w) => ["ziel", "design", "funktionen"].includes(w.kapitel))), beschreibung: pj?.beschreibung || "", anfang: !eD && !designs, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
+    const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, /^\[Marke\]/.test(f.text) ? "bilder" : "design", designPrompt({ projektName: pj?.name || f.projekt_id, projektId: f.projekt_id, appArt: pj?.app_art || "verwaltung", wissen: wissenText((await holeWissen(f.projekt_id)).filter((w) => ["ziel", "design", "funktionen"].includes(w.kapitel))), beschreibung: pj?.beschreibung || "", anfang: !eD && !designs, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
     const { text, vorschlag } = designAntwort(ohneGeheimnisse(roh));
     const { error: e2 } = await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
     if (e2) throw e2;
