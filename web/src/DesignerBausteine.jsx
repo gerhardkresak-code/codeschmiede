@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Table2, Shapes, ListTree, ExternalLink, Plus, Loader2, Send, Calendar, Users, Trophy, Bell, ShieldCheck, Settings, Download, Check, CircleAlert, CircleCheck, Stamp, Upload, RefreshCw, ArrowRight } from "lucide-react";
 import { supabase } from "./supabase";
 import { Logo, LogoZeichen, ZEICHEN, marke as markeAus } from "./Logo";
@@ -179,12 +179,13 @@ function Eingabe({ wert, muster, onWert, max, ...rest }) {
 // das Logo als bearbeitbares Vektor-Logo nachbauen → mit Klick in den Entwurf → wie jedes Design als Auftrag senden (dann überall in der App).
 const BILD_ARTEN = { "image/png": 1, "image/jpeg": 1, "image/webp": 1, "image/svg+xml": 1 };
 function LogoEinlesen({ projekt, bearbeitbar, toast, onUebernehmen }) {
-  const [liste, setListe] = useState([]); const [busy, setBusy] = useState(false); const [wunsch, setWunsch] = useState({}); const [bilder, setBilder] = useState({});
+  const [liste, setListe] = useState([]); const [busy, setBusy] = useState(false); const [wunsch, setWunsch] = useState({}); const [bilder, setBilder] = useState({}); const geladen = useRef({});
   // Liste ohne Bild (klein); Originalbilder nur einmal je Logo nachladen (Prüfung 0.8.6 O3)
   const holen = async () => {
     const { data } = await supabase.from("ws_marke_vorlagen").select("id, dateiname, stand, ergebnis, hinweis, ki, erstellt").eq("projekt_id", projekt.id).order("id", { ascending: false }).limit(3);
     setListe(data || []);
-    const fehlt = (data || []).map((v) => v.id).filter((id) => !(id in bilder));
+    const fehlt = (data || []).map((v) => v.id).filter((id) => !(id in geladen.current));
+    fehlt.forEach((id) => { geladen.current[id] = true; });
     if (fehlt.length) { const { data: b } = await supabase.from("ws_marke_bilder").select("vorlage_id, bild").in("vorlage_id", fehlt); setBilder((alt) => ({ ...alt, ...Object.fromEntries((b || []).map((x) => [x.vorlage_id, x.bild])) })); }
   };
   useEffect(() => {

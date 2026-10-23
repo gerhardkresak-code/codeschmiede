@@ -85,6 +85,7 @@ create table if not exists public.ws_marke_vorlagen (
   geaendert timestamptz not null default now()
 );
 create index if not exists ws_marke_vorlagen_projekt on public.ws_marke_vorlagen (projekt_id, id desc);
+alter table public.ws_marke_vorlagen drop column if exists bild;   -- falls eine frühe Fassung eingespielt war
 -- Das Bild selbst liegt getrennt (nicht in Realtime, Prüfung 0.8.6 O3) und wird nur bei Bedarf geladen
 create table if not exists public.ws_marke_bilder (
   vorlage_id bigint primary key references public.ws_marke_vorlagen(id) on delete cascade,

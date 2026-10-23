@@ -47,3 +47,21 @@ test("Sperrliste und PR-Text", () => {
   const t = prText("Fixes #12 @gerhard ``` boom");
   assert.ok(!t.includes("#12") && !t.includes("@gerhard") && t.startsWith("```text"));
 });
+
+test("Harte Links und symlinkte Elternordner werden abgelehnt", async () => {
+  const { link } = await import("node:fs/promises");
+  const { t, q, k } = await aufbau();
+  const original = await kopiereProjekt(q, k);
+  const geheim = path.join(t, "geheim.txt"); await writeFile(geheim, "SCHLÜSSEL");
+  await link(geheim, path.join(k, "src", "hart.js"));
+  let a = await vergleiche(q, k, original);
+  assert.equal((await uebernehmen(q, a)).ok, false);
+  await unlink(path.join(k, "src", "hart.js"));
+  // im echten Ordner ist „lib“ eine Verknüpfung nach draußen, Codex legt in der Kopie einen echten Ordner „lib“ an
+  const draussen = path.join(t, "draussen"); await mkdir(draussen); await symlink(draussen, path.join(q, "lib"));
+  await mkdir(path.join(k, "lib")); await writeFile(path.join(k, "lib", "x.js"), "x");
+  a = await vergleiche(q, k, original);
+  assert.equal((await uebernehmen(q, a)).ok, false);
+  assert.ok(!existsSync(path.join(draussen, "x.js")));
+  await rm(t, { recursive: true, force: true });
+});

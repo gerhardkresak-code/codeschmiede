@@ -223,7 +223,9 @@ export async function sandboxLauf({ anbieter, prog, arbeit, env, bauen = false }
     } catch { /* ohne Einstellungen */ }
   }
   if (art === "macos") {
-    const profil = macProfil({ home, frei: [...frei, ...zert], schreibbar: schreib, temp: os.tmpdir(), starten: frei, startenDateien: bauen ? BAU_PROGRAMME : [] });
+    // Beim Bauen nicht ganze Ordner wie /usr/local starten lassen: nur den Codex-Ordner und einzelne Programme (Prüfung 0.8.6 Hinweis)
+    const profil = macProfil({ home, frei: [...frei, ...zert], schreibbar: schreib, temp: os.tmpdir(), starten: bauen ? [progOrdner] : frei,
+      startenDateien: bauen ? [...BAU_PROGRAMME, echt(process.execPath), start.befehl] : [] });
     return { befehl: "/usr/bin/sandbox-exec", vorne: ["-p", profil, start.befehl, ...start.vorne], env: neueEnv, nachher, art };
   }
   const args = bwrapArgs({ frei: [...frei, ...zert], schreibbar: schreib, arbeit, home: kiHome });

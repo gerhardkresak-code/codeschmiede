@@ -1,7 +1,8 @@
 // Ersatz beim Programmieren (Gerhard 2026-10-23 „Nur als Ersatz“, Prüfung 0.8.6 R1/R4/O2):
 // Codex arbeitet NIE im echten Auftragsordner, sondern in einer Kopie ohne .git (in der Sandbox). Danach vergleicht die Werkstatt
 // Datei für Datei selbst (ohne git auf fremden Dateien), prüft die Sperrliste und übernimmt erlaubte Änderungen mit eigenen Dateizugriffen.
-import { lstat, mkdir, readdir, readFile, writeFile, unlink, copyFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, writeFile, unlink, copyFile, realpath } from "node:fs/promises";
+import { sicherLesen } from "./sandbox.mjs";
 import path from "node:path";
 
 const UEBERSPRINGEN = new Set([".git", "node_modules", "dist", "build", ".next", ".vite", "coverage"]);
@@ -41,14 +42,16 @@ export async function kopiereProjekt(quelle, ziel) {
   return liste;
 }
 
-/** Was hat Codex in der Kopie geändert? Die Kopie ist fremd: nur lstat/readFile, nie einem Symlink folgen. */
+/** Was hat Codex in der Kopie geändert? Die Kopie ist fremd: Verknüpfungen und harte Links gelten als verbotene Änderung. */
 export async function vergleiche(quelle, kopie, original) {
   const symlinks = [];
   const jetzt = await dateien(kopie, { symlinks });
   const vorher = new Set(original);
   const geaendert = [];
   for (const r of jetzt) {
-    const neu = await readFile(path.join(kopie, ...r.split("/")));
+    // Fremde Kopie: nur sicher lesen (kein Symlink, kein harter Link, Ordnerkette vor/nach dem Öffnen gleich – Prüfung 0.8.6 N1)
+    const neu = await sicherLesen(path.join(kopie, ...r.split("/")), kopie, 20 * 1024 * 1024);
+    if (!neu) { symlinks.push(r); continue; }
     if (vorher.has(r)) { const alt = await readFile(path.join(quelle, ...r.split("/"))); if (!alt.equals(neu)) geaendert.push({ r, neu }); }
     else geaendert.push({ r, neu });
   }
@@ -58,19 +61,33 @@ export async function vergleiche(quelle, kopie, original) {
 }
 
 /** Erlaubte Änderungen in den echten Auftragsordner schreiben. Gesperrtes → Fehler (nichts wird übernommen). */
+// Jede Stufe vom Auftragsordner bis zum Ziel muss ein echter Ordner sein (kein Symlink) – sonst ginge Schreiben/Löschen nach draußen (Prüfung 0.8.6 N2)
+async function zielSicher(quelle, r) {
+  const basis = path.resolve(quelle); let o = basis;
+  const teile = r.split("/");
+  for (const t of teile.slice(0, -1)) {
+    o = path.join(o, t);
+    try { const l = await lstat(o); if (l.isSymbolicLink() || !l.isDirectory()) return null; } catch { break; }   // fehlt: wird neu angelegt
+  }
+  const z = path.join(basis, ...teile);
+  if (!z.startsWith(basis + path.sep)) return null;
+  try { const l = await lstat(z); if (l.isSymbolicLink() || !l.isFile()) return null; } catch { /* neu */ }
+  return z;
+}
 export async function uebernehmen(quelle, { geaendert, geloescht, symlinks }) {
   const alle = [...geaendert.map((x) => x.r), ...geloescht, ...symlinks];
   const verboten = [...new Set(alle.filter((r) => gesperrt(r) || r.split("/").some((t) => t === ".." || t === "")))];
   if (symlinks.length) verboten.push(...symlinks.map((r) => `${r} (Verknüpfung)`));
   if (verboten.length) return { ok: false, verboten };
+  for (const r of [...geaendert.map((x) => x.r), ...geloescht]) if (!(await zielSicher(quelle, r))) return { ok: false, verboten: [`${r} (Ordner ist eine Verknüpfung)`] };
+  const echt = await realpath(quelle);
   for (const { r, neu } of geaendert) {
-    const z = path.join(quelle, ...r.split("/"));
-    if (!z.startsWith(path.resolve(quelle) + path.sep)) return { ok: false, verboten: [r] };
+    const z = await zielSicher(quelle, r); if (!z) return { ok: false, verboten: [r] };
     await mkdir(path.dirname(z), { recursive: true });
-    try { const l = await lstat(z); if (l.isSymbolicLink() || !l.isFile()) return { ok: false, verboten: [r] }; } catch { /* neu */ }
+    if (!(await realpath(path.dirname(z))).startsWith(echt)) return { ok: false, verboten: [r] };
     await writeFile(z, neu);
   }
-  for (const r of geloescht) await unlink(path.join(quelle, ...r.split("/"))).catch(() => {});
+  for (const r of geloescht) { const z = await zielSicher(quelle, r); if (z) await unlink(z).catch(() => {}); }
   return { ok: true, anzahl: geaendert.length + geloescht.length, dateien: alle };
 }
 
