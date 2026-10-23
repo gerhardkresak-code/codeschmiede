@@ -816,11 +816,11 @@ async function einrichtenStarten(anbieter, aktion) {
     .finally(() => { einrichtenLaeuft.delete(anbieter); delete einrichtenStand[anbieter]; kopplungZuletzt = 0; });
 }
 let kopplungZuletzt = 0;
-let abgleichLaeuft = false;   // kein zweiter Abgleich, solange einer läuft (Prüfung B5)
+let kopplungLaeuft = false;   // kein zweiter Kopplungs-Abgleich, solange einer läuft (Prüfung B5)
 async function kopplungAbgleich(zwingend = false) {
-  if (!pcId || abgleichLaeuft) return;
-  abgleichLaeuft = true;
-  try { await kopplungAbgleichEinmal(zwingend); } finally { abgleichLaeuft = false; }
+  if (!pcId || kopplungLaeuft) return;
+  kopplungLaeuft = true;
+  try { await kopplungAbgleichEinmal(zwingend); } finally { kopplungLaeuft = false; }
 }
 async function kopplungAbgleichEinmal(zwingend) {
   let auftraege = [];
