@@ -7,6 +7,7 @@ import { supabase } from "./supabase";
 import { BausteineModus, MarkeModus, BAUSTEIN_BASIS, bausteinWerteBereinigen } from "./DesignerBausteine";
 import { MARKE_BASIS } from "./Logo";
 import { Markdown } from "./Markdown";
+import { APP_ARTEN, ART_BASIS, ArtEinstellungen, ArtMuster, beispieleBereinigen, beispieleFuer, menueSymbol } from "./DesignerArten";
 
 // App-Designer · Etappe 1 (Entwurf 0.9, freigegeben von Gerhard 2026-10-22 22:40) · Etappe 2: Chat mit Claude + erweiterte Prüfungen (2026-10-23)
 // Ein Grunddesign je Projekt (nicht je Rolle). Ändern → Entwurf speichern (jede Fassung bleibt) → vergleichen → als Auftrag senden.
@@ -35,6 +36,8 @@ export const BASIS = {
   // Etappe 4/5: Tabellen-Varianten, Icon-Stil, Marke (gleich wie src/lib/design/grunddesign.js in Trainer to go)
   ...JSON.parse(JSON.stringify(BAUSTEIN_BASIS)),
   marke: { ...MARKE_BASIS },
+  // App-Arten (Datenbank 0022): Spiel-Bausteine, Webseite, Shop – feste Auswahlwerte
+  ...JSON.parse(JSON.stringify(ART_BASIS)),
 };
 
 const FARBEN = [["primaer", "Hauptfarbe"], ["primaer_text", "Text auf Hauptfarbe"], ["hintergrund", "Hintergrund"], ["flaeche", "Flächen (Karten)"],
@@ -51,7 +54,11 @@ const mische = (b, w) => { const r = tief(b); const geh = (z, q) => { if (!q || 
     if (z[k] && typeof z[k] === "object") geh(z[k], v);
     else if (typeof v === typeof z[k] && (typeof z[k] !== "string" || !z[k].startsWith("#") || /^#[0-9a-f]{6}$/i.test(v))) z[k] = v; }); }; geh(r, w);
   // Zuweisung je Tabelle und Marke: nur aus w übernehmen, wenn w sie enthält (Vorschläge sind Teilwerte)
-  return bausteinWerteBereinigen(r, w, b); };
+  const e = bausteinWerteBereinigen(r, w, b);
+  // Beispiele der Vorschau (nur Text): aus w, sonst aus b übernehmen – Vorschläge sind Teilwerte
+  const bsp = beispieleBereinigen(w && Object.prototype.hasOwnProperty.call(w, "beispiele") ? w.beispiele : b?.beispiele);
+  if (bsp) e.beispiele = bsp; else delete e.beispiele;
+  return e; };
 const setze = (o, pfad, v) => { const r = tief(o); let z = r; pfad.slice(0, -1).forEach((k) => { z[k] = z[k] || {}; z = z[k]; }); z[pfad[pfad.length - 1]] = v; return r; };
 const flach = (o, p = "") => Object.entries(o || {}).filter(([k]) => !VERBOTEN.has(k)).flatMap(([k, v]) => (v && typeof v === "object" ? flach(v, p + k + ".") : [[p + k, v]]));
 
@@ -193,6 +200,11 @@ export default function Designer({ d, ich, toast }) {
     setAktivId(null); setWerte(gueltig); setGeaendert(false); toast("Entwurf verworfen");
   };
 
+  const art = APP_ARTEN.some(([k]) => k === projekt?.app_art) ? projekt.app_art : "verwaltung";
+  const artSetzen = async (neu) => {
+    const { error } = await supabase.rpc("ws_projekt_app_art", { p_projekt: projekt.id, p_art: neu });
+    if (error) toast(fehler(error)); else { toast(`App-Art: ${APP_ARTEN.find(([k]) => k === neu)?.[1]}`); d.holen?.(); }
+  };
   if (!projekt) return null;
   // Design ist eines der ersten Dinge, die man plant (Gerhard 2026-10-23 17:49): ohne Design-Gruppe richtet sich der Designer selbst ein
   if (!projekt.design_gruppe_id) return <DesignerEinrichten projekt={projekt} d={d} ich={ich} toast={toast} />;
@@ -209,6 +221,9 @@ export default function Designer({ d, ich, toast }) {
             <button key={id} type="button" role="tab" aria-selected={modus === id} onClick={() => setModus(id)}
               className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-semibold ${modus === id ? "bg-white dark:bg-slate-900 shadow-sm text-emerald-800 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300"}`}><I className="w-4 h-4" />{t}</button>))}
         </div>
+        <label className="flex items-center gap-1.5 text-sm text-slate-500" title={APP_ARTEN.find(([k]) => k === art)?.[2]}>App-Art
+          <select id="ds-app-art" value={art} disabled={!darf} onChange={(e) => artSetzen(e.target.value)} className={`${input} w-auto`}>
+            {APP_ARTEN.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
         <span className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1" />
         <label className="sr-only" htmlFor="ds-entwurf">Entwurf</label>
         <select id="ds-entwurf" value={aktivId || ""} onChange={(e) => oeffne(entwuerfe.find((x) => String(x.id) === e.target.value))} className={`${input} w-auto max-w-[260px]`}>
@@ -236,7 +251,8 @@ export default function Designer({ d, ich, toast }) {
         <div className="grid gap-3 grid-cols-[minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_280px] lg:grid-cols-[300px_minmax(0,1fr)]">
           {modus === "bausteine" ? <BausteineModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} projekt={projekt} d={d} ich={ich} toast={toast} dunkel={dunkel} Testseite={Testseite} breite={GERAETE[geraet][0]} onChat={(t) => { setRechts("chat"); setChatText(t); }} />
             : modus === "marke" ? <MarkeModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} projekt={projekt} ich={ich} toast={toast} />
-            : <><Einstellungen w={werte} aendere={aendere} bearbeitbar={bearbeitbar} />
+            : <><Einstellungen w={werte} aendere={aendere} bearbeitbar={bearbeitbar} art={art}
+              onBeispiele={() => { setRechts("chat"); setChatText(`[Beispiele] Passe die Beispiele der Vorschau (${APP_ARTEN.find(([k]) => k === art)?.[1]}) an unser Konzept an: Menüpunkte, Kennzahlen und Beispieltexte.`); }} />
           <section className={`${card} min-w-0 flex flex-col`}>
             <div className="flex flex-wrap items-center gap-2 p-2 border-b border-slate-200 dark:border-slate-800">
               <div role="tablist" aria-label="Ansicht" className="flex gap-1">
@@ -250,9 +266,9 @@ export default function Designer({ d, ich, toast }) {
               </div>
             </div>
             <div className="p-3 bg-slate-100 dark:bg-slate-950 flex-1 overflow-auto min-h-[520px]">
-              {mitte === "geruest" && <Rahmen breite={GERAETE[geraet][0]}><Geruest w={werte} modus={dunkel ? "dunkel" : "hell"} geraet={geraet} name={projekt.name} /></Rahmen>}
+              {mitte === "geruest" && <Rahmen breite={GERAETE[geraet][0]}><Geruest w={werte} modus={dunkel ? "dunkel" : "hell"} geraet={geraet} name={projekt.name} art={art} bsp={beispieleFuer(projekt, art, werte)} /></Rahmen>}
               {mitte === "testseite" && <Testseite projekt={projekt} breite={GERAETE[geraet][0]} werte={werte} modus={dunkel ? "dunkel" : "hell"} />}
-              {mitte === "vergleich" && <Vergleich entwuerfe={entwuerfe} gueltig={gueltig} aktuell={{ name: aktiv ? `${aktiv.name}${geaendert ? " (ungespeichert)" : ""}` : "Im Editor", werte }} modus={dunkel ? "dunkel" : "hell"} name={projekt.name} />}
+              {mitte === "vergleich" && <Vergleich entwuerfe={entwuerfe} gueltig={gueltig} aktuell={{ name: aktiv ? `${aktiv.name}${geaendert ? " (ungespeichert)" : ""}` : "Im Editor", werte }} modus={dunkel ? "dunkel" : "hell"} name={projekt.name} art={art} projekt={projekt} />}
             </div>
           </section></>}
           <aside className={`${card} lg:col-span-2 xl:col-span-1 self-start flex flex-col min-h-[520px] max-h-[calc(100vh-140px)]`}>
@@ -289,14 +305,18 @@ function Abschnitt({ titel, children, offen = true }) {
   return <details open={offen} className="group border-b border-slate-200 dark:border-slate-800 last:border-0 py-2"><summary className="cursor-pointer font-display font-bold text-[15px] list-none flex items-center justify-between">{titel}<span className="text-slate-400 group-open:rotate-90 transition">›</span></summary><div className="space-y-2 pt-2">{children}</div></details>;
 }
 
-function Einstellungen({ w, aendere, bearbeitbar }) {
+function Einstellungen({ w, aendere, bearbeitbar, art = "verwaltung", onBeispiele }) {
   const [m, setM] = useState("hell");
   const dis = !bearbeitbar;
   const zahl = (pfad, min, max, schritt = 1) => { const v = pfad.reduce((o, k) => o[k], w);
     return <span className="flex items-center gap-2"><input type="range" min={min} max={max} step={schritt} value={v} disabled={dis} onChange={(e) => aendere(pfad, Number(e.target.value))} className="w-28 accent-emerald-700" /><span className="w-10 text-right tabular-nums text-xs">{v}</span></span>; };
   const wahl = (pfad, opts) => <select value={String(pfad.reduce((o, k) => o[k], w))} disabled={dis} onChange={(e) => { const v = e.target.value; aendere(pfad, /^\d+$/.test(v) ? Number(v) : v === "true" ? true : v === "false" ? false : v); }} className={`${input} w-40`}>{opts.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>;
+  const farbe = (pfad) => { const v = pfad.reduce((o, k) => o[k], w); return <span className="flex items-center gap-1.5">
+    <input type="color" aria-label={pfad.join(" ")} value={v} disabled={dis} onChange={(e) => aendere(pfad, e.target.value)} className="w-8 h-7 rounded border border-slate-300 dark:border-slate-700 bg-transparent cursor-pointer disabled:cursor-default" />
+    <input aria-label={`${pfad.join(" ")} Farbwert`} value={v} disabled={dis} onChange={(e) => /^#[0-9a-fA-F]{6}$/.test(e.target.value) && aendere(pfad, e.target.value.toLowerCase())} className={`${input} w-[84px] font-mono text-xs`} /></span>; };
   return (
     <section className={`${card} p-3 self-start`} aria-label="Einstellungen Grunddesign">
+      <ArtEinstellungen art={art} w={w} wahl={wahl} farbe={farbe} onBeispiele={onBeispiele} bearbeitbar={bearbeitbar} Abschnitt={Abschnitt} Feld={Feld} />
       <Abschnitt titel="Farben">
         <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-xs font-semibold w-max">
           {[["hell", "Hellmodus"], ["dunkel", "Dunkelmodus"]].map(([id, t]) => <button key={id} type="button" aria-pressed={m === id} onClick={() => setM(id)} className={`px-2.5 py-1 rounded-md ${m === id ? "bg-white dark:bg-slate-900 shadow-sm" : ""}`}>{t}</button>)}
@@ -321,13 +341,13 @@ function Einstellungen({ w, aendere, bearbeitbar }) {
         <Feld label="Grundabstand">{zahl(["form", "abstand"], 8, 28, 2)}</Feld>
         <Feld label="Schatten">{wahl(["form", "schatten"], [["kein", "Kein"], ["leicht", "Leicht"], ["deutlich", "Deutlich"]])}</Feld>
       </Abschnitt>
-      <Abschnitt titel="Menüleiste" offen={false}>
+      {art !== "spiel" && <Abschnitt titel="Menüleiste" offen={false}>
         <Feld label="Position (PC)">{wahl(["menue", "position"], [["links", "Links"], ["oben", "Oben"]])}</Feld>
         <Feld label="Aufklappbar">{wahl(["menue", "aufklappbar"], [[true, "Ja"], [false, "Nein"]].map(([v, t]) => [String(v), t]))}</Feld>
         <Feld label="Breite (px)">{zahl(["menue", "breite"], 200, 320, 8)}</Feld>
         <Feld label="Tablet">{wahl(["menue", "tablet"], [["eingeklappt", "Eingeklappt (nur Symbole)"], ["offen", "Offen"], ["oben", "Oben"]])}</Feld>
         <Feld label="Handy">{wahl(["menue", "handy"], [["unten", "Leiste unten"], ["burger", "Menü-Knopf oben"]])}</Feld>
-      </Abschnitt>
+      </Abschnitt>}
       <Abschnitt titel="Logo-Platz" offen={false}>
         <Feld label="Platz">{wahl(["logo", "platz"], [["menue-oben", "Menü oben"], ["kopf-links", "Kopfzeile links"], ["kopf-mitte", "Kopfzeile Mitte"]])}</Feld>
         <Feld label="Größe (px)">{zahl(["logo", "groesse"], 20, 56, 2)}</Feld>
@@ -341,7 +361,7 @@ function Rahmen({ breite, children }) {
 }
 
 // Gerüst: Menü, Kopfzeile, Kacheln, Liste, Knöpfe – zeigt die Werte sofort (die echte App erst nach „live“)
-function Geruest({ w, modus, geraet, name }) {
+function Geruest({ w, modus, geraet, name, art = "verwaltung", bsp = beispieleFuer(null, "verwaltung", w) }) {
   const f = w.farben[modus]; const s = w.schrift; const fo = w.form;
   const schatten = { kein: "none", leicht: "0 1px 3px rgba(0,0,0,.08)", deutlich: "0 6px 18px rgba(0,0,0,.14)" }[fo.schatten];
   const pos = geraet === "handy" ? w.menue.handy : geraet === "tablet" ? (w.menue.tablet === "oben" ? "oben" : w.menue.tablet) : w.menue.position;
@@ -349,11 +369,13 @@ function Geruest({ w, modus, geraet, name }) {
   const schmal = pos === "eingeklappt";
   const fontH = `"${s.ueberschrift}", system-ui, sans-serif`; const fontT = `"${s.text}", system-ui, sans-serif`;
   const Logo = () => <span style={{ width: w.logo.groesse, height: w.logo.groesse, borderRadius: fo.radius, background: f.primaer, color: f.primaer_text, fontFamily: fontH, fontWeight: 700, fontSize: w.logo.groesse * 0.5 }} className="grid place-items-center shrink-0">{name.slice(0, 1)}</span>;
-  const punkte = [["Start", Home], ["Mannschaft", Users], ["Kalender", Calendar], ["Spiele", Trophy], ["Einstellungen", Settings]];
+  // Menüpunkte aus den Beispielen der App-Art (Trainer to go: bisherige Muster)
+  const punkte = (bsp.menue || []).map((t, i, a) => [t, menueSymbol(i, a.length)]);
+  if (art !== "verwaltung") return <ArtMuster art={art} w={w} f={f} fo={fo} s={s} fontH={fontH} fontT={fontT} bsp={bsp} geraet={geraet} schatten={schatten} />;
   const Menue = ({ quer }) => (
     <nav style={{ background: f.menue, color: f.menue_text, borderColor: f.rand, width: quer ? "auto" : schmal ? 64 : Math.min(w.menue.breite, 280), fontFamily: fontT }} className={quer ? "flex items-center gap-1 px-3 py-2 border-b" : "flex flex-col gap-1 p-2.5 border-r shrink-0"}>
       {!quer && w.logo.platz === "menue-oben" && <div className="flex items-center gap-2 px-1.5 pb-2"><Logo />{!schmal && <b style={{ fontFamily: fontH }}>{name}</b>}</div>}
-      {punkte.map(([t, I], i) => <span key={t} style={i === 0 ? { background: f.primaer + "22", color: f.primaer, borderRadius: fo.radius } : { borderRadius: fo.radius }} className="flex items-center gap-2 px-2 py-1.5 text-[0.9em] font-semibold"><I size={17} />{!schmal && t}</span>)}
+      {punkte.map(([t, I], i) => <span key={i} style={i === 0 ? { background: f.primaer + "22", color: f.primaer, borderRadius: fo.radius } : { borderRadius: fo.radius }} className="flex items-center gap-2 px-2 py-1.5 text-[0.9em] font-semibold"><I size={17} />{!schmal && t}</span>)}
     </nav>);
   const kopfLogo = w.logo.platz !== "menue-oben" || !seitlich;
   return (
@@ -363,33 +385,33 @@ function Geruest({ w, modus, geraet, name }) {
         <header style={{ borderColor: f.rand, padding: `${fo.abstand * 0.6}px ${fo.abstand}px` }} className="flex items-center gap-3 border-b">
           {pos === "burger" && <span style={{ color: f.text }}>☰</span>}
           {kopfLogo && w.logo.platz !== "kopf-mitte" && <Logo />}
-          <h2 style={{ fontFamily: fontH, fontWeight: s.gewicht, fontSize: s.basis * 1.6 }} className={w.logo.platz === "kopf-mitte" ? "flex-1" : ""}>Übersicht</h2>
+          <h2 style={{ fontFamily: fontH, fontWeight: s.gewicht, fontSize: s.basis * 1.6 }} className={w.logo.platz === "kopf-mitte" ? "flex-1" : ""}>{bsp.titel}</h2>
           {kopfLogo && w.logo.platz === "kopf-mitte" && <Logo />}
           <span className="ml-auto flex items-center gap-2" style={{ color: f.text_leise }}><Search size={18} /><Bell size={18} /></span>
         </header>
         {pos === "oben" && <Menue quer />}
         <main style={{ padding: fo.abstand, gap: fo.abstand }} className="grid flex-1 content-start">
           <div style={{ gap: fo.abstand }} className={`grid ${geraet === "handy" ? "grid-cols-2" : "grid-cols-4"}`}>
-            {[["Spieler", "24"], ["Trainings", "3"], ["Anwesenheit", "92 %"], ["Nächstes Spiel", "Sa"]].map(([t, z]) => (
-              <div key={t} style={{ background: f.flaeche, borderColor: f.rand, borderRadius: fo.radius_karte, boxShadow: schatten, padding: fo.abstand * 0.8 }} className="border">
+            {(bsp.kacheln || []).map(([t, z], i) => (
+              <div key={i} style={{ background: f.flaeche, borderColor: f.rand, borderRadius: fo.radius_karte, boxShadow: schatten, padding: fo.abstand * 0.8 }} className="border">
                 <div style={{ color: f.text_leise }} className="text-[0.8em]">{t}</div>
                 <div style={{ fontFamily: fontH, fontWeight: s.gewicht, fontSize: s.basis * 1.7 }}>{z}</div>
               </div>))}
           </div>
           <div style={{ background: f.flaeche, borderColor: f.rand, borderRadius: fo.radius_karte, boxShadow: schatten }} className="border overflow-hidden">
             <div style={{ padding: `${fo.abstand * 0.7}px ${fo.abstand}px`, borderColor: f.rand }} className="flex items-center gap-2 border-b">
-              <b style={{ fontFamily: fontH, fontWeight: s.gewicht, fontSize: s.basis * 1.2 }}>Nächste Termine</b>
-              <span style={{ background: f.primaer, color: f.primaer_text, borderRadius: fo.radius }} className="ml-auto px-3 py-1.5 text-[0.85em] font-semibold">Neuer Termin</span>
+              <b style={{ fontFamily: fontH, fontWeight: s.gewicht, fontSize: s.basis * 1.2 }}>{bsp.liste}</b>
+              <span style={{ background: f.primaer, color: f.primaer_text, borderRadius: fo.radius }} className="ml-auto px-3 py-1.5 text-[0.85em] font-semibold">{bsp.knopf}</span>
               <span style={{ borderColor: f.rand, borderRadius: fo.radius }} className="px-3 py-1.5 text-[0.85em] font-semibold border">Filter</span>
             </div>
-            {[["Training U13", "Di 17:30", f.erfolg, "Zugesagt 14"], ["Heimspiel gegen SV Muster", "Sa 10:00", f.warnung, "Offen 6"], ["Elternabend", "Mo 19:00", f.fehler, "Frist morgen"]].map(([t, z, c, h]) => (
-              <div key={t} style={{ padding: `${fo.abstand * 0.6}px ${fo.abstand}px`, borderColor: f.rand }} className="flex items-center gap-3 border-b last:border-0">
+            {(bsp.zeilen || []).map((r, i) => [r[0] || "", r[1] || "", [f.erfolg, f.warnung, f.fehler][i % 3], r[2] || ""]).map(([t, z, c, h], i) => (
+              <div key={i} style={{ padding: `${fo.abstand * 0.6}px ${fo.abstand}px`, borderColor: f.rand }} className="flex items-center gap-3 border-b last:border-0">
                 <span className="w-2 h-2 rounded-full" style={{ background: c }} /><span className="flex-1 font-semibold">{t}</span><span style={{ color: f.text_leise }} className="text-[0.85em]">{z}</span>
                 {geraet !== "handy" && <span style={{ color: c, borderColor: c, borderRadius: 999 }} className="border px-2 text-[0.75em] font-semibold">{h}</span>}
               </div>))}
           </div>
         </main>
-        {pos === "unten" && <nav style={{ background: f.menue, color: f.menue_text, borderColor: f.rand }} className="flex justify-around border-t py-2">{punkte.slice(0, 4).map(([t, I], i) => <span key={t} style={i === 0 ? { color: f.primaer } : {}} className="flex flex-col items-center text-[0.7em] font-semibold"><I size={18} />{t}</span>)}</nav>}
+        {pos === "unten" && <nav style={{ background: f.menue, color: f.menue_text, borderColor: f.rand }} className="flex justify-around border-t py-2">{punkte.slice(0, 4).map(([t, I], i) => <span key={i} style={i === 0 ? { color: f.primaer } : {}} className="flex flex-col items-center text-[0.7em] font-semibold"><I size={18} />{t}</span>)}</nav>}
       </div>
     </div>);
 }
@@ -416,7 +438,7 @@ function Testseite({ projekt, breite, werte, modus }) {
     </div>);
 }
 
-function Vergleich({ entwuerfe, gueltig, aktuell, modus, name }) {
+function Vergleich({ entwuerfe, gueltig, aktuell, modus, name, art, projekt }) {
   const optionen = [["gueltig", "Gültiges Grunddesign", gueltig], ["aktuell", aktuell.name, aktuell.werte], ...entwuerfe.map((e) => [String(e.id), `${e.name} (${STAND_TXT[e.stand]})`, mische(BASIS, e.werte)])];
   const [a, setA] = useState("gueltig"); const [b, setB] = useState("aktuell");
   const wa = optionen.find((o) => o[0] === a)?.[2] || gueltig; const wb = optionen.find((o) => o[0] === b)?.[2] || aktuell.werte;
@@ -426,7 +448,7 @@ function Vergleich({ entwuerfe, gueltig, aktuell, modus, name }) {
     <div className="space-y-3">
       <div className="flex flex-wrap gap-3"><Wahl v={a} set={setA} l="A" /><Wahl v={b} set={setB} l="B" /></div>
       <div className="grid md:grid-cols-2 gap-3">
-        {[[a, wa], [b, wb]].map(([id, w], i) => <div key={i} className="min-w-0"><p className="text-xs font-bold text-slate-500 mb-1">{i ? "B" : "A"} · {optionen.find((o) => o[0] === id)?.[1]}</p><div className="rounded-xl overflow-hidden ring-1 ring-black/10 pointer-events-none" style={{ zoom: 0.62 }}><Geruest w={w} modus={modus} geraet="pc" name={name} /></div></div>)}
+        {[[a, wa], [b, wb]].map(([id, w], i) => <div key={i} className="min-w-0"><p className="text-xs font-bold text-slate-500 mb-1">{i ? "B" : "A"} · {optionen.find((o) => o[0] === id)?.[1]}</p><div className="rounded-xl overflow-hidden ring-1 ring-black/10 pointer-events-none" style={{ zoom: 0.62 }}><Geruest w={w} modus={modus} geraet="pc" name={name} art={art} bsp={beispieleFuer(projekt, art, w)} /></div></div>)}
       </div>
       <div className={`${card} overflow-hidden`}>
         <div className="px-3 py-2 font-display font-bold border-b border-slate-200 dark:border-slate-800">{diff.length} Unterschied{diff.length === 1 ? "" : "e"}</div>

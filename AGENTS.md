@@ -40,6 +40,8 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-23 18:56 – Designer nach App-Art (Entwurf 1.0 frei):** Vorschau-Muster und Designer-Einstellungen richten sich nach der App-Art
+  des Projekts (Verwaltungs-App, Spiel, Webseite, Shop/Buchung); Beispieltexte kommen aus dem Konzept. Nie Trainer-to-go-Muster für andere Projekte.
 - **2026-10-23 18:38 – GitHub-Repository beim Anlegen:** Neue Projekte bekommen auf Wunsch sofort ein Repository unter `gerhardkresak-code`
   (öffentlich, per Klick privat) mit Grundgerüst aus `gerhardkresak-code/ai-dev-os/project-template`; angelegt nur von der Werkstatt des Admins.
   Ohne Repository laufen Konzept, App-Designer und Chat; Bau-Aufträge warten.
