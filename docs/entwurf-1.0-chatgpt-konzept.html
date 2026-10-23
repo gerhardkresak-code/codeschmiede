@@ -76,24 +76,24 @@ button:focus-visible{outline:3px solid var(--orange);outline-offset:2px}
 
 <div class="wrap">
   <header style="display:flex;flex-direction:column;gap:6px">
-    <span class="etikett">Entwurf 1.0 · Codeschmiede · 23.10.2026</span>
-    <h1>ChatGPT für die Konzeptphase, Claude fürs Bauen</h1>
-    <p class="leise" style="max-width:70ch">Klären, Ausloten und Konzepte laufen über dein ChatGPT-Abo. Steht das Konzept, gibst du es mit einem Klick frei und Claude baut. Im Chat sieht man nicht, wer antwortet. Im Protokoll steht es.</p>
+    <span class="etikett">Entwurf 1.2 · Codeschmiede · 23.10.2026 · Antworten von Gerhard 14:27, 14:34 und 14:49 eingearbeitet</span>
+    <h1>KI-Anbieter: wer was wann übernimmt</h1>
+    <p class="leise" style="max-width:70ch">Beliebig viele Anbieter (Claude, ChatGPT, Gemini und weitere) mit dem jeweils eigenen Abo. Du legst je Aufgabe fest, wer zuerst dran ist und wer übernimmt, wenn ein Limit voll ist. Gebaut wird nur von Claude. Im Chat sieht man nicht, wer antwortet. Im Protokoll steht es.</p>
   </header>
 
   <div class="raster">
     <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
       <section class="karte" aria-labelledby="r-t">
-        <h2 id="r-t">Richtlinie: wer macht was</h2>
+        <h2 id="r-t">Standard-Richtlinie (änderbar unter KI-Anbieter)</h2>
         <div class="tab-wrap"><table>
           <thead><tr><th>Arbeit</th><th>Wer</th><th>Wenn dessen Limit voll ist</th></tr></thead>
           <tbody>
             <tr><td>Fragen, Erklären, Ideen ausloten (Chat-Spalte überall)</td><td><span class="pill p-gpt"><i class="punkt"></i>ChatGPT</span></td><td>Claude</td></tr>
             <tr><td>Konzept erarbeiten, Rückfragen vor dem Bauen, Konzept-Karte</td><td><span class="pill p-gpt"><i class="punkt"></i>ChatGPT</span></td><td>Claude</td></tr>
             <tr><td>Design-Chat im App-Designer (Werte vorschlagen)</td><td><span class="pill p-gpt"><i class="punkt"></i>ChatGPT</span></td><td>Claude</td></tr>
-            <tr><td>Bauen, Programmieren, Datenbank, Nacharbeit</td><td><span class="pill p-cl"><i class="punkt"></i>Claude</span></td><td>warten <span class="leise klein">(siehe Frage 2)</span></td></tr>
+            <tr><td>Bauen, Programmieren, Datenbank, Nacharbeit</td><td><span class="pill p-cl"><i class="punkt"></i>Claude</span></td><td>warten (nie ein anderer Anbieter)</td></tr>
             <tr><td>Rückfragen der Werkstatt während des Bauens</td><td><span class="pill p-cl"><i class="punkt"></i>Claude</span></td><td>warten</td></tr>
-            <tr><td>Unabhängige Sicherheits- und Feature-Prüfung</td><td><span class="pill p-gpt"><i class="punkt"></i>ChatGPT</span> <span class="leise klein">Vorschlag</span></td><td>Claude</td></tr>
+            <tr><td>Unabhängige Sicherheits- und Feature-Prüfung</td><td><span class="pill p-gpt"><i class="punkt"></i>ChatGPT</span></td><td>Claude</td></tr>
           </tbody></table></div>
         <p class="klein leise">ChatGPT liest das Projekt nur (Stand von main, keine Änderungen, keine Befehle) und hält sich an dieselbe <span class="mono">AGENTS.md</span>. Codex liest diese Datei von sich aus.</p>
       </section>
@@ -142,18 +142,59 @@ button:focus-visible{outline:3px solid var(--orange);outline-offset:2px}
     </section>
   </div>
 
+
+  <section class="karte" aria-labelledby="a-t">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:baseline"><h2 id="a-t" style="margin-right:auto">Einstellungen › KI-Anbieter</h2><span class="klein leise">klickbar · Reihenfolge mit den Pfeilen</span></div>
+    <div class="tab-wrap"><table id="anbieter"><thead><tr><th>Anbieter</th><th>Programm</th><th>Anmeldung</th><th>Auf meinem PC</th><th>Limit</th></tr></thead><tbody>
+      <tr><td><b>Claude</b></td><td class="mono">claude (Claude Code)</td><td>Claude-Abo</td><td><span class="pill p-cl"><i class="punkt"></i>gekoppelt</span></td><td>38 %</td></tr>
+      <tr><td><b>ChatGPT</b></td><td class="mono">codex (OpenAI)</td><td>ChatGPT-Abo</td><td><span class="pill p-cl"><i class="punkt"></i>gekoppelt</span></td><td>22 %</td></tr>
+      <tr><td><b>Gemini</b></td><td class="mono">gemini (Google)</td><td>Google-Konto</td><td><span class="pill p-gpt"><i class="punkt"></i>nicht gekoppelt</span> <button type="button" class="ghost" style="height:28px;font-size:12px">Koppeln</button></td><td>–</td></tr>
+    </tbody></table></div>
+    <h3>Zuständigkeiten (gilt fürs ganze Projekt, Admin legt fest)</h3>
+    <div class="tab-wrap"><table id="zust"><thead><tr><th>Aufgabe</th><th>Anbieter und Modell in Reihenfolge (1. zuerst, danach bei vollem Limit oder ohne Kopplung)</th><th>Weitergeben ab</th></tr></thead><tbody></tbody></table></div>
+    <p class="klein leise">Je Aufgabe wählst du Anbieter <b>und Modell</b>, z. B. ein Bild-Modell für Grafiken, ein starkes Modell für Dokumentation. Die Aufgabenliste lässt sich erweitern. „Automatisch“ heißt: nach Aufwand, wie heute bei Claude. Bilder gehen nur mit Anbietern, deren Programm oder Abo Bilder erzeugen kann; das zeigt der Assistent beim Koppeln an. „Bauen“ ist fest auf Claude gestellt und lässt sich nicht ändern. Ist das Claude-Limit voll, wartet der Bau, Konzepte laufen weiter. Wer einen Anbieter nicht gekoppelt hat, bekommt automatisch den nächsten aus der Reihe. Neue Anbieter kommen über den Einrichtungs-Assistenten dazu, sobald es dafür ein offizielles Programm mit Abo-Anmeldung gibt.</p>
+  </section>
   <section class="karte" aria-labelledby="f-t">
-    <h2 id="f-t">Bitte entscheiden</h2>
-    <div class="frage"><b>1. Prüfungen durch ChatGPT?</b> Die unabhängige Sicherheits- und Feature-Prüfung macht dann ein anderes Modell als das, das gebaut hat. Das ist wirklich unabhängig und schont dein Claude-Limit. Vorschlag: ja.</div>
-    <div class="frage"><b>2. Claude-Limit voll: soll ChatGPT (Codex) auch bauen?</b> Codex kann programmieren. Vorschlag: nein, Bauen wartet auf Claude. Konzepte laufen in der Zeit weiter.</div>
-    <div class="frage"><b>3. Wohin mit freigegebenen Konzepten?</b> Vorschlag: als <span class="mono">docs/konzepte/&lt;datum&gt;-&lt;feature&gt;.md</span> im Projekt, mit dem Bau-PR. So stehen sie in Dokumentation und Wissen.</div>
-    <div class="frage"><b>4. Dürfen Mitglieder ohne ChatGPT-Abo den Chat nutzen?</b> Vorschlag: ja, dann antwortet bei ihnen automatisch Claude.</div>
+    <h2 id="f-t">Entschieden (Gerhard 14:27)</h2>
+    <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px">
+      <li><b>Prüfungen:</b> Die unabhängige Sicherheits- und Feature-Prüfung darf ein anderer Anbieter machen (Standard: ChatGPT).</li>
+      <li><b>Bauen:</b> nie durch ChatGPT oder einen anderen Anbieter, nur durch Claude.</li>
+      <li><b>Konzepte:</b> als <span class="mono">docs/konzepte/&lt;datum&gt;-&lt;feature&gt;.md</span> im Projekt, mit dem Bau-PR.</li>
+      <li><b>Ohne ChatGPT-Abo:</b> Der Chat funktioniert trotzdem, dann antwortet der nächste Anbieter aus der Reihe.</li>
+      <li><b>Neu 14:34:</b> beliebig viele Anbieter, Zuständigkeiten frei einstellbar.</li>
+      <li><b>Neu 14:49:</b> je Aufgabe auch das Modell frei wählbar (Bilder, Dokumentation, Texte usw.).</li>
+    </ul>
+    <div class="frage"><b>Noch offen: Wer stellt die Zuständigkeiten ein?</b> Vorschlag: der Admin je Projekt (oben). Jede Person sieht nur, welche Anbieter auf ihrem PC gekoppelt sind.</div>
   </section>
   <p class="klein leise">Datenschutz: Projekttexte gehen auch an OpenAI. Daten von Vereinsmitgliedern oder Kindern liegen nicht in der Codeschmiede. Der ChatGPT-Zugang bleibt im Anmeldespeicher deines PCs und kommt nie in die Datenbank.</p>
 </div>
 
 <script>
 (function(){
+
+  // Zuständigkeiten-Tabelle (Modell)
+  const MODELLE={Claude:['Opus','Sonnet','Haiku','automatisch'],ChatGPT:['GPT (stark)','GPT (schnell)','automatisch'],Gemini:['Pro','Flash','Bild','automatisch']};
+  const AUFG=[
+    ['Chat überall (Fragen, Ausloten)',[['ChatGPT','automatisch'],['Gemini','Flash'],['Claude','Sonnet']],'90 %'],
+    ['Konzept & Rückfragen vor dem Bauen',[['ChatGPT','GPT (stark)'],['Claude','Opus']],'90 %'],
+    ['Design-Chat (Farben, Schrift, Prüfungen)',[['ChatGPT','automatisch'],['Claude','Sonnet']],'90 %'],
+    ['Bilder & Grafiken (Logo, Symbole, Illustrationen)',[['Gemini','Bild'],['ChatGPT','automatisch']],'95 %'],
+    ['Dokumentation & Handbuch',[['Gemini','Pro'],['ChatGPT','GPT (stark)'],['Claude','Sonnet']],'90 %'],
+    ['Texte & Übersetzungen in der App',[['ChatGPT','GPT (schnell)'],['Claude','Haiku']],'90 %'],
+    ['Unabhängige Prüfungen',[['ChatGPT','GPT (stark)'],['Gemini','Pro'],['Claude','Opus']],'95 %'],
+    ['Bauen & Programmieren',[['Claude','automatisch']],'–',true]];
+  const zt=document.querySelector('#zust tbody');
+  function zeichne(){zt.innerHTML='';AUFG.forEach((a,i)=>{const tr=document.createElement('tr');const td1=document.createElement('td');td1.textContent=a[0];const td2=document.createElement('td');
+    const r=document.createElement('div');r.className='reihe';
+    a[1].forEach((e,j)=>{const box=document.createElement('span');box.className='pill '+(e[0]==='Claude'?'p-cl':'p-gpt');box.style.gap='4px';
+      const t=document.createElement('span');t.textContent=(j+1)+'. '+e[0];box.appendChild(t);
+      const sel=document.createElement('select');sel.id='m-'+i+'-'+j;sel.setAttribute('aria-label','Modell '+e[0]);sel.style.cssText='font:inherit;font-size:12px;border:0;background:transparent;color:inherit';
+      MODELLE[e[0]].forEach(m=>{const o=document.createElement('option');o.textContent=m;if(m===e[1])o.selected=true;sel.appendChild(o)});sel.onchange=()=>{e[1]=sel.value};box.appendChild(sel);r.appendChild(box);
+      if(!a[3]&&j<a[1].length-1){const b=document.createElement('button');b.type='button';b.className='ghost';b.style.cssText='height:24px;padding:0 6px;font-size:12px';b.textContent='⇄';b.title='Reihenfolge tauschen';b.setAttribute('aria-label','Reihenfolge tauschen');b.onclick=()=>{[a[1][j],a[1][j+1]]=[a[1][j+1],a[1][j]];zeichne()};r.appendChild(b)}});
+    if(a[3]){const l=document.createElement('span');l.className='klein leise';l.textContent='Anbieter fest, Modell nach Aufwand';r.appendChild(l)}
+    else{const plus=document.createElement('button');plus.type='button';plus.className='ghost';plus.style.cssText='height:24px;padding:0 8px;font-size:12px';plus.textContent='+ Anbieter';plus.onclick=()=>{const frei=Object.keys(MODELLE).filter(n=>!a[1].some(x=>x[0]===n));if(frei[0]){a[1].push([frei[0],'automatisch']);zeichne()}};r.appendChild(plus)}
+    td2.appendChild(r);const td3=document.createElement('td');td3.textContent=a[2];tr.append(td1,td2,td3);zt.appendChild(tr)})}
+  zeichne();
   const chat=document.getElementById('chat'), form=document.getElementById('form'), ein=document.getElementById('eingabe');
   const prot=document.querySelector('#protokoll tbody'), bL=document.getElementById('b-limit');
   let limitVoll=false, schritt=0, uhr=new Date(2026,9,23,14,30);
