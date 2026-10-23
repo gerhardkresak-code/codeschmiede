@@ -24,6 +24,7 @@ import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
 import { pruefErgebnis } from "./lib/pruefung.mjs";
 import { designPrompt, designAntwort } from "./lib/design.mjs";
 import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
+import { repoAnlegen, repoSichtbarkeit } from "./lib/repo.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen } from "./lib/ki.mjs";
 import { rm } from "node:fs/promises";
 
@@ -269,6 +270,12 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
   try {
     const { data: gruppe } = await db.from("ws_gruppen").select("*, ws_bereiche!inner(projekt_id, global)").eq("id", auftrag.gruppe_id).single();
     const { data: projekt } = await db.from("ws_projekte").select("*").eq("id", gruppe.ws_bereiche.projekt_id).single();
+    if (!projekt.repo) {
+      // Noch kein GitHub-Repository (Datenbank 0021): Auftrag wartet als Rückfrage, nichts wird gebaut
+      await nachricht(auftrag.id, "frage", "Für dieses Projekt gibt es noch kein GitHub-Repository. Bitte unter „Projekte verwalten“ auf „GitHub-Repository anlegen“ klicken (oder ein vorhandenes eintragen) und hier dann mit „weiter“ antworten.");
+      await db.from("ws_auftraege").update({ stand: "frage", werkstatt_pc: pcId }).eq("id", auftrag.id);
+      return;
+    }
     const feature = auftrag.feature_id ? (await db.from("ws_features").select("*").eq("id", auftrag.feature_id).single()).data : null;
     const { data: nachrichten } = await db.from("ws_nachrichten").select("*").eq("auftrag_id", auftrag.id).order("id");
     const { data: pgr } = await db.from("ws_gruppen").select("id, ws_bereiche!inner(projekt_id)").eq("ws_bereiche.projekt_id", gruppe.ws_bereiche.projekt_id);
@@ -284,7 +291,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
 
     const prompt = nacharbeit
       ? `Nacharbeit aus der Prüfung (nichts ist live gegangen):\n${nachrichten.slice(-1)[0]?.text || ""}\n\nBehebe die Befunde auf demselben Zweig ${zweig}, prüfe, committe, \`git push origin HEAD\` und antworte wieder mit „ERGEBNIS-PR: #${auftrag.pr_nummer || "<Nummer>"} ${zweig}“ (denselben Pull Request weiterverwenden).`
-      : fortsetzen
+      : fortsetzen && merk.sitzung
       ? `Antwort von Gerhard/Team auf deine Rückfrage:\n${nachrichten.filter((n) => n.von).slice(-1)[0]?.text || ""}\n\nArbeite weiter nach denselben Regeln.`
       : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature), await holeWissen(projekt.id));
 
@@ -894,9 +901,39 @@ async function projektAbgleich() {
   } finally { abgleichLaeuft = false; }
 }
 
+// ---------- GitHub-Repository anlegen / Sichtbarkeit (Datenbank 0021, nur Werkstatt des Admins) ----------
+async function repoArbeit() {
+  const { data, error } = await db.rpc("ws_repo_nehmen", { p_pc: pcId });
+  if (error) { if (!/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", ohneGeheimnisse(error.message)); return false; }
+  const p = data?.[0]; if (!p) return false;
+  melde("status", `GitHub: ${p.aktion === "anlegen" ? "Repository wird angelegt" : "Sichtbarkeit wird umgestellt"} (${p.name})`);
+  const arbeit = await mkdtemp(path.join(os.tmpdir(), "cs-repo-"));
+  try {
+    const keineHooks = path.join(arbeit, "keine-hooks"); await mkdir(keineHooks, { recursive: true });
+    let repo = p.repo;
+    if (p.aktion === "anlegen") {
+      const { data: ich } = await db.from("ws_benutzer").select("name").eq("id", cfg.user_id).maybeSingle();
+      const wissen = await holeWissen(p.projekt_id);
+      const konzeptMd = wissen.length ? `# Konzept – ${p.name}\n\nAus der Codeschmiede (Gruppe „Konzept“), Stand ${new Date().toLocaleDateString("de-AT")}.\n\n${wissenText(wissen, 20000)}\n` : "";
+      ({ repo } = await repoAnlegen({ sh, arbeit, keineHooks, projekt: p, privat: !!p.privat, inhaber: ich?.name || "", konzeptMd, melde: (t) => melde("status", t) }));
+    } else {
+      await repoSichtbarkeit({ sh, repo: p.repo, privat: !!p.privat });
+    }
+    const { error: e2 } = await db.rpc("ws_repo_ergebnis", { p_pc: pcId, p_projekt: p.projekt_id, p_repo: repo });
+    if (e2) throw e2;
+  } catch (e) {
+    const t = kuerzen(ohneGeheimnisse(e?.stderr || e?.message || String(e)), 400);
+    await db.rpc("ws_repo_ergebnis", { p_pc: pcId, p_projekt: p.projekt_id, p_repo: null, p_fehler: `Hat nicht geklappt: ${t}` }).catch(() => {});
+    melde("fehler", `GitHub (${p.name}): ${t}`);
+  } finally { await rm(arbeit, { recursive: true, force: true }).catch(() => {}); }
+  melde("status", "Werkstatt bereit");
+  return true;
+}
+
 // ---------- Schleife ----------
 async function naechsterAuftrag() {
   if (laeuft || stopp) return;
+  if (await repoArbeit()) return;
   // 0. Designer-Chat: kurz, eigene Fragen zuerst (nicht während der Abo-Pause)
   if ((await aboLage()) !== "pause" && ((await designChat()) || (await claudeChat()))) return;
   // 1. Fortsetzen: eigene Rückfragen, auf die geantwortet wurde
