@@ -98,3 +98,17 @@ test("Antworten, Feature-Zeile, Prüfergebnisse, Testseiten-Adresse", () => {
   assert.equal(cfAlias("feature/cs-4-das-geho-rt-in-die-einstellung"), "feature-cs-4-das-geho-rt-in");
   assert.equal(cfAlias("feature/cs-3-testanfrage"), "feature-cs-3-testanfrage");
 });
+
+import { designAntwort, designPrompt } from "../lib/design.mjs";
+test("Designer-Chat: Antwort und Vorschlag zerlegen", () => {
+  const a = designAntwort('Ein dunkleres Grün hebt den Kontrast.\nVORSCHLAG: {"farben":{"hell":{"primaer":"#047857"}}}');
+  assert.equal(a.text, "Ein dunkleres Grün hebt den Kontrast.");
+  assert.deepEqual(a.vorschlag, { farben: { hell: { primaer: "#047857" } } });
+  assert.equal(designAntwort("Nur Erklärung").vorschlag, null);
+  assert.equal(designAntwort('Text\nVORSCHLAG: [1,2]').vorschlag, null);
+  assert.equal(designAntwort('Text\nVORSCHLAG: kaputt{').vorschlag, null);
+  assert.equal(designAntwort('Text\n**VORSCHLAG:** `{"logo":{"groesse":40}}`').vorschlag.logo.groesse, 40);
+  assert.equal(designAntwort('Text\nVORSCHLAG: {}').vorschlag, null);
+  const p = designPrompt({ projektName: "TTG", frage: "Wärmer bitte", werte: { form: { radius: 8 } }, verlauf: [{ von: "x", text: "Hallo" }, { von: null, text: "Hi" }] });
+  assert.match(p, /KEINE Werkzeuge/); assert.match(p, /Person: Hallo/); assert.match(p, /Claude: Hi/); assert.match(p, /"radius":8/);
+});
