@@ -24,7 +24,7 @@ import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
 import { pruefErgebnis } from "./lib/pruefung.mjs";
 import { designPrompt, designAntwort } from "./lib/design.mjs";
 import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
-import { repoAnlegen, repoSichtbarkeit } from "./lib/repo.mjs";
+import { repoAnlegen, repoSichtbarkeit, repoIstPrivat } from "./lib/repo.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen } from "./lib/ki.mjs";
 import { rm } from "node:fs/promises";
 
@@ -866,6 +866,8 @@ async function projektAbgleich() {
     const { data: projekte } = await db.from("ws_projekte").select("*");
     for (const p of projekte || []) {
       if (!p.repo || p.archiviert) continue;
+      // Sichtbarkeit bei GitHub (öffentlich/privat) für die Anzeige in „Projekte verwalten“ – nur die Werkstatt des Admins meldet sie
+      if (cfg.admin) { const pv = await repoIstPrivat({ sh, repo: p.repo }); if (pv !== null) await db.rpc("ws_repo_sichtbarkeit_melden", { p_projekt: p.id, p_privat: pv }).then(() => {}, () => {}); }
       const { data: rolle } = await db.rpc("ws_rolle_im_projekt", { p_projekt: p.id });
       if (!["admin", "entwickler"].includes(rolle)) continue;
       try {

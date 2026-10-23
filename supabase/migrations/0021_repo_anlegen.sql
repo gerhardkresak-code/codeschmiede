@@ -6,7 +6,8 @@
 begin;
 
 alter table public.ws_projekte add column if not exists repo_aktion text check (repo_aktion in ('anlegen','sichtbarkeit'));
-alter table public.ws_projekte add column if not exists repo_privat boolean;   -- null = bei bestehenden Repositorys unbekannt
+alter table public.ws_projekte add column if not exists repo_privat boolean;   -- tatsächliche Sichtbarkeit; null = noch unbekannt
+alter table public.ws_projekte add column if not exists repo_wunsch_privat boolean;   -- gewünschte Sichtbarkeit des laufenden Auftrags (Prüfung N2)
 alter table public.ws_projekte add column if not exists repo_stand text check (repo_stand in ('angefragt','laeuft','fertig','fehler'));
 alter table public.ws_projekte add column if not exists repo_hinweis text check (char_length(repo_hinweis) <= 500);
 alter table public.ws_projekte add column if not exists repo_pc uuid references public.ws_werkstatt_pcs(id) on delete set null;
@@ -23,10 +24,11 @@ create or replace function public.ws_repo_anfordern(p_projekt text, p_privat boo
 language plpgsql security definer set search_path = public as $$
 begin
   if not public.ws_ist_admin() then raise exception 'GitHub-Repositorys legt nur der Admin an'; end if;
-  update public.ws_projekte set repo_aktion = 'anlegen', repo_privat = coalesce(p_privat, false), repo_stand = 'angefragt',
+  update public.ws_projekte set repo_aktion = 'anlegen', repo_wunsch_privat = coalesce(p_privat, false), repo_stand = 'angefragt',
          repo_hinweis = 'Wartet auf die Werkstatt des Admins', repo_pc = null, repo_geaendert = now()
-   where id = p_projekt and repo is null and not coalesce(archiviert, false);
-  if not found then raise exception 'Projekt nicht gefunden, archiviert oder hat schon ein Repository'; end if;
+   where id = p_projekt and repo is null and not coalesce(archiviert, false)
+     and (coalesce(repo_stand, '') not in ('angefragt','laeuft') or repo_geaendert < now() - interval '15 minutes');   -- Prüfung N1
+  if not found then raise exception 'Projekt nicht gefunden, archiviert, hat schon ein Repository oder es läuft gerade ein GitHub-Auftrag'; end if;
   insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'repo_angefragt', jsonb_build_object('projekt', p_projekt, 'privat', coalesce(p_privat, false)));
 end $$;
 
@@ -35,10 +37,11 @@ create or replace function public.ws_repo_sichtbarkeit(p_projekt text, p_privat 
 language plpgsql security definer set search_path = public as $$
 begin
   if not public.ws_ist_admin() then raise exception 'Die Sichtbarkeit stellt nur der Admin um'; end if;
-  update public.ws_projekte set repo_aktion = 'sichtbarkeit', repo_privat = p_privat, repo_stand = 'angefragt',
+  update public.ws_projekte set repo_aktion = 'sichtbarkeit', repo_wunsch_privat = p_privat, repo_stand = 'angefragt',
          repo_hinweis = 'Wartet auf die Werkstatt des Admins', repo_pc = null, repo_geaendert = now()
-   where id = p_projekt and repo is not null;
-  if not found then raise exception 'Projekt hat noch kein Repository'; end if;
+   where id = p_projekt and repo is not null
+     and (coalesce(repo_stand, '') not in ('angefragt','laeuft') or repo_geaendert < now() - interval '15 minutes');
+  if not found then raise exception 'Projekt hat noch kein Repository oder es läuft gerade ein GitHub-Auftrag'; end if;
   insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'repo_sichtbarkeit', jsonb_build_object('projekt', p_projekt, 'privat', p_privat));
 end $$;
 
@@ -55,7 +58,7 @@ begin
    order by x.repo_geaendert nulls first limit 1 for update skip locked;
   if p.id is null then return; end if;
   update public.ws_projekte set repo_stand = 'laeuft', repo_pc = p_pc, repo_geaendert = now(), repo_hinweis = 'Werkstatt arbeitet' where id = p.id;
-  return query select p.id, p.name, p.beschreibung, p.repo_aktion, p.repo_privat, p.repo;
+  return query select p.id, p.name, p.beschreibung, p.repo_aktion, coalesce(p.repo_wunsch_privat, false), p.repo;
 end $$;
 
 -- Werkstatt des Admins: Ergebnis melden
@@ -71,14 +74,25 @@ begin
     update public.ws_projekte set repo_stand = 'fehler', repo_aktion = null, repo_hinweis = left(p_fehler, 500), repo_geaendert = now() where id = p_projekt;
   elsif p.repo_aktion = 'anlegen' then
     if p_repo is null or not public.ws_repo_ok(p_repo) then raise exception 'Ungültiges Repository'; end if;
-    update public.ws_projekte set repo = coalesce(repo, p_repo), repo_stand = 'fertig', repo_aktion = null,
+    update public.ws_projekte set repo = coalesce(repo, p_repo), repo_privat = repo_wunsch_privat, repo_stand = 'fertig', repo_aktion = null,
            repo_hinweis = 'Angelegt', repo_geaendert = now() where id = p_projekt;
   else
-    update public.ws_projekte set repo_stand = 'fertig', repo_aktion = null,
-           repo_hinweis = case when repo_privat then 'Auf privat umgestellt' else 'Auf öffentlich umgestellt' end, repo_geaendert = now() where id = p_projekt;
+    update public.ws_projekte set repo_privat = repo_wunsch_privat, repo_stand = 'fertig', repo_aktion = null,
+           repo_hinweis = case when repo_wunsch_privat then 'Auf privat umgestellt' else 'Auf öffentlich umgestellt' end, repo_geaendert = now() where id = p_projekt;
   end if;
   insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'repo_ergebnis', jsonb_build_object('projekt', p_projekt, 'repo', p_repo, 'fehler', p_fehler));
 end $$;
+
+-- Werkstatt des Admins meldet die tatsächliche Sichtbarkeit (Abgleich), damit die Oberfläche sie richtig anzeigt (Prüfung M4)
+create or replace function public.ws_repo_sichtbarkeit_melden(p_projekt text, p_privat boolean) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.ws_ist_admin() then return; end if;
+  update public.ws_projekte set repo_privat = p_privat where id = p_projekt and repo is not null and repo_privat is distinct from p_privat
+    and coalesce(repo_stand, '') not in ('angefragt','laeuft');
+end $$;
+revoke execute on function public.ws_repo_sichtbarkeit_melden(text, boolean) from public, anon;
+grant execute on function public.ws_repo_sichtbarkeit_melden(text, boolean) to authenticated;
 
 revoke execute on function public.ws_repo_anfordern(text, boolean), public.ws_repo_sichtbarkeit(text, boolean),
   public.ws_repo_nehmen(uuid), public.ws_repo_ergebnis(uuid, text, text, text) from public, anon;

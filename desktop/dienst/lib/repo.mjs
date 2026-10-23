@@ -2,7 +2,7 @@
 // Konto gerhardkresak-code, öffentlich (per Klick privat), Grundgerüst aus dem Regelwerk ai-dev-os/project-template.
 // Läuft nur in der Werkstatt des Admins mit dessen GitHub-Anmeldung (gh). Es wird kein Projekt-Code ausgeführt:
 // nur „gh repo create“, Dateien schreiben, „git commit/push“ ohne Hooks – darum auch auf dem Admin-PC zulässig.
-import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export const REPO_KONTO = "gerhardkresak-code";
@@ -13,21 +13,33 @@ export const repoOk = (r) => /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,1
 
 /** Platzhalter der Vorlage füllen (nur Markdown/Text-Dateien). */
 export function vorlageFuellen(text, { name, repo, inhaber }) {
+  // Ersetzungsfunktionen: Sonderzeichen wie $' im Namen werden nicht als Muster gelesen (Prüfung N4)
   return String(text)
-    .replaceAll("[PROJEKTNAME]", name)
-    .replaceAll("[OWNER/REPO]", repo)
-    .replaceAll("[NAME]", inhaber || "Inhaber")
-    .replaceAll("[ENTWICKLUNG / STAGING / PRODUKTION]", "ENTWICKLUNG");
+    .replaceAll("[PROJEKTNAME]", () => name)
+    .replaceAll("[OWNER/REPO]", () => repo)
+    .replaceAll("[NAME]", () => inhaber || "Inhaber")
+    .replaceAll("[ENTWICKLUNG / STAGING / PRODUKTION]", () => "ENTWICKLUNG");
 }
 
-async function alleDateien(o, basis = o) {
+// Nur echte Dateien und Ordner INNERHALB der Vorlage – keine Verknüpfungen, auch nicht der Vorlagen-Ordner selbst (Prüfung M1)
+async function alleDateien(o, grenze, basis = o) {
   const r = [];
   for (const e of await readdir(o, { withFileTypes: true })) {
     const p = path.join(o, e.name);
-    if (e.isSymbolicLink()) continue;   // Vorlage: keine Verknüpfungen übernehmen
-    if (e.isDirectory()) r.push(...(await alleDateien(p, basis))); else if (e.isFile()) r.push(path.relative(basis, p));
+    const l = await lstat(p);
+    if (l.isSymbolicLink()) continue;
+    const echt = await realpath(p);
+    if (echt !== grenze && !echt.startsWith(grenze + path.sep)) continue;
+    if (l.isDirectory()) r.push(...(await alleDateien(p, grenze, basis))); else if (l.isFile() && l.nlink === 1) r.push(path.relative(basis, p));
   }
   return r;
+}
+async function vorlageSicher(vorlage, regel) {
+  const l = await lstat(vorlage);
+  if (!l.isDirectory() || l.isSymbolicLink()) throw new Error("Vorlage ist kein echter Ordner");
+  const echt = await realpath(vorlage); const wurzel = await realpath(regel);
+  if (!echt.startsWith(wurzel + path.sep)) throw new Error("Vorlage liegt außerhalb des Regelwerks");
+  return echt;
 }
 
 /**
@@ -35,15 +47,17 @@ async function alleDateien(o, basis = o) {
  * github/ der Vorlage wird zu .github/. Gibt die Liste der geschriebenen Dateien zurück.
  */
 export async function geruestSchreiben(ziel, vorlageOrdner, { name, repo, beschreibung = "", inhaber = "", konzeptMd = "", heute = new Date() }) {
-  const dateien = vorlageOrdner ? await alleDateien(vorlageOrdner) : [];
+  const grenze = vorlageOrdner ? await realpath(vorlageOrdner) : null;
+  const dateien = vorlageOrdner ? await alleDateien(grenze, grenze) : [];
+  vorlageOrdner = grenze;
   const geschrieben = [];
   for (const rel of dateien) {
     const nach = path.join(ziel, rel.split(path.sep)[0] === "github" ? path.join(".github", ...rel.split(path.sep).slice(1)) : rel);
     await mkdir(path.dirname(nach), { recursive: true });
     const quelle = path.join(vorlageOrdner, rel);
-    if ((await stat(quelle)).size > 512 * 1024) continue;
+    if ((await lstat(quelle)).size > 512 * 1024) continue;
     if (/\.(md|txt|json|ya?ml)$/i.test(rel)) await writeFile(nach, vorlageFuellen(await readFile(quelle, "utf8"), { name, repo, inhaber }));
-    else await cp(quelle, nach);
+    else await copyFile(quelle, nach);
     geschrieben.push(path.relative(ziel, nach).split(path.sep).join("/"));
   }
   const datum = heute.toISOString().slice(0, 10);
@@ -73,7 +87,12 @@ export async function geruestSchreiben(ziel, vorlageOrdner, { name, repo, beschr
  * Repository anlegen und Grundgerüst hochladen.
  * sh(befehl, args, opts) führt ohne Shell aus; arbeit = leerer Ordner; keineHooks = leerer Ordner für core.hooksPath.
  */
-export async function repoAnlegen({ sh, arbeit, keineHooks, projekt, privat, inhaber, konzeptMd, melde = () => {} }) {
+// Nie auf eine Eingabe warten (Anmeldefenster, Passwort) und nie ewig hängen (Prüfung M2)
+const OHNE_FRAGEN = { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", GH_PROMPT_DISABLED: "1" };
+const mitGrenze = (sh) => (b, a, o = {}) => sh(b, a, { timeout: 120000, env: OHNE_FRAGEN, maxBuffer: 20 * 1024 * 1024, ...o });
+
+export async function repoAnlegen({ sh: shRoh, arbeit, keineHooks, projekt, privat, inhaber, konzeptMd, melde = () => {} }) {
+  const sh = mitGrenze(shRoh);
   const name = repoName(projekt.projekt_id || projekt.id);
   if (!name) throw new Error("Ungültige Projekt-Kennung für GitHub");
   const repo = `${REPO_KONTO}/${name}`;
@@ -86,29 +105,49 @@ export async function repoAnlegen({ sh, arbeit, keineHooks, projekt, privat, inh
   let vorlage = null;
   try {
     await sh("gh", ["repo", "clone", REGELWERK, regel, "--", "--depth", "1", "-c", `core.hooksPath=${keineHooks}`], { maxBuffer: 50 * 1024 * 1024 });
-    vorlage = path.join(regel, "project-template");
-    await stat(vorlage);
+    vorlage = await vorlageSicher(path.join(regel, "project-template"), regel);
   } catch { vorlage = null; melde("Regelwerk-Vorlage nicht erreichbar – Grundgerüst ohne Regelkapitel"); }
   const ziel = path.join(arbeit, "neu");
   await mkdir(ziel, { recursive: true });
   const dateien = await geruestSchreiben(ziel, vorlage, { name: projekt.name, repo, beschreibung: projekt.beschreibung || "", inhaber, konzeptMd });
   await rm(regel, { recursive: true, force: true }).catch(() => {});
-  // Repository anlegen (leer), dann Grundgerüst als ersten Stand auf main
-  await sh("gh", ["repo", "create", repo, privat ? "--private" : "--public", "--description", String(projekt.name).slice(0, 300), "--disable-wiki"]);
+  // Erst lokal committen, dann Anlegen und Hochladen in EINEM Schritt (gh repo create --source --push, Prüfung M3).
+  // Der Zugang kommt nur für diesen Aufruf aus gh (Credential-Helfer per -c), die globale Git-Einstellung bleibt unverändert (N3).
   const g = (...a) => sh("git", ["-c", `core.hooksPath=${keineHooks}`, ...a], { cwd: ziel });
   await g("init", "-q", "-b", "main");
   const { stdout: login } = await sh("gh", ["api", "user", "--jq", ".login"]).catch(() => ({ stdout: "codeschmiede" }));
   await g("config", "user.name", String(login).trim() || "Codeschmiede");
   await g("config", "user.email", `${String(login).trim() || "codeschmiede"}@users.noreply.github.com`);
+  await g("config", "credential.helper", "");
+  await g("config", "--add", "credential.helper", "!gh auth git-credential");
   await g("add", "-A");
   await g("commit", "-q", "--no-verify", "-m", `Grundgerüst aus der Codeschmiede (Regelwerk ${REGELWERK})`);
-  await g("remote", "add", "origin", `https://github.com/${repo}.git`);
-  await sh("gh", ["auth", "setup-git"]).catch(() => {});
-  await g("push", "-q", "-u", "origin", "main");
+  try {
+    await sh("gh", ["repo", "create", repo, privat ? "--private" : "--public", "--description", String(projekt.name).slice(0, 300), "--disable-wiki", "--source", ziel, "--remote", "origin", "--push"], { cwd: ziel });
+  } catch (e) {
+    // Angelegt, aber Hochladen gescheitert? Repo trotzdem melden und das Hochladen einmal ohne Prüf-Workflow wiederholen
+    const da = await sh("gh", ["repo", "view", repo, "--json", "name"]).then(() => true, () => false);
+    if (!da) throw e;
+    melde("Hochladen beim ersten Versuch gescheitert – zweiter Versuch");
+    try { await g("remote", "add", "origin", `https://github.com/${repo}.git`); } catch { /* schon da */ }
+    try { await g("push", "-q", "-u", "origin", "main"); }
+    catch {
+      await rm(path.join(ziel, ".github", "workflows"), { recursive: true, force: true });
+      await g("add", "-A"); await g("commit", "-q", "--no-verify", "--amend", "-m", `Grundgerüst aus der Codeschmiede (Regelwerk ${REGELWERK}; Prüf-Workflow bitte später ergänzen)`);
+      await g("push", "-q", "-u", "origin", "main");
+    }
+  }
   return { repo, dateien };
 }
 
-export async function repoSichtbarkeit({ sh, repo, privat }) {
+export async function repoSichtbarkeit({ sh: shRoh, repo, privat }) {
+  const sh = mitGrenze(shRoh);
   if (!repoOk(repo)) throw new Error("Ungültiges Repository");
   await sh("gh", ["repo", "edit", repo, "--visibility", privat ? "private" : "public", "--accept-visibility-change-consequences"]);
+}
+/** Tatsächliche Sichtbarkeit bei GitHub (true = privat, null = unbekannt). */
+export async function repoIstPrivat({ sh: shRoh, repo }) {
+  const sh = mitGrenze(shRoh);
+  if (!repoOk(repo)) return null;
+  try { const { stdout } = await sh("gh", ["repo", "view", repo, "--json", "visibility", "--jq", ".visibility"]); const v = String(stdout).trim().toUpperCase(); return v === "PRIVATE" || v === "INTERNAL" ? true : v === "PUBLIC" ? false : null; } catch { return null; }
 }
