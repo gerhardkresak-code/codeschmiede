@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
   Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power,
@@ -18,6 +18,7 @@ import { MitErwaehnung, erwaehnte, FeatureBezuege } from "./Bezuege";
 import Regelwerk from "./Regelwerk";
 import { LogoZeichen } from "./Logo";
 import CodeschmiedeZeichen from "./Zeichen";
+const AboLimits = lazy(() => import("./AboLimits"));
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
 // Konzept: docs/KONZEPT.md · Datenbank: supabase/migrations/
@@ -159,7 +160,7 @@ export default function App() {
   const [oeffne, setOeffne] = useState(null);   // aus „Zu erledigen“: Feature-Arbeitsplatz bzw. Gruppen-Chat öffnen
   const [projekt, setProjekt] = useState(() => merke.lies("cs-projekt"));
   const [toast, setToast] = useState("");
-  const [neuesProjekt, setNeuesProjekt] = useState(false); const [projekteVerwalten, setProjekteVerwalten] = useState(false); const [einrichtung, setEinrichtung] = useState(false);
+  const [neuesProjekt, setNeuesProjekt] = useState(false); const [projekteVerwalten, setProjekteVerwalten] = useState(false); const [einrichtung, setEinrichtung] = useState(false); const [aboOffen, setAboOffen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSitzung(data.session || null));
@@ -223,7 +224,8 @@ export default function App() {
           <span className="text-sm text-slate-500">{aktuell?.name}</span>
           <span className="inline-flex items-center gap-1.5 text-xs text-slate-500"><i className="w-2 h-2 rounded-full bg-green-600" />Live synchronisiert</span>
           <div className="ml-auto flex items-center gap-3 flex-wrap">
-            <VerbrauchKurz d={daten} ich={ich} onClick={() => setAnsicht("verbrauch")} />
+            <VerbrauchKurz d={daten} ich={ich} onClick={() => setAboOffen(true)} />
+            {aboOffen && <Suspense fallback={null}><AboLimits d={daten} ich={ich} onSchliessen={() => setAboOffen(false)} onVerbrauch={() => { setAboOffen(false); setAnsicht("verbrauch"); }} /></Suspense>}
             <EinrichtungChip ich={ich} d={daten} onOeffnen={() => setEinrichtung(true)} />
             <WerkstattSchalter ich={ich} sitzung={sitzung} d={daten} toast={setToast} />
           </div>
@@ -1307,7 +1309,7 @@ function VerbrauchKurz({ d, ich, onClick }) {
     <button type="button" onClick={onClick} className={`flex items-center gap-2.5 rounded-xl border px-3 py-1.5 text-sm ${hoch ? "border-amber-500 bg-amber-50 dark:bg-amber-950/40" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"}`} title="Nutzungslimits deines Claude-Abos (laut Claude Code)">
       <Gauge className={`w-4 h-4 ${hoch ? "text-amber-600" : "text-emerald-700"}`} />
       {a ? <span className="flex items-center gap-2 tabular-nums"><span>5 Std. <b>{p(f)}</b></span><Balken wert={f} warn={warn} pause={pause} /><span>Woche <b>{p(w)}</b></span><Balken wert={w} warn={warn} pause={pause} /></span>
-        : <span className="text-slate-500">Abo-Limits: noch keine Werte</span>}
+        : <span className="text-slate-600 dark:text-slate-300 font-semibold">Abo-Limits</span>}
     </button>
   );
 }

@@ -5,10 +5,11 @@
 // Restrisiko (dokumentiert): Ihre eingebauten Werkzeuge könnten technisch trotzdem Dateien des PCs lesen. Darum: Standard nur Claude,
 // Prüfungen und Bauen nur Claude, Antworten mit verdächtigem Inhalt werden verworfen. Nächster Schritt: Betriebssystem-Sandbox.
 import { spawn, execFile } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, readdirSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { sandboxLauf, sandboxArt, sicherLesen } from "./sandbox.mjs";
 import { kopiereProjekt, vergleiche } from "./ersatz.mjs";
+import { codexFenster } from "./abo.mjs";
 export { sandboxArt };
 import path from "node:path";
 import os from "node:os";
@@ -374,4 +375,45 @@ export async function freiPruefen(def, zugelassen = false) {
     return { gekoppelt: true, version: v || null, hinweis: def.anmelden ? `Gefunden. Falls nötig anmelden: ${def.anmelden}` : "Gefunden" };
   } catch { return { gekoppelt: true, version: null, hinweis: "Gefunden (Version unbekannt)" }; }
   finally { await rm(tmp, { recursive: true, force: true }).catch(() => {}); }
+}
+
+// ---------- Abo-Limits von ChatGPT (Codex) – Gerhard 2026-10-23 23:38 „für jede KI die Limits“ ----------
+// 1. Offizieller Weg: „codex app-server“ (JSON-RPC über stdin/stdout), Methode account/rateLimits/read – nur lesen, ohne Shell,
+//    minimale Umgebung, nach spätestens 20 Sekunden beendet. 2. Rückfall: letzte Zeile „rate_limits“ aus ~/.codex/sessions (nur Zahlen).
+export function codexLimits({ home = os.homedir() } = {}) {
+  const prog = findeProgramm("chatgpt");
+  const ausDatei = () => codexLimitsAusSitzungen(home);
+  if (!prog) return Promise.resolve(ausDatei());
+  return new Promise((fertig) => {
+    let fertigWert = null; let puffer = "";
+    const kind = spawn(prog.befehl, [...prog.vorne, "app-server"], { env: minimaleUmgebung(), shell: false, windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
+    const ende = (w) => { if (fertigWert !== null) return; fertigWert = w || ausDatei(); clearTimeout(t); try { kind.kill(); } catch { /* weg */ } fertig(fertigWert); };
+    const t = setTimeout(() => ende(null), 20000);
+    kind.on("error", () => ende(null)); kind.on("exit", () => ende(null));
+    kind.stdout.on("data", (d) => {
+      puffer += d.toString("utf8"); if (puffer.length > 2e6) return ende(null);
+      let i; while ((i = puffer.indexOf("\n")) >= 0) {
+        const z = puffer.slice(0, i).trim(); puffer = puffer.slice(i + 1);
+        if (!z.startsWith("{")) continue;
+        let m; try { m = JSON.parse(z); } catch { continue; }
+        if (m.id === 0) { schreib({ jsonrpc: "2.0", method: "initialized" }); schreib({ jsonrpc: "2.0", id: 1, method: "account/rateLimits/read", params: {} }); }
+        if (m.id === 1) ende(m.result ? codexFenster(m.result) : null);
+      }
+    });
+    const schreib = (o) => { try { kind.stdin.write(JSON.stringify(o) + "\n"); } catch { /* zu */ } };
+    schreib({ jsonrpc: "2.0", id: 0, method: "initialize", params: { clientInfo: { name: "codeschmiede", title: "Codeschmiede", version: "0.8.7" } } });
+  });
+}
+export function codexLimitsAusSitzungen(home = os.homedir()) {
+  try {
+    const basis = path.join(home, ".codex", "sessions");
+    // neueste Datei suchen (Jahr/Monat/Tag), höchstens 3 Ebenen, nur normale Dateien
+    let ordner = basis;
+    for (let i = 0; i < 3; i++) { const u = readdirSync(ordner, { withFileTypes: true }).filter((e) => e.isDirectory() && /^\d+$/.test(e.name)).map((e) => e.name).sort(); if (!u.length) break; ordner = path.join(ordner, u[u.length - 1]); }
+    const dateien = readdirSync(ordner, { withFileTypes: true }).filter((e) => e.isFile() && /\.jsonl$/.test(e.name)).map((e) => path.join(ordner, e.name)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+    if (!dateien.length || statSync(dateien[0]).size > 50 * 1024 * 1024) return null;
+    const zeilen = readFileSync(dateien[0], "utf8").split("\n").reverse();
+    for (const z of zeilen) { if (!z.includes("rate_limits")) continue; try { const r = codexFenster(JSON.parse(z)); if (r) return r; } catch { /* weiter */ } }
+  } catch { /* keine Sitzungen */ }
+  return null;
 }
