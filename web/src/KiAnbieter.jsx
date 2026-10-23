@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { kiFarbe } from "./kiFarbe";
 import { Cpu, Loader2, Save, ArrowUp, ArrowDown, Plus, X, RefreshCw, Lock, CircleCheck, CircleAlert, Copy, History, PlugZap, Globe, SquareTerminal, Check } from "lucide-react";
 import { supabase } from "./supabase";
 
@@ -67,7 +68,7 @@ function Eignung({ liste }) {
           const st = STAERKEN[id];
           return (
             <div key={id} className="px-3 py-2.5 grid gap-1 md:grid-cols-[170px_minmax(0,1fr)] text-sm">
-              <div className="font-semibold">{a.name}<span className="block text-xs font-normal text-slate-500">{a.programm}</span></div>
+              <div className="font-semibold flex flex-wrap items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-full shrink-0 ${kiFarbe(id).punkt}`} aria-hidden="true" />{a.name}<span className="basis-full text-xs font-normal text-slate-500">{a.programm}</span></div>
               <div className="min-w-0 flex flex-col gap-1">
                 <span className="text-slate-700 dark:text-slate-200">{st?.gut || a.eigen?.hinweis || "Keine Beschreibung hinterlegt."}</span>
                 {st?.aufgaben?.length > 0 && <span className="flex flex-wrap gap-1">{st.aufgaben.map((t) => <span key={t} className="text-[11px] font-semibold rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">{name(t)}</span>)}</span>}
@@ -113,7 +114,7 @@ function Zeile({ id, titel, hinweis, eintrag, admin, onSpeichern, anbieter = ANB
         {reihe.map((e, i) => {
           const a = anbieter[e.anbieter] || { name: e.anbieter, modelle: ["automatisch"] }; const eigenes = e.modell && !a.modelle.includes(e.modell);
           return (
-            <span key={e.anbieter} className={`inline-flex items-center gap-1 rounded-full pl-2.5 pr-1 py-0.5 text-xs font-semibold border ${e.anbieter === "claude" ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"}`}>
+            <span key={e.anbieter} className={`inline-flex items-center gap-1 rounded-full pl-2.5 pr-1 py-0.5 text-xs font-semibold border ${kiFarbe(e.anbieter).chip}`}>
               {i + 1}. {a.name}
               {admin && !fest ? (
                 <select className="bg-transparent text-xs font-normal" aria-label={`Modell ${a.name}`} value={eigenes ? "eigenes" : e.modell || "automatisch"}
@@ -209,8 +210,8 @@ const EIN_KLICK = {
   codex: { art: "browser", install: "npm install -g @openai/codex" }, gemini: { art: "fenster", install: "npm install -g @google/gemini-cli" },
   copilot: { art: "browser", install: "npm install -g @github/copilot" }, opencode: { art: "fenster", install: "npm install -g opencode-ai" },
   "cursor-agent": { art: "browser", install: "offizielle Installation von cursor.com" },
-  grok: { art: "browser", install: "Installer-Seite von x.ai öffnet sich" }, agy: { art: "fenster", install: "Installer-Seite von Google öffnet sich" },
-  vibe: { art: "fenster", install: "Installer-Seite von Mistral öffnet sich" },
+  grok: { art: "fenster", install: "Offizielle Installation von x.ai läuft automatisch" }, agy: { art: "fenster", install: "Installer-Seite von Google öffnet sich" },
+  vibe: { art: "fenster", install: "Offizielle Installation von Mistral läuft automatisch" },
 };
 const SCHRITTE = [["installieren", "Programm installieren"], ["anmelden", "Beim Anbieter anmelden"], ["pruefen", "Kopplung prüfen"]];
 function Einrichten({ k, art, kopiere }) {
@@ -302,7 +303,7 @@ export default function KiAnbieter({ d, ich, toast }) {
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {Object.entries(liste).map(([key, a]) => (
             <div key={key} className="px-3 py-2 flex flex-wrap items-center gap-2 text-sm">
-              <b>{a.name}</b><span className="text-xs text-slate-500 font-mono">{a.eigen ? `${a.programm} ${(a.eigen.argumente || []).join(" ")}` : a.programm}</span>
+              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${kiFarbe(key).punkt}`} aria-hidden="true" /><b>{a.name}</b><span className="text-xs text-slate-500 font-mono">{a.eigen ? `${a.programm} ${(a.eigen.argumente || []).join(" ")}` : a.programm}</span>
               <span className={`text-[11px] rounded-full px-2 py-0.5 ${a.eigen ? "bg-slate-100 dark:bg-slate-800" : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"}`}>{a.eigen ? "eigener Anbieter" : "eingebaut"}</span>
               {admin && a.eigen && <span className="ml-auto flex gap-1.5"><button type="button" className={ghost} onClick={() => setBearbeite({ ...a.eigen, argumenteText: (a.eigen.argumente || []).join("\n"), modelleText: (a.eigen.modelle || []).join(", ") })}>Bearbeiten</button>
                 <button type="button" className={ghost} onClick={async () => { const { error } = await supabase.rpc("ws_ki_anbieter_loeschen", { p_id: key }); if (error) toast(fehler(error)); else { toast(`${a.name} entfernt`); setTick((t) => t + 1); } }}><X className="w-3.5 h-3.5" />Entfernen</button></span>}
@@ -323,7 +324,7 @@ export default function KiAnbieter({ d, ich, toast }) {
                   const limit = k?.limit_bis && Date.parse(k.limit_bis) > Date.now();
                   return (
                     <div key={key} className="rounded-lg border border-slate-200 dark:border-slate-800 p-2.5 flex flex-col gap-1.5 text-xs min-w-0">
-                      <div className="flex items-center gap-1.5"><b className="text-sm">{a.name}</b><span className="text-slate-500">{a.programm}</span>
+                      <div className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-full shrink-0 ${kiFarbe(key).punkt}`} aria-hidden="true" /><b className="text-sm">{a.name}</b><span className="text-slate-500">{a.programm}</span>
                         <span className={`ml-auto inline-flex items-center gap-1 font-semibold ${k?.gekoppelt ? (limit ? "text-amber-700 dark:text-amber-300" : "text-green-700 dark:text-green-400") : "text-slate-500"}`}>{k?.gekoppelt ? (limit ? <CircleAlert className="w-3.5 h-3.5" /> : <CircleCheck className="w-3.5 h-3.5" />) : <CircleAlert className="w-3.5 h-3.5" />}{k ? (k.gekoppelt ? (limit ? `Limit voll bis ${fmt(k.limit_bis)}` : "gekoppelt") : "nicht gekoppelt") : "noch nicht geprüft"}</span></div>
                       {STAERKEN[key] && <p className="text-slate-500 break-words"><b className="font-semibold text-slate-600 dark:text-slate-300">Gut für:</b> {STAERKEN[key].gut}</p>}
                       {k?.hinweis && <p className="text-slate-600 dark:text-slate-300 break-words">{k.hinweis}</p>}

@@ -246,9 +246,17 @@ export function anmeldungStarten(anbieter) {
 // Definition kommt vom Admin (ws_ki_anbieter): Programmname + feste Argumente mit {prompt}/{modell}. Läuft nur, wenn die Person den
 // Anbieter auf IHREM PC zugelassen hat; immer im leeren Ordner, minimale Umgebung, ohne Shell; verdächtige Antworten werden verworfen.
 const PROGRAMM = /^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$/;
+// Ordner, in die die offiziellen Installer legen. Ein laufender Dienst sieht einen neu gesetzten PATH erst nach dem Neustart –
+// darum werden diese Ordner immer mit durchsucht (Gerhard 22:50 „Grok und Mistral werden nicht verknüpft“).
+export function installOrdner({ env = process.env, home = os.homedir(), plattform = process.platform } = {}) {
+  return plattform === "win32"
+    ? [path.join(env.APPDATA || path.join(home, "AppData", "Roaming"), "npm"), path.join(home, ".local", "bin"), path.join(home, ".grok", "bin"),
+       path.join(env.LOCALAPPDATA || path.join(home, "AppData", "Local"), "cursor-agent")]
+    : [path.join(home, ".local", "bin"), path.join(home, ".grok", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
+}
 export function findeFreiesProgramm(programm) {
   if (!PROGRAMM.test(programm || "")) return null;
-  const ordner = (process.env.PATH || "").split(path.delimiter).filter((o) => o && path.isAbsolute(o));   // nur absolute Ordner (kein „.“)
+  const ordner = [...(process.env.PATH || "").split(path.delimiter), ...installOrdner()].filter((o) => o && path.isAbsolute(o));   // nur absolute Ordner (kein „.“)
   if (process.platform !== "win32") { const f = ordner.map((o) => path.join(o, programm)).find((p) => existsSync(p)); return f ? { befehl: f, vorne: [] } : null; }
   for (const o of ordner) { const exe = path.join(o, `${programm}.exe`); if (existsSync(exe)) return { befehl: exe, vorne: [] }; }
   // npm-Kurzbefehl (programm.cmd): darin steht das Skript – direkt mit Node starten (ohne Shell)

@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { minimaleUmgebung } from "./ki.mjs";
+import { minimaleUmgebung, installOrdner } from "./ki.mjs";
 
 // art: "browser" = eigener Anmelde-Befehl öffnet den Browser (Ende mit Code 0 = angemeldet); "fenster" = Anmeldung beim ersten Start im Eingabefenster
 // install: { npm } = offizielles npm-Paket; { skript: { win, unix } } = offizielles Installationsskript; { seite } = Installer-Seite im Browser öffnen
@@ -28,9 +28,16 @@ export const KATALOG = {
   "cursor-agent": { name: "Cursor", programme: ["cursor-agent"], art: "browser", login: ["login"],
     install: { skript: { win: "irm 'https://cursor.com/install?win32=true' | iex", unix: "curl https://cursor.com/install -fsS | bash" } },
     status: { args: ["status"], ok: /logged in|authenticated|signed in/i, nein: /not (logged|authenticated|signed)/i } },
-  grok: { name: "Grok Build", programme: ["grok"], install: { seite: "https://x.ai/cli" }, art: "browser", login: ["login"] },
+  // Grok Build: offizielles Skript von x.ai (legt nach ~/.grok/bin); Anmeldung beim ersten Start im Browser, gespeichert in ~/.grok/auth.json
+  grok: { name: "Grok Build", programme: ["grok"], art: "fenster", login: [],
+    install: { skript: { win: "irm https://x.ai/cli/install.ps1 | iex", unix: "curl -fsSL https://x.ai/cli/install.sh | bash" } },
+    status: { datei: [".grok", "auth.json"] } },
   agy: { name: "Google Antigravity", programme: ["agy"], install: { seite: "https://antigravity.google/" }, art: "fenster", login: [] },
-  vibe: { name: "Mistral Vibe", programme: ["vibe"], install: { seite: "https://docs.mistral.ai/vibe/code/cli/" }, art: "fenster", login: ["--setup"] },
+  // Mistral Vibe: offizielles Skript (Mac/Linux); unter Windows über uv (offizieller Weg laut Mistral). Anmeldung im Einrichtungs-Assistenten
+  // („Launch browser“); der Schlüssel liegt im Schlüsselbund – prüfbar ist nur die Einstellungsdatei, darum bestätigt die Person.
+  vibe: { name: "Mistral Vibe", programme: ["vibe"], art: "fenster", login: ["--setup"],
+    install: { skript: { win: "irm https://astral.sh/uv/install.ps1 | iex; & (Join-Path $env:USERPROFILE '.local\\bin\\uv.exe') tool install mistral-vibe",
+      unix: "curl -LsSf https://mistral.ai/vibe/install.sh | bash" } } },
 };
 
 /** Katalog-Eintrag zu einem Programmnamen (eingebaut: codex/gemini, eigene Anbieter: ws_ki_anbieter.programm). */
@@ -68,9 +75,7 @@ const absolut = (o, plattform) => (plattform === "win32" ? /^(?:[A-Za-z]:\\|\\\\
 /** Programm suchen: PATH (nur absolute Ordner) plus die üblichen Ordner der Installer (~/.local/bin, npm global). */
 export function findeKatalogProgramm(k, { env = process.env, home = os.homedir(), plattform = process.platform, gibt = existsSync } = {}) {
   const trenner = plattform === "win32" ? ";" : ":";
-  const extra = plattform === "win32"
-    ? [path.join(env.APPDATA || path.join(home, "AppData", "Roaming"), "npm"), path.join(home, ".local", "bin"), path.join(env.LOCALAPPDATA || path.join(home, "AppData", "Local"), "cursor-agent")]
-    : [path.join(home, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
+  const extra = installOrdner({ env, home, plattform });
   const ordner = [...(env.PATH || "").split(trenner), ...extra, path.dirname(process.execPath)].filter((o) => o && absolut(o, plattform));
   for (const name of k.programme) {
     for (const o of ordner) {

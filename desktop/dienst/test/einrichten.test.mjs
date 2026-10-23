@@ -50,3 +50,11 @@ test("Claude-Anmeldung lesen: Abo, API-Schlüssel, nicht angemeldet", async () =
   assert.match(claudeStatus("Unknown command auth").text, /nicht prüfbar/);
   assert.ok(!JSON.stringify(claudeStatus('{"authMethod":"claude.ai","email":"geheim@x.at"}')).includes("geheim"));
 });
+
+test("Grok und Mistral: offizielle Installation, Grok im eigenen Ordner gefunden (Gerhard 22:50)", () => {
+  assert.ok(KATALOG.grok.install.skript.unix.startsWith("curl -fsSL https://x.ai/cli/install.sh"));
+  assert.ok(KATALOG.vibe.install.skript.unix.startsWith("curl -LsSf https://mistral.ai/vibe/install.sh"));
+  assert.deepEqual(KATALOG.grok.status.datei, [".grok", "auth.json"]);
+  const gibt = (p) => p === "/home/x/.grok/bin/grok";
+  assert.equal(findeKatalogProgramm(katalogFuer("grok"), { env: { PATH: "/usr/bin" }, home: "/home/x", plattform: "linux", gibt }).pfad, "/home/x/.grok/bin/grok");
+});
