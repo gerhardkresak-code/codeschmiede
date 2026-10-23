@@ -8,6 +8,7 @@ import { supabase } from "./supabase";
 import { WS_ICON, STAND, ROLLEN, BEREICH_RECHTE } from "./config";
 import { isDesktop, tauri } from "./desktop";
 import Designer from "./Designer";
+import ClaudeSpalte from "./ClaudeSpalte";
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
 // Konzept: docs/KONZEPT.md · Datenbank: supabase/migrations/
@@ -140,6 +141,7 @@ export default function App() {
   const [projekt, setProjekt] = useState(() => merke.lies("cs-projekt"));
   const [toast, setToast] = useState("");
   const [neuesProjekt, setNeuesProjekt] = useState(false);
+  const [ortZentrale, setOrtZentrale] = useState(null);   // Gruppe/Feature, das in der Zentrale gerade offen ist (für den Chat)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSitzung(data.session || null));
@@ -166,7 +168,7 @@ export default function App() {
   const PIcon = WS_ICON[aktuell?.symbol] || Layers;
 
   return (
-    <div className="min-h-screen grid md:grid-cols-[248px_minmax(0,1fr)] bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-body">
+    <div className={`min-h-screen grid md:grid-cols-[248px_minmax(0,1fr)] ${ansicht !== "designer" ? "xl:grid-cols-[248px_minmax(0,1fr)_auto]" : ""} bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-body`}>
       <aside className="bg-[#0f2a22] text-emerald-50 flex md:flex-col gap-1 p-3 md:sticky md:top-0 md:h-screen overflow-x-auto">
         <div className="flex items-center gap-2.5 px-2 pb-0 md:pb-3">
           <span className="w-9 h-9 rounded-lg bg-emerald-500 text-emerald-950 grid place-items-center"><Hammer className="w-5 h-5" /></span>
@@ -207,13 +209,20 @@ export default function App() {
         </div>
         {daten.laden ? <div className="grid place-items-center py-20"><Loader2 className="w-6 h-6 animate-spin text-emerald-700" /></div>
           : !daten.projektId ? <div className={`${card} p-8 text-slate-500`}>Du bist noch keinem Projekt zugeordnet. Der Admin nimmt dich in ein Projekt auf.</div>
-          : ansicht === "zentrale" ? <Zentrale key={daten.projektId} d={daten} ich={ich} toast={setToast} />
-          : ansicht === "global" ? <Zentrale key={daten.projektId + "-global"} d={daten} ich={ich} toast={setToast} nurGlobal />
+          : ansicht === "zentrale" ? <Zentrale key={daten.projektId} d={daten} ich={ich} toast={setToast} onOrt={setOrtZentrale} />
+          : ansicht === "global" ? <Zentrale key={daten.projektId + "-global"} d={daten} ich={ich} toast={setToast} nurGlobal onOrt={setOrtZentrale} />
           : ansicht === "designer" ? <Designer key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "benutzer" ? <BenutzerRechte d={daten} ich={ich} toast={setToast} />
           : ansicht === "verbrauch" ? <Verbrauch d={daten} ich={ich} toast={setToast} />
           : <Spaeter ansicht={ansicht} />}
       </main>
+      {ansicht !== "designer" && !daten.laden && daten.projektId && (() => {
+        // Chat mit Claude überall: fest eingeblendet (im App-Designer gibt es einen eigenen Design-Chat)
+        const imZentrum = ["zentrale", "global"].includes(ansicht) && ortZentrale;
+        const ort = imZentrum ? ortZentrale.ort : ansicht;
+        const kontext = `Projekt: ${aktuell?.name || ""}\nSeite: ${nav.find((n) => n[0] === ansicht)?.[1] || ansicht}${imZentrum ? `\n${ortZentrale.text}` : ""}`;
+        return <ClaudeSpalte d={daten} ich={ich} ort={ort} kontext={kontext} toast={setToast} />;
+      })()}
       {neuesProjekt && <NeuesProjekt toast={setToast} onClose={() => setNeuesProjekt(false)} onFertig={(id) => waehle(id)} />}
       <Toast text={toast} onDone={() => setToast("")} />
     </div>
@@ -254,7 +263,7 @@ function Spaeter({ ansicht }) {
 // ---------------- Zentrale ----------------
 // nurGlobal: Ansicht „Globale Einstellungen“ (Anweisung Gerhard 2026-10-23 10:20) – Bereich, der in der App nie als eigener Bereich erscheint;
 // seine Features gelten für die ganze App. In der Auftrags-Zentrale wird er ausgeblendet.
-function Zentrale({ d: alle, ich, toast, nurGlobal = false }) {
+function Zentrale({ d: alle, ich, toast, nurGlobal = false, onOrt }) {
   const d = useMemo(() => {
     const bereiche = alle.bereiche.filter((b) => !!b.global === nurGlobal);
     const bids = new Set(bereiche.map((b) => b.id));
@@ -290,6 +299,13 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false }) {
   const fragen = d.auftraege.filter((a) => a.offeneFrage).length;
   if (!g) return <div className={`${card} p-8 text-slate-500`}>{nurGlobal ? "Für dieses Projekt gibt es noch keine globalen Einstellungen (Datenbank 0009 einspielen)." : "Noch keine Gruppen angelegt."}</div>;
   const platzF = platz ? d.features.find((x) => x.id === platz) : null;
+  useEffect(() => {
+    // Ort für den Chat mit Claude: offenes Feature (Arbeitsplatz/Kurzinfo) oder Gruppe
+    const ff = platzF || f; const gg = ff ? d.gruppen.find((x) => x.id === ff.gruppe_id) : g;
+    if (!onOrt) return;
+    if (ff) onOrt({ ort: `feature:${ff.id}`.toLowerCase(), text: `Gruppe: ${gg?.name || ""} (${gg?.id || ""})\nFeature: ${ff.name} (${ff.id}), Stand ${ff.stand}${ff.beschreibung ? `\nBeschreibung: ${ff.beschreibung}` : ""}` });
+    else if (gg) onOrt({ ort: `gruppe:${gg.id}`.toLowerCase(), text: `Gruppe: ${gg.name} (${gg.id})\nFeatures: ${d.features.filter((x) => x.gruppe_id === gg.id && !x.ausgebaut).map((x) => `${x.id} ${x.name}`).join("; ").slice(0, 3000)}` });
+  }, [platzF?.id, f?.id, g?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const platzG = platzF ? d.gruppen.find((x) => x.id === platzF.gruppe_id) : null;
   return (
     <>

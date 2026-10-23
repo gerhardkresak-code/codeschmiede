@@ -23,6 +23,7 @@ import { werteAus, zweigName } from "./lib/ergebnis.mjs";
 import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
 import { pruefErgebnis } from "./lib/pruefung.mjs";
 import { designPrompt, designAntwort } from "./lib/design.mjs";
+import { assistentPrompt, assistentAntwort } from "./lib/assistent.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -68,6 +69,8 @@ const ERLAUBT = [
 const VERBOTEN = [
   "Bash(git push origin main*)", "Bash(git push -f*)", "Bash(git push --force*)", "Bash(git reset --hard origin*)",
   "Bash(rm -rf /*)", "Bash(rm -rf ~*)", "Bash(gh repo delete*)", "Bash(gh secret*)", "Bash(curl * | sh*)",
+  // Zusammenführen/Releases macht nur die Codeschmiede über die Stationen (gefunden 2026-10-23: Werkstatt fragte „gh pr merge 16“)
+  "Bash(gh pr merge*)", "Bash(gh release*)", "Bash(gh workflow run*)",
   // Dateien über Git/gh schreiben oder einlesen (umgeht Read/Write-Verbote)
   "Bash(git *--output*)", "Bash(git commit *-F*)", "Bash(git commit *--file*)", "Bash(git commit *--template*)", "Bash(git commit *-t *)",
   "Bash(git add *--pa*)", "Bash(git commit *--pa*)", "Bash(gh pr create *--body-file*)", "Bash(gh pr create *-F*)", "Bash(git config*)",
@@ -80,11 +83,17 @@ const VERBOTEN = [
   "Edit(../**)", "Write(../**)", "Edit(**/.git/**)", "Write(**/.git/**)", "Edit(**/.husky/**)", "Write(**/.husky/**)",
   // Einstellungen, Hooks und Abläufe darf die Werkstatt nicht selbst ändern (sonst Umgehung der Erlaubnis-Brücke)
   "Edit(.claude/**)", "Write(.claude/**)", "Edit(**/.claude/**)", "Write(**/.claude/**)", "Edit(.mcp.json)", "Write(.mcp.json)",
-  "Edit(.github/**)", "Write(.github/**)", "Edit(**/package.json)", "Write(**/package.json)",
+  "Edit(.github/**)", "Write(.github/**)", "Edit(**/.gitattributes)", "Write(**/.gitattributes)", "Edit(**/.gitmodules)", "Write(**/.gitmodules)", "Edit(**/package.json)", "Write(**/package.json)",
   // Anmeldedaten auf dem PC sind tabu
   "Read(~/.claude/**)", "Read(~/.ssh/**)", "Read(~/.codeschmiede/**)", "Read(~/.config/gh/**)", "Read(~/.aws/**)",
   "Read(**/zugriff.token)", "Read(**/.env*)", "Read(**/*.pem)", "Read(**/*.key)",
 ];
+
+// Zusätzliche Lese-Sperren (Chat mit Claude, Prüfung 2026-10-23)
+// (nicht ganz ~/AppData sperren – dort liegt unter Windows der Lese-Ordner der Werkstatt; --restricted begrenzt Grep/Glob bereits)
+const LESE_SPERREN = ["Read(~/.git-credentials)", "Read(~/.npmrc)", "Read(~/.netrc)", "Read(~/.claude.json)", "Read(~/.gnupg/**)",
+  "Read(~/AppData/Roaming/GitHub CLI/**)", "Read(~/AppData/Roaming/Microsoft/**)", "Read(~/AppData/Local/Microsoft/**)",
+  "Read(//**/.ssh/**)", "Read(//**/GitHub CLI/**)", "Read(//**/hosts.yml)", "Read(//**/.claude.json)", "Read(//**/.git-credentials)", "Read(//**/.env*)"];
 
 // ---------- Hilfen ----------
 async function existiert(p) { try { await access(p); return true; } catch { return false; } }
@@ -256,7 +265,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
 
     // Erlaubnis-Brücke (MCP) für Werkzeuge außerhalb der freigegebenen Liste
     const mcp = { mcpServers: { werkstatt: { command: process.execPath, args: [path.join(HIER, "erlaubnis-mcp.mjs")], env: {
-      CS_SUPABASE_URL: cfg.supabase_url, CS_ANON_KEY: cfg.anon_key, CS_TOKEN_DATEI: tokenDatei(), CS_AUFTRAG: String(auftrag.id), CS_GRUPPE: auftrag.gruppe_id,
+      CS_SUPABASE_URL: cfg.supabase_url, CS_ANON_KEY: cfg.anon_key, CS_TOKEN_DATEI: tokenDatei(), CS_AUFTRAG: String(auftrag.id), CS_GRUPPE: auftrag.gruppe_id, CS_ADMIN_PC: cfg.admin ? "1" : "0", CS_ORDNER: ordner,
     } } } };
     const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", modell,
       "--permission-mode", "default", "--allowedTools", ERLAUBT.join(","), "--disallowedTools", VERBOTEN.join(","),
@@ -273,7 +282,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
     await new Promise((fertig, fehl) => {
       const claude = findeClaude();
       if (!claude) throw new Error("Claude Code wurde auf diesem PC nicht gefunden (erwartet: %USERPROFILE%\\.local\\bin\\claude.exe). Bitte installieren und einmal „claude“ im Terminal starten.");
-      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: ordner, env, shell: false, windowsHide: true });
+      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: ordner, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
       laeuft.kind = kind;
       abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
       const rl = createInterface({ input: kind.stdout });
@@ -328,8 +337,17 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
         await nachricht(auftrag.id, "text", `Bauen & Tests auf dem PC sind rot – ich arbeite das nach:\n${lokal.text}`);
       }
     } else {
-      await nachricht(auftrag.id, "frage", `${r.text}\n\n(Es gibt noch keinen Pull Request. Soll ich weitermachen oder etwas ändern?)`);
-      await db.from("ws_auftraege").update({ stand: "frage" }).eq("id", auftrag.id);
+      // Kein Pull Request: Gibt es Änderungen, fehlt der PR (Rückfrage). Sonst ist der Auftrag ohne Änderung erledigt –
+      // nicht als offene Rückfrage stehen lassen (Meldung Gerhard 2026-10-22, Auftrag #5).
+      let geaendert = true;
+      try { const st = await git(ordner, "status", "--porcelain"); const vor = await git(ordner, "rev-list", "--count", "origin/main..HEAD"); geaendert = !!st.trim() || Number(vor) > 0; } catch { /* sicher ist sicher */ }
+      if (geaendert) {
+        await nachricht(auftrag.id, "frage", `${r.text}\n\n(Es gibt Änderungen, aber noch keinen Pull Request. Soll ich weitermachen oder etwas ändern?)`);
+        await db.from("ws_auftraege").update({ stand: "frage" }).eq("id", auftrag.id);
+      } else {
+        await nachricht(auftrag.id, "ergebnis", `${r.text}\n\n(Ohne Änderung abgeschlossen. Schreib einfach weiter, wenn noch etwas fehlt.)`);
+        await db.from("ws_auftraege").update({ stand: "erledigt" }).eq("id", auftrag.id);
+      }
     }
   } catch (e) {
     const text = ohneGeheimnisse(e?.message || String(e));
@@ -358,6 +376,8 @@ function npm(ordner, args, minuten = 15) {
   });
 }
 async function lokalePruefung(ordner) {
+  // Regel (Prüfung 2026-10-22, R2): Der Admin-PC führt nie Projekt-Code aus – dort prüft der Cloudflare-Bau (gefunden 2026-10-23: lief trotzdem).
+  if (cfg.admin) return { ok: true, text: "Admin-PC: keine lokale Prüfung – gebaut und geprüft wird in der Cloud (Cloudflare-Bau)." };
   if (!(await existiert(path.join(ordner, "package.json")))) return { ok: true, text: "Kein package.json – nichts zu bauen." };
   const pkg = JSON.parse(await readFile(path.join(ordner, "package.json"), "utf8"));
   const schritte = [[(await existiert(path.join(ordner, "package-lock.json"))) ? ["ci", "--no-audit", "--no-fund"] : ["install", "--no-audit", "--no-fund"], "Abhängigkeiten"]];
@@ -386,7 +406,7 @@ async function claudePruefung(auftragId, ordner, prompt) {
     "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", "--setting-sources", "user"];
   let ende = null; let kosten = 0;
   await new Promise((fertig, fehl) => {
-    const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: ordner, env, shell: false, windowsHide: true });
+    const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: ordner, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     laeuft.kind = kind;
     laeuft.abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
     const rl = createInterface({ input: kind.stdout }); const offen = []; let fehlerText = "";
@@ -547,23 +567,29 @@ async function station(a) {
 // ---------- Designer-Chat (App-Designer Etappe 2, Entscheidung Gerhard 2026-10-23 09:46) ----------
 // Nur eigene Fragen (Werkstatt des Schreibenden). Claude bekommt NUR Werte + Frage: keine Werkzeuge, leerer Ordner,
 // keine Projekt-Einstellungen, keine MCP-Server – führt nichts aus, darum auch auf dem Admin-PC zulässig.
-async function claudeOhneWerkzeuge(prompt) {
+async function claudeOhneWerkzeuge(prompt, { lesenIn = null } = {}) {
   const claude = findeClaude();
   if (!claude) throw new Error("Claude Code wurde auf diesem PC nicht gefunden.");
   const env = { ...process.env };
   for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE_CODE_USE_|CLAUDE_CODE_OAUTH)/i.test(k)) delete env[k];
-  const leer = await mkdtemp(path.join(os.tmpdir(), "cs-design-"));
-  const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", "sonnet", "--tools", "", "--disallowedTools", "*",
-    "--max-turns", "2", "--no-session-persistence", "--permission-mode", "default",
-    "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", "--setting-sources", "user",
+  const leer = lesenIn ? null : await mkdtemp(path.join(os.tmpdir(), "cs-design-"));
+  // Nur Lesen (Chat überall): Read/Grep/Glob im Lese-Ordner; alles andere entfernt, Rückfragen werden abgelehnt
+  const werkzeuge = lesenIn
+    // Prüfung 2026-10-23 (ROT): kein --allowedTools (sonst überall lesbar); --restricted begrenzt Datei-Werkzeuge auf den Arbeitsordner,
+    // --permission-prompts none lehnt alles andere ab; zusätzlich feste Sperren für Anmeldedaten
+    ? ["--restricted", "--tools", "Read,Grep,Glob", "--disallowedTools", ["Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task", "mcp__*", ...VERBOTEN.filter((v) => v.startsWith("Read(")), ...LESE_SPERREN].join(","), "--permission-prompts", "none"]
+    : ["--tools", "", "--disallowedTools", "*"];
+  const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", "sonnet", ...werkzeuge,
+    "--max-turns", lesenIn ? "12" : "2", "--no-session-persistence", "--permission-mode", "default",
+    "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", ...(lesenIn ? [] : ["--setting-sources", "user"]),
     "--settings", JSON.stringify({ disableAllHooks: true })];   // Prüfung: eigene Hooks bekommen keinen fremden Text
   let ende = null;
   laeuft = { id: "design", abort: new AbortController() };   // Prüfung O4: beenden()/Update stoppt auch den Chat
   try {
     await new Promise((fertig, fehl) => {
-      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: leer, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: lesenIn || leer, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
       laeuft.kind = kind; laeuft.abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
-      const uhr = setTimeout(() => kind.kill("SIGINT"), 3 * 60 * 1000);
+      const uhr = setTimeout(() => kind.kill("SIGINT"), (lesenIn ? 6 : 3) * 60 * 1000);
       const rl = createInterface({ input: kind.stdout }); const offen = []; let fehlerText = "";
       kind.stderr.on("data", (d) => { fehlerText = (fehlerText + d.toString()).slice(-1500); });
       rl.on("line", (zeile) => {
@@ -574,7 +600,7 @@ async function claudeOhneWerkzeuge(prompt) {
       kind.on("error", (e) => { clearTimeout(uhr); fehl(e); });
       kind.on("close", (code) => { clearTimeout(uhr); Promise.all(offen).then(() => (ende ? fertig() : fehl(new Error(`Claude beendet (${code}): ${ohneGeheimnisse(fehlerText).slice(-300)}`)))); });
     });
-  } finally { laeuft = null; await rm(leer, { recursive: true, force: true }).catch(() => {}); }
+  } finally { laeuft = null; if (leer) await rm(leer, { recursive: true, force: true }).catch(() => {}); }
   if (ende?.subtype !== "success") throw new Error("Claude hat keine Antwort geliefert");
   return ende.result || "";
 }
@@ -604,11 +630,47 @@ async function designChat() {
   return true;
 }
 
+// Lese-Ordner je Projekt: Stand von main, nur zum Lesen für den Chat (kein Code wird ausgeführt)
+async function leseOrdner(projekt) {
+  const repo = await arbeitsordnerRepo(projekt);
+  const ordner = path.join(cfg.daten_ordner, "projekte", projekt.id, "lesen");
+  await git(repo, "fetch", "-q", "origin", "main");
+  if (await existiert(path.join(ordner, ".git"))) await git(ordner, "checkout", "-q", "--detach", "--force", "origin/main");
+  else { try { await git(repo, "worktree", "prune"); } catch { /* egal */ } await git(repo, "worktree", "add", "--detach", ordner, "origin/main"); }
+  return ordner;
+}
+
+// Chat überall: nur eigene Fragen, eigener PC, Claude liest nur
+async function claudeChat() {
+  const { data, error } = await db.rpc("ws_claude_chat_nehmen", { p_pc: pcId });
+  if (error) { if (!/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", ohneGeheimnisse(error.message)); return false; }
+  const f = data?.[0];
+  if (!f) return false;
+  melde("status", "Chat: Claude antwortet");
+  try {
+    const { data: projekt } = await db.from("ws_projekte").select("*").eq("id", f.projekt_id).single();
+    const { data: gruppen } = await db.from("ws_gruppen").select("id, name, ws_bereiche!inner(projekt_id, global)").eq("ws_bereiche.projekt_id", f.projekt_id);
+    const { data: alle } = await db.from("ws_claude_chat").select("id, von, text, frage_id").eq("projekt_id", f.projekt_id).eq("ort", f.ort).lt("id", f.id).order("id", { ascending: false }).limit(30);
+    const verlauf = (alle || []).reverse().slice(-10);
+    let lesenIn = null; try { lesenIn = await leseOrdner(projekt); } catch (e) { melde("fehler", `Lese-Ordner: ${ohneGeheimnisse(e?.message || String(e))}`); }
+    const prompt = assistentPrompt({ projekt, ort: f.ort, kontext: f.kontext, frage: f.text, verlauf,
+      gruppen: (gruppen || []).map((g) => ({ id: g.id, name: g.name, global: g.ws_bereiche?.global })) });
+    const roh = await claudeOhneWerkzeuge(prompt, { lesenIn: lesenIn || null });
+    const { text, vorschlag } = assistentAntwort(ohneGeheimnisse(roh));
+    const { error: e2 } = await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
+    if (e2) throw e2;
+  } catch (e) {
+    await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: `Claude konnte gerade nicht antworten: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 300)}`, p_fehler: true });
+  }
+  melde("status", "Werkstatt bereit");
+  return true;
+}
+
 // ---------- Schleife ----------
 async function naechsterAuftrag() {
   if (laeuft || stopp) return;
   // 0. Designer-Chat: kurz, eigene Fragen zuerst (nicht während der Abo-Pause)
-  if ((await aboLage()) !== "pause" && (await designChat())) return;
+  if ((await aboLage()) !== "pause" && ((await designChat()) || (await claudeChat()))) return;
   // 1. Fortsetzen: eigene Rückfragen, auf die geantwortet wurde
   // (auch von früheren Werkstatt-PC-Einträgen derselben Person, z. B. nach Neuinstallation)
   const { data: meinePcs } = await db.from("ws_werkstatt_pcs").select("id").eq("benutzer_id", cfg.user_id);
