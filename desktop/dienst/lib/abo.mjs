@@ -3,10 +3,12 @@
 // rate_limits.five_hour / rate_limits.seven_day mit used_percentage und resets_at, siehe Claude-Code-Doku „Status line“).
 
 const zahl = (v) => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v)) ? Number(v) : null);
+// Ungültige oder absurde Zeitwerte → null statt Absturz (Prüfung 0.8.7 L1)
+const iso = (d) => (Number.isFinite(d.getTime()) && d.getUTCFullYear() >= 2000 && d.getUTCFullYear() < 10000 ? d.toISOString() : null);
 const zeit = (v) => {
   const n = zahl(v);
-  if (n != null) return new Date(n < 1e12 ? n * 1000 : n).toISOString();
-  if (typeof v === "string" && !Number.isNaN(Date.parse(v))) return new Date(v).toISOString();
+  if (n != null) return iso(new Date(n < 1e12 ? n * 1000 : n));
+  if (typeof v === "string" && !Number.isNaN(Date.parse(v))) return iso(new Date(v));
   return null;
 };
 const prozent = (o) => {
@@ -61,7 +63,7 @@ export function aboEntscheidung(limits, { kleinAb = 75, pauseAb = 95 } = {}) {
  * Limits von ChatGPT (Codex): Antwort von „account/rateLimits/read“ (codex app-server) oder Zeile „rate_limits“ aus den Sitzungsdateien.
  * Ergebnis: [{ art: "5std" | "woche" | "tag" | "fenster", prozent, reset }] – nur Zahlen, nichts anderes.
  */
-export function codexFenster(obj, tiefe = 0) {
+export function codexFenster(obj, tiefe = 0, bezug = Date.now()) {
   if (!obj || typeof obj !== "object" || tiefe > 6) return null;
   const rl = obj.rateLimits || obj.rate_limits;
   if (rl && typeof rl === "object" && (rl.primary || rl.secondary)) {
@@ -70,12 +72,12 @@ export function codexFenster(obj, tiefe = 0) {
       if (!f || typeof f !== "object") continue;
       const p = zahl(f.usedPercent ?? f.used_percent); if (p == null) continue;
       const min = zahl(f.windowDurationMins ?? f.window_minutes ?? f.windowMinutes);
-      const reset = zeit(f.resetsAt ?? f.resets_at) || (zahl(f.resets_in_seconds ?? f.resetsInSeconds) != null ? new Date(Date.now() + zahl(f.resets_in_seconds ?? f.resetsInSeconds) * 1000).toISOString() : null);
+      const reset = zeit(f.resetsAt ?? f.resets_at) || (zahl(f.resets_in_seconds ?? f.resetsInSeconds) != null ? iso(new Date(bezug + zahl(f.resets_in_seconds ?? f.resetsInSeconds) * 1000)) : null);
       const art = min == null ? "fenster" : min <= 360 ? "5std" : min <= 1500 ? "tag" : min <= 11000 ? "woche" : "fenster";
       aus.push({ art, prozent: Math.max(0, Math.min(100, Math.round(p * 10) / 10)), reset });
     }
     if (aus.length) return aus;
   }
-  for (const v of Object.values(obj)) if (v && typeof v === "object") { const r = codexFenster(v, tiefe + 1); if (r) return r; }
+  for (const v of Object.values(obj)) if (v && typeof v === "object") { const r = codexFenster(v, tiefe + 1, bezug); if (r) return r; }
   return null;
 }

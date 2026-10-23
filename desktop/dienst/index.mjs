@@ -868,8 +868,9 @@ async function kopplungAbgleichEinmal(zwingend) {
   }
   // ChatGPT-Limits (5 Std./Woche) mit jedem Abgleich – nur wenn gekoppelt
   if (kiKopplung.chatgpt?.gekoppelt) {
-    const f = await codexLimits().catch(() => null);
-    if (f?.length) await kopplungMelden("chatgpt", { limits: f.slice(0, 4), limits_zeit: new Date().toISOString() }).catch(() => {});
+    const r = await codexLimits().catch(() => null);
+    const f = Array.isArray(r) ? r : r?.fenster; const stand = Array.isArray(r) ? new Date().toISOString() : r?.stand;
+    if (f?.length) await kopplungMelden("chatgpt", { limits: f.slice(0, 4), limits_zeit: stand }).catch(() => {});
   }
 }
 async function kiVermerken(art, frageId, ki) {

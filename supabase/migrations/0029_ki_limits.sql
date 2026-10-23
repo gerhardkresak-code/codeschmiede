@@ -10,7 +10,7 @@ language sql immutable set search_path = public as $$
      where jsonb_typeof(e) <> 'object'
         or exists (select 1 from jsonb_object_keys(e) k where k not in ('art','prozent','reset'))
         or coalesce(e ->> 'art', '') not in ('5std','woche','tag','fenster')
-        or jsonb_typeof(e -> 'prozent') <> 'number' or (e ->> 'prozent')::numeric not between 0 and 100
+        or coalesce(jsonb_typeof(e -> 'prozent'), '') <> 'number' or (e ->> 'prozent')::numeric not between 0 and 100
         or (e ? 'reset' and jsonb_typeof(e -> 'reset') not in ('string','null'))
         or (jsonb_typeof(e -> 'reset') = 'string' and (e ->> 'reset') !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$')))
 $$;

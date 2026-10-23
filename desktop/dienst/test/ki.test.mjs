@@ -118,3 +118,10 @@ test("Abo-Limits: Claude unifiedWindows und ChatGPT rateLimits (Gerhard 23:38)",
   const y = codexFenster({ payload: { type: "token_count", rate_limits: { primary: { used_percent: 7, window_minutes: 300, resets_in_seconds: 600 } } } });
   assert.equal(y[0].art, "5std"); assert.ok(Date.parse(y[0].reset) > Date.now());
 });
+
+test("Abo-Limits: absurde Zeitwerte stürzen nicht ab (Prüfung 0.8.7)", async () => {
+  const { codexFenster, findeAboLimits } = await import("../lib/abo.mjs");
+  const x = codexFenster({ rateLimits: { primary: { usedPercent: 5, windowDurationMins: 300, resetsAt: 1e20 } } });
+  assert.equal(x[0].reset, null);
+  assert.equal(findeAboLimits({ unifiedWindows: { five_hour: { utilization: 0.5, resetsAt: "abc" } } }).fuenf_std_reset, null);
+});

@@ -5,7 +5,7 @@
 // Restrisiko (dokumentiert): Ihre eingebauten Werkzeuge könnten technisch trotzdem Dateien des PCs lesen. Darum: Standard nur Claude,
 // Prüfungen und Bauen nur Claude, Antworten mit verdächtigem Inhalt werden verworfen. Nächster Schritt: Betriebssystem-Sandbox.
 import { spawn, execFile } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, readdirSync, statSync, openSync, readSync, closeSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { sandboxLauf, sandboxArt, sicherLesen } from "./sandbox.mjs";
 import { kopiereProjekt, vergleiche } from "./ersatz.mjs";
@@ -385,35 +385,59 @@ export function codexLimits({ home = os.homedir() } = {}) {
   const ausDatei = () => codexLimitsAusSitzungen(home);
   if (!prog) return Promise.resolve(ausDatei());
   return new Promise((fertig) => {
-    let fertigWert = null; let puffer = "";
-    const kind = spawn(prog.befehl, [...prog.vorne, "app-server"], { env: minimaleUmgebung(), shell: false, windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
-    const ende = (w) => { if (fertigWert !== null) return; fertigWert = w || ausDatei(); clearTimeout(t); try { kind.kill(); } catch { /* weg */ } fertig(fertigWert); };
+    let erledigt = false; let puffer = "";
+    const gruppe = process.platform !== "win32";
+    const kind = spawn(prog.befehl, [...prog.vorne, "app-server"], { cwd: os.tmpdir(), env: minimaleUmgebung(), shell: false, windowsHide: true, detached: gruppe, stdio: ["pipe", "pipe", "ignore"] });
+    // Ganzen Prozessbaum beenden: unter Windows startet „node codex.js“ das eigentliche Programm als Kind (Prüfung L2)
+    const beenden = () => {
+      try { kind.stdin.end(); } catch { /* zu */ }
+      if (!kind.pid) return;
+      if (gruppe) { try { process.kill(-kind.pid, "SIGKILL"); } catch { /* weg */ } return; }
+      const taskkill = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "taskkill.exe");
+      execFile(taskkill, ["/pid", String(kind.pid), "/T", "/F"], { windowsHide: true }, () => {});
+    };
+    const ende = (w) => {
+      if (erledigt) return; erledigt = true; clearTimeout(t); beenden();
+      let r = w; if (!r) { try { r = ausDatei(); } catch { r = null; } }
+      fertig(r || null);
+    };
     const t = setTimeout(() => ende(null), 20000);
     kind.on("error", () => ende(null)); kind.on("exit", () => ende(null));
+    kind.stdin.on("error", () => {});
+    const schreib = (o) => { try { kind.stdin.write(JSON.stringify(o) + "\n"); } catch { /* zu */ } };
     kind.stdout.on("data", (d) => {
+      if (erledigt) return;
       puffer += d.toString("utf8"); if (puffer.length > 2e6) return ende(null);
       let i; while ((i = puffer.indexOf("\n")) >= 0) {
         const z = puffer.slice(0, i).trim(); puffer = puffer.slice(i + 1);
         if (!z.startsWith("{")) continue;
         let m; try { m = JSON.parse(z); } catch { continue; }
         if (m.id === 0) { schreib({ jsonrpc: "2.0", method: "initialized" }); schreib({ jsonrpc: "2.0", id: 1, method: "account/rateLimits/read", params: {} }); }
-        if (m.id === 1) ende(m.result ? codexFenster(m.result) : null);
+        if (m.id === 1) { let r = null; try { r = m.result ? codexFenster(m.result) : null; } catch { r = null; } return ende(r); }
       }
     });
-    const schreib = (o) => { try { kind.stdin.write(JSON.stringify(o) + "\n"); } catch { /* zu */ } };
     schreib({ jsonrpc: "2.0", id: 0, method: "initialize", params: { clientInfo: { name: "codeschmiede", title: "Codeschmiede", version: "0.8.7" } } });
   });
 }
 export function codexLimitsAusSitzungen(home = os.homedir()) {
   try {
     const basis = path.join(home, ".codex", "sessions");
-    // neueste Datei suchen (Jahr/Monat/Tag), höchstens 3 Ebenen, nur normale Dateien
+    // neueste Datei suchen (Jahr/Monat/Tag), höchstens 3 Ebenen, nur normale Dateien (keine Verknüpfungen)
     let ordner = basis;
     for (let i = 0; i < 3; i++) { const u = readdirSync(ordner, { withFileTypes: true }).filter((e) => e.isDirectory() && /^\d+$/.test(e.name)).map((e) => e.name).sort(); if (!u.length) break; ordner = path.join(ordner, u[u.length - 1]); }
     const dateien = readdirSync(ordner, { withFileTypes: true }).filter((e) => e.isFile() && /\.jsonl$/.test(e.name)).map((e) => path.join(ordner, e.name)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
-    if (!dateien.length || statSync(dateien[0]).size > 50 * 1024 * 1024) return null;
-    const zeilen = readFileSync(dateien[0], "utf8").split("\n").reverse();
-    for (const z of zeilen) { if (!z.includes("rate_limits")) continue; try { const r = codexFenster(JSON.parse(z)); if (r) return r; } catch { /* weiter */ } }
+    if (!dateien.length) return null;
+    // nur das Ende der Datei lesen (höchstens 1 MB) – Prompts und Code davor kommen gar nicht erst in den Speicher (Prüfung L4)
+    const st = statSync(dateien[0]); const laenge = Math.min(st.size, 1024 * 1024);
+    const fd = openSync(dateien[0], "r"); const buf = Buffer.alloc(laenge);
+    try { readSync(fd, buf, 0, laenge, st.size - laenge); } finally { closeSync(fd); }
+    for (const z of buf.toString("utf8").split("\n").reverse()) {
+      if (!z.includes("rate_limits")) continue;
+      // Bezug für „resets_in_seconds“: Zeitpunkt der Zeile, sonst Änderungszeit der Datei (Prüfung L6)
+      let m; try { m = JSON.parse(z); } catch { continue; }
+      const t = Date.parse(m?.timestamp || ""); const bezug = Number.isFinite(t) ? t : st.mtimeMs;
+      const r = codexFenster(m, 0, bezug); if (r) return { fenster: r, stand: new Date(bezug).toISOString() };
+    }
   } catch { /* keine Sitzungen */ }
   return null;
 }
