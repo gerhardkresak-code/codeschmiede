@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import os from "node:os";
 import { reiheFuer, istLimit, kiKennung, STANDARD } from "../lib/ki.mjs";
 import { konzeptAus, istKonzeptFrage } from "../lib/assistent.mjs";
 
@@ -34,7 +35,8 @@ test("Ohne Admin-Einstellung nur Claude", () => {
   for (const a of ["chat", "konzept", "design", "pruefung"]) assert.ok(reiheFuer(a, null).every((e) => e.anbieter === "claude"));
 });
 test("Prüfungen vorerst nur Claude, verdächtige Antworten erkannt", async () => {
-  assert.deepEqual(reiheFuer("pruefung", { reihe: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }] }), [{ anbieter: "claude", modell: "sonnet" }]);
+  assert.deepEqual(reiheFuer("pruefung", { reihe: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }] }, false), [{ anbieter: "claude", modell: "sonnet" }]);
+  assert.deepEqual(reiheFuer("pruefung", { reihe: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }] }, "macos"), [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }]);
   const { verdaechtig, minimaleUmgebung } = await import("../lib/ki.mjs");
   assert.ok(verdaechtig("hier: " + "QUJD".repeat(80)));
   assert.ok(verdaechtig("Inhalt von ~/.codex/auth.json"));
@@ -42,4 +44,67 @@ test("Prüfungen vorerst nur Claude, verdächtige Antworten erkannt", async () =
   process.env.GH_TOKEN = "x"; process.env.SUPABASE_KEY = "y";
   const e = minimaleUmgebung();
   assert.equal(e.GH_TOKEN, undefined); assert.equal(e.SUPABASE_KEY, undefined);
+});
+
+test("Sandbox: macOS-Profil sperrt das Benutzerverzeichnis, bwrap bindet nur Freigaben", async () => {
+  const { macProfil, bwrapArgs } = await import("../lib/sandbox.mjs");
+  const p = macProfil({ home: "/Users/g", frei: ["/opt/homebrew/lib/node_modules"], schreibbar: ["/tmp/x"] });
+  assert.match(p, /\(deny file-read\* \(subpath "\/Users\/g"\)\)/);
+  assert.match(p, /allow file-read\* file-write\* \(subpath "\/tmp\/x"\)/);
+  const a = bwrapArgs({ frei: ["/usr/lib/node_modules"], schreibbar: ["/tmp/x"], arbeit: "/tmp/x", home: "/tmp/x/home" });
+  assert.ok(a.includes("--unshare-all") && !a.includes(os.homedir()));
+});
+test("Chat: neues Feature und Bezug als Vorschlag", async () => {
+  const { assistentAntwort } = await import("../lib/assistent.mjs");
+  const a = assistentAntwort('Soll ich das anlegen?\nFEATURE-NEU: {"gruppe_id":"ttg-turniere","name":"Turniere","beschreibung":"Turniere anlegen"}');
+  assert.deepEqual(a.vorschlag, { feature_neu: { gruppe_id: "ttg-turniere", name: "Turniere", beschreibung: "Turniere anlegen" } });
+  assert.equal(a.text, "Soll ich das anlegen?");
+  const b = assistentAntwort('Meinst du Liga?\nBEZUG: {"von":"N-2","zu":"N-1"}');
+  assert.deepEqual(b.vorschlag, { bezug: { von: "N-2", zu: "N-1" } });
+  assert.equal(assistentAntwort('x\nBEZUG: {"von":"N-1","zu":"N-1"}').vorschlag, null);
+});
+test("Eigene Anbieter: Argumente mit {prompt}/{modell}, nie für Prüfungen", async () => {
+  const { freieArgumente } = await import("../lib/ki.mjs");
+  const def = { argumente: ["-p", "{prompt}", "--model", "{modell}", "--silent"] };
+  assert.deepEqual(freieArgumente(def, "Hallo", "gpt-5"), { args: ["-p", "Hallo", "--model", "gpt-5", "--silent"], stdin: null });
+  assert.deepEqual(freieArgumente(def, "Hallo", ""), { args: ["-p", "Hallo", "--silent"], stdin: null });
+  assert.deepEqual(freieArgumente({ argumente: ["--model={modell}"] }, "X", "--yolo"), { args: [], stdin: "X" });
+  assert.deepEqual(reiheFuer("chat", { reihe: [{ anbieter: "copilot", modell: "gpt-5" }, { anbieter: "claude" }] }), [{ anbieter: "copilot", modell: "gpt-5" }, { anbieter: "claude" }]);
+  assert.deepEqual(reiheFuer("pruefung", { reihe: [{ anbieter: "copilot" }, { anbieter: "claude" }] }, "macos"), [{ anbieter: "claude" }]);
+});
+test("Sandbox (Prüfung 0.8.0): keine Symlinks zurück, keine zu weiten Freigaben, kein Schlüsselbund", async () => {
+  const { sicherLesen, zuWeit, macProfil } = await import("../lib/sandbox.mjs");
+  const fs = await import("node:fs/promises"); const p = await import("node:path");
+  const a = await fs.mkdtemp(p.join(os.tmpdir(), "cs-t-")); const draussen = await fs.mkdtemp(p.join(os.tmpdir(), "cs-g-"));
+  await fs.writeFile(p.join(draussen, "geheim.json"), '{"token":"x"}');
+  await fs.writeFile(p.join(a, "ok.json"), '{"a":1}');
+  await fs.symlink(p.join(draussen, "geheim.json"), p.join(a, "link.json"));
+  await fs.link(p.join(draussen, "geheim.json"), p.join(a, "hart.json"));
+  await fs.symlink(draussen, p.join(a, "ordner"));
+  assert.equal((await sicherLesen(p.join(a, "ok.json"), a)).toString(), '{"a":1}');
+  assert.equal(await sicherLesen(p.join(a, "link.json"), a), null);
+  assert.equal(await sicherLesen(p.join(a, "hart.json"), a), null);
+  assert.equal(await sicherLesen(p.join(a, "ordner", "geheim.json"), a), null);
+  assert.ok(zuWeit("/home/g", "/home/g") && zuWeit("/home", "/home/g") && zuWeit("/", "/home/g"));
+  assert.ok(!zuWeit("/home/g/.nvm/versions/node/v22", "/home/g") && !zuWeit("/usr/lib/node_modules", "/home/g"));
+  const m = macProfil({ home: "/Users/g", frei: ["/opt/homebrew/lib/node_modules"], schreibbar: ["/var/t/T/cs-1"], temp: "/var/t/T" });
+  assert.match(m, /deny process-exec/); assert.match(m, /com\.apple\.SecurityServer/); assert.match(m, /deny file-read\* \(subpath "\/var\/t"\)/);
+  assert.ok(m.indexOf('deny file-read* (subpath "/var/t")') < m.indexOf('allow file-read* file-write* (subpath "/var/t/T/cs-1")'));
+  await fs.rm(a, { recursive: true }); await fs.rm(draussen, { recursive: true });
+});
+test("Nachprüfung 0.8.0: Anmeldedateien nur mit erwartetem Aufbau, Mac ohne Schreiben außerhalb, freie Argumente", async () => {
+  const { anmeldungBereinigen, macProfil, zuWeit } = await import("../lib/sandbox.mjs");
+  const ok = anmeldungBereinigen("auth.json", Buffer.from('{"tokens":{"refresh_token":"r","x":"y"},"fremd":"geheim"}'));
+  assert.deepEqual(JSON.parse(ok.toString()), { tokens: { refresh_token: "r" } });
+  assert.equal(anmeldungBereinigen("auth.json", Buffer.from('{"claudeAiOauth":{"accessToken":"a"}}')), null);
+  assert.equal(anmeldungBereinigen("oauth_creds.json", Buffer.from('{"foo":1}')), null);
+  assert.equal(anmeldungBereinigen("installation_id", Buffer.from("-----BEGIN")), null);
+  const m = macProfil({ home: "/Users/g", frei: ["/Users/g/.nvm/versions/node/v22"], schreibbar: ["/var/t/x/T/cs-1"], temp: "/var/t/x/T" });
+  assert.match(m, /deny file-write\* \(subpath "\/"\)/);
+  assert.match(m, /deny file-read\* \(subpath "\/var\/t\/x"\)/);
+  assert.match(m, /allow file-read-metadata \(literal "\/Users\/g\/\.nvm"\)/);
+  assert.ok(zuWeit("/home/g", "/home/g/..x") && !zuWeit("/home/g/..x", "/home/g"));
+  assert.ok(anmeldungBereinigen("installation_id", Buffer.from("123e4567-e89b-12d3-a456-426614174000\n")));
+  const { freieArgumente } = await import("../lib/ki.mjs");
+  assert.deepEqual(freieArgumente({ argumente: ["--p={prompt}"] }, "Hi", ""), { args: ["--p=Hi"], stdin: null });
 });

@@ -2,15 +2,20 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
   Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power, Hammer,
-  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore,
+  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale,
 } from "lucide-react";
 import { supabase } from "./supabase";
+import { Markdown } from "./Markdown";
 import { WS_ICON, STAND, ROLLEN, BEREICH_RECHTE } from "./config";
 import { isDesktop, tauri } from "./desktop";
 import Designer from "./Designer";
 import ClaudeSpalte from "./ClaudeSpalte";
 import { ZweigeVersionen, Pruefstand, Wissensdatenbank, Aenderungsprotokoll, Dokumentation } from "./Ablauf";
 import KiAnbieter from "./KiAnbieter";
+import Einrichtung, { EinrichtungChip, useEinrichtung } from "./Einrichtung";
+import { MitErwaehnung, erwaehnte, FeatureBezuege } from "./Bezuege";
+import Regelwerk from "./Regelwerk";
+import { LogoZeichen } from "./Logo";
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
 // Konzept: docs/KONZEPT.md · Datenbank: supabase/migrations/
@@ -143,7 +148,7 @@ export default function App() {
   const [ansicht, setAnsicht] = useState("zentrale");
   const [projekt, setProjekt] = useState(() => merke.lies("cs-projekt"));
   const [toast, setToast] = useState("");
-  const [neuesProjekt, setNeuesProjekt] = useState(false); const [projekteVerwalten, setProjekteVerwalten] = useState(false);
+  const [neuesProjekt, setNeuesProjekt] = useState(false); const [projekteVerwalten, setProjekteVerwalten] = useState(false); const [einrichtung, setEinrichtung] = useState(false);
   const [ortZentrale, setOrtZentrale] = useState(null);   // Gruppe/Feature, das in der Zentrale gerade offen ist (für den Chat)
 
   useEffect(() => {
@@ -165,7 +170,7 @@ export default function App() {
   if (!sitzung) return <Anmelden />;
   if (!ich) return <EinladungAnnehmen sitzung={sitzung} onFertig={ladeIch} />;
 
-  const nav = [["zentrale", "Auftrags-Zentrale", Inbox], ["vorschau", "Live-Vorschau", Eye], ["designer", "App-Designer", Palette], ["global", "Globale Einstellungen", Globe], ["_", "Ablauf"], ["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen], ["_", "Dokumentation"], ["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["_", "Verwaltung"], ["benutzer", "Benutzer & Rechte", KeyRound], ["ki", "KI-Anbieter", Cpu], ["verbrauch", "Verbrauch & Limits", Gauge]];
+  const nav = [["zentrale", "Auftrags-Zentrale", Inbox], ["vorschau", "Live-Vorschau", Eye], ["designer", "App-Designer", Palette], ["global", "Globale Einstellungen", Globe], ["_", "Ablauf"], ["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen], ["_", "Dokumentation"], ["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["regelwerk", "Regelwerk", Scale], ["_", "Verwaltung"], ["benutzer", "Benutzer & Rechte", KeyRound], ["ki", "KI-Anbieter", Cpu], ["einrichtung", "Einrichtung", Wrench], ["verbrauch", "Verbrauch & Limits", Gauge]];
   const offen = daten.auftraege.filter((a) => a.offeneFrage).length;
   const aktuell = daten.projekte.find((p) => p.id === daten.projektId);
   const PIcon = WS_ICON[aktuell?.symbol] || Layers;
@@ -180,7 +185,7 @@ export default function App() {
         <div className="hidden md:block mb-2">
           <label htmlFor="cs-projekt" className="text-[11px] uppercase tracking-widest text-emerald-200/60 px-2.5">Projekt</label>
           <div className="mt-1 flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-2">
-            <PIcon className="w-[18px] h-[18px] shrink-0" />
+            {aktuell?.logo ? <LogoZeichen werte={aktuell.logo} groesse={20} /> : <PIcon className="w-[18px] h-[18px] shrink-0" />}
             <select id="cs-projekt" value={daten.projektId || ""} onChange={(e) => waehle(e.target.value)} className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none [&>option]:text-slate-900">
               {daten.projekte.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -190,7 +195,7 @@ export default function App() {
         </div>
         <nav className="flex md:flex-col gap-0.5" aria-label="Programm-Menü">
           {nav.map(([id, t, Icon], i) => id === "_" ? <div key={i} className="hidden md:block text-[11px] uppercase tracking-widest text-emerald-200/60 px-2.5 pt-3 pb-1">{t}</div> : (
-            <button key={id} type="button" aria-current={ansicht === id} onClick={() => setAnsicht(id)}
+            <button key={id} type="button" aria-current={ansicht === id} onClick={() => (id === "einrichtung" ? setEinrichtung(true) : setAnsicht(id))}
               className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm whitespace-nowrap text-left ${ansicht === id ? "bg-emerald-400/15 text-white font-semibold" : "hover:bg-white/5"}`}>
               <Icon className="w-[18px] h-[18px]" />{t}{id === "zentrale" && offen > 0 && <span className="ml-auto text-[11px] font-bold bg-amber-500 text-amber-950 rounded-full px-1.5">{offen}</span>}
             </button>))}
@@ -208,6 +213,7 @@ export default function App() {
           <span className="inline-flex items-center gap-1.5 text-xs text-slate-500"><i className="w-2 h-2 rounded-full bg-green-600" />Live synchronisiert</span>
           <div className="ml-auto flex items-center gap-3 flex-wrap">
             <VerbrauchKurz d={daten} ich={ich} onClick={() => setAnsicht("verbrauch")} />
+            <EinrichtungChip ich={ich} d={daten} onOeffnen={() => setEinrichtung(true)} />
             <WerkstattSchalter ich={ich} sitzung={sitzung} d={daten} toast={setToast} />
           </div>
         </div>
@@ -215,6 +221,7 @@ export default function App() {
           : !daten.projektId ? <div className={`${card} p-8 text-slate-500`}>Du bist noch keinem Projekt zugeordnet. Der Admin nimmt dich in ein Projekt auf.</div>
           : ansicht === "zentrale" ? <Zentrale key={daten.projektId} d={daten} ich={ich} toast={setToast} onOrt={setOrtZentrale} />
           : ansicht === "global" ? <Zentrale key={daten.projektId + "-global"} d={daten} ich={ich} toast={setToast} nurGlobal onOrt={setOrtZentrale} />
+          : ansicht === "regelwerk" ? <Regelwerk key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "ki" ? <KiAnbieter key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "zweige" ? <ZweigeVersionen key={daten.projektId} d={daten} />
           : ansicht === "pruef" ? <Pruefstand key={daten.projektId} d={daten} />
@@ -234,6 +241,8 @@ export default function App() {
         const kontext = `Projekt: ${aktuell?.name || ""}\nSeite: ${nav.find((n) => n[0] === ansicht)?.[1] || ansicht}${imZentrum ? `\n${ortZentrale.text}` : ""}`;
         return <ClaudeSpalte d={daten} ich={ich} ort={ort} kontext={kontext} toast={setToast} />;
       })()}
+      {einrichtung && !daten.laden && <Einrichtung ich={ich} d={daten} toast={setToast} onClose={() => setEinrichtung(false)} />}
+      {!daten.laden && daten.projektId && <EinrichtungAuto ich={ich} d={daten} onOeffnen={() => setEinrichtung(true)} />}
       {projekteVerwalten && <ProjekteVerwalten toast={setToast} aktiv={daten.projektId} onClose={() => setProjekteVerwalten(false)} onWeg={(id) => { if (id === daten.projektId) { const n = daten.projekte.find((p) => p.id !== id); if (n) waehle(n.id); } }} />}
       {neuesProjekt && <NeuesProjekt toast={setToast} onClose={() => setNeuesProjekt(false)} onFertig={(id) => waehle(id)} />}
       <Toast text={toast} onDone={() => setToast("")} />
@@ -393,7 +402,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onOrt }) {
           </div>
         </section>
 
-        {f ? <FeatureKurzinfo f={f} g={g} d={d} onOeffnen={() => setPlatz(f.id)} onGruppe={() => setSel({ g: g.id, f: null })} onVerschieben={kannVerschieben ? () => setDlg({ art: "verschieben", f }) : null} />
+        {f ? <FeatureKurzinfo f={f} g={g} d={d} ich={ich} toast={toast} darfAuftrag={darf(g.bereich_id, "auftraege")} onOeffnen={() => setPlatz(f.id)} onGruppe={() => setSel({ g: g.id, f: null })} onVerschieben={kannVerschieben ? () => setDlg({ art: "verschieben", f }) : null} />
           : <AuftragsChat g={g} f={null} d={d} ich={ich} darf={darf} toast={toast} kanal="gruppe" />}
       </div>}
       {dlg?.art === "feature" && <NeuesFeature g={g} ich={ich} texter={rolle === "texter"} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: g.id, f: id })} />}
@@ -431,6 +440,11 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
         if (error) throw error;
         const r = await supabase.from("ws_nachrichten").insert({ auftrag_id: data.id, von: ich.id, art: "text", text: bausteinText(t), kanal });
         if (r.error) throw r.error; toast(`Auftrag #${data.id} an Werkstatt ${g.name} gestellt`);
+      }
+      // @Feature im Text = fester Bezug „Vorlage“ für dieses Feature (Entscheidung 2026-10-22 22:31)
+      if (f) for (const x of erwaehnte(t, d.features).filter((x) => x.id !== f.id)) {
+        const { error: eb } = await supabase.rpc("ws_bezug_setzen", { p_von: f.id, p_zu: x.id });
+        if (!eb) toast(`Vorlage gesetzt: ${x.name}`);
       }
       setText(""); onBausteinFertig?.();
     } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
@@ -479,7 +493,7 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
                     {m.kanal === "gruppe" && f && <span className="px-1.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">aus Gruppe</span>}
                     {m.kanal === "claude-chat" && <span className="px-1.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">aus Claude-Chat</span>}
                     {zu && <span className="text-green-700 dark:text-green-400 inline-flex items-center gap-1"><CircleCheck className="w-3 h-3" />abgeschlossen</span>}</div>}
-                  <div className="whitespace-pre-wrap break-words">{m.text}</div>
+                  <Markdown text={m.text} klein />
                 </div>); })}
               <PruefBefunde a={a} />
               {offeneErl.filter((e) => e.auftrag_id === a.id).map((e) => <ErlaubnisKarte key={e.id} e={e} g={g} kann={kannFrei} onEntscheid={erlauben} />)}
@@ -495,7 +509,7 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
       )}
       {kannAuftrag ? (
         <div className="border-t border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-2">
-          <textarea id="ws-auftrag" className={`${input} min-h-[72px]`} value={text} onChange={(e) => setText(e.target.value)} placeholder={frage ? "Antwort auf die Rückfrage …" : f ? `Was soll sich bei „${f.name}“ ändern?` : `Was soll sich in ${g.name} ändern?`} aria-label="Nachricht" />
+          <MitErwaehnung id="ws-auftrag" className={`${input} min-h-[72px]`} value={text} onChange={setText} features={d.features.filter((x) => !x.ausgebaut)} placeholder={frage ? "Antwort auf die Rückfrage …" : f ? `Was soll sich bei „${f.name}“ ändern? (@ verweist auf ein Feature als Vorlage)` : `Was soll sich in ${g.name} ändern?`} aria-label="Nachricht" />
           <div className="flex items-center justify-between gap-2 flex-wrap"><span className="text-xs text-slate-500">{frage ? "Antwort geht an den laufenden Auftrag" : laufend ? "Neuer Auftrag kommt in die Warteschlange" : "Wird vom nächsten freien Werkstatt-PC übernommen"}</span>
             <button type="button" className={btn} disabled={busy || !text.trim()} onClick={senden}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}{frage ? "Antworten" : "Senden"}</button></div>
         </div>
@@ -587,7 +601,7 @@ function Verschieben({ f, d, onClose, onWahl }) {
     </Dialog>);
 }
 
-function FeatureKurzinfo({ f, g, d, onOeffnen, onGruppe, onVerschieben }) {
+function FeatureKurzinfo({ f, g, d, ich, toast, darfAuftrag, onOeffnen, onGruppe, onVerschieben }) {
   const js = d.auftraege.filter((a) => a.feature_id === f.id);
   const letzter = js[js.length - 1];
   const laufend = js.find((a) => a.stand === "laeuft");
@@ -603,6 +617,7 @@ function FeatureKurzinfo({ f, g, d, onOeffnen, onGruppe, onVerschieben }) {
         <dt className="text-slate-500">Gerade</dt><dd>{laufend ? <span className="inline-flex items-center gap-1.5 text-blue-600 font-semibold"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />Werkstatt {pc?.name || ""} arbeitet</span> : "niemand"}</dd>
         <dt className="text-slate-500">Aufträge</dt><dd>{js.length} ({js.filter((a) => ABGESCHLOSSEN.includes(a.stand)).length} abgeschlossen)</dd>
       </dl>
+      <FeatureBezuege f={f} d={d} ich={ich} toast={toast} darfAuftrag={darfAuftrag} />
       <button type="button" className={btn} onClick={onOeffnen}><Layers className="w-4 h-4" />Öffnen: Chat & Live-Vorschau</button>
       <button type="button" className={ghost} onClick={onGruppe}><MessageSquare className="w-4 h-4" />Zum Chat der Gruppe</button>
       {onVerschieben && <button type="button" className={ghost} onClick={onVerschieben}><FolderInput className="w-4 h-4" />Verschieben …</button>}
@@ -1076,6 +1091,23 @@ function Verbrauch({ d, ich, toast }) {
 }
 
 // ---------------- Werkstatt (nur im Programm) ----------------
+// Einrichtungs-Assistent beim ersten Start von selbst öffnen – und später, wenn auf diesem PC etwas Wichtiges fehlt (einmal je Programmstart)
+let einrichtungAutoGezeigt = false;
+function EinrichtungAuto({ ich, d, onOeffnen }) {
+  const { st, offen } = useEinrichtung(ich, d);
+  useEffect(() => {
+    if (einrichtungAutoGezeigt || !st?.desk) return;
+    let gesehen = false; try { gesehen = localStorage.getItem("cs-einrichtung-gesehen") === "1"; } catch { /* egal */ }
+    // offen zählt auch die laufende Werkstatt – kurz nach dem Start ist sie evtl. noch nicht an, darum nur Werkzeuge/Anmeldung werten
+    // Nur wer baut (Admin/Entwickler), braucht die Werkzeuge – Leser sehen den Assistenten nur beim ersten Start (Prüfung 0.8.0)
+    const baut = ich?.rolle === "admin" || (d?.mitglieder || []).some((m) => m.benutzer_id === ich?.id && m.rolle === "entwickler");
+    const werkzeugFehlt = baut && ["node", "git", "claude", "gh", "gh_angemeldet"].some((k) => !st.werk?.[k]);
+    if (!gesehen || werkzeugFehlt) { einrichtungAutoGezeigt = true; onOeffnen(); }
+    else einrichtungAutoGezeigt = true;
+  }, [st, offen, onOeffnen, ich, d]);
+  return null;
+}
+
 let werkstattAutoVersucht = false;   // einmal je Programmstart
 function WerkstattSchalter({ ich, sitzung, d, toast }) {
   const [st, setSt] = useState(null); const [busy, setBusy] = useState(false);
@@ -1149,7 +1181,7 @@ function UpdateHinweis({ toast }) {
 function ProjekteVerwalten({ toast, aktiv, onClose, onWeg }) {
   const [liste, setListe] = useState(null); const [weg, setWeg] = useState(null); const [umfang, setUmfang] = useState(null);
   const [name, setName] = useState(""); const [busy, setBusy] = useState(false); const [tick, setTick] = useState(0);
-  useEffect(() => { supabase.from("ws_projekte").select("id, name, repo, archiviert").order("name").then(({ data }) => setListe(data || [])); }, [tick]);
+  useEffect(() => { supabase.from("ws_projekte").select("id, name, repo, archiviert, logo").order("name").then(({ data }) => setListe(data || [])); }, [tick]);
   const archiv = async (p, aus) => {
     const { error } = await supabase.rpc("ws_projekt_archivieren", { p_projekt: p.id, p_aus: aus });
     if (error) { toast(fehler(error)); return; }
@@ -1186,6 +1218,7 @@ function ProjekteVerwalten({ toast, aktiv, onClose, onWeg }) {
         <div className="flex flex-col divide-y divide-slate-100 dark:divide-slate-800">
           {liste.map((p) => (
             <div key={p.id} className="py-2.5 flex flex-wrap items-center gap-2">
+              {p.logo && <LogoZeichen werte={p.logo} groesse={28} />}
               <div className="min-w-0 flex-1"><div className="font-semibold flex items-center gap-2">{p.name}{p.id === aktiv && <span className="text-[11px] rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">geöffnet</span>}{p.archiviert && <span className="text-[11px] rounded-full px-2 py-0.5 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">archiviert</span>}</div>
                 <div className="text-xs text-slate-500 font-mono break-all">{p.id}{p.repo ? ` · ${p.repo}` : ""}</div></div>
               {p.archiviert ? <button type="button" className={`${ghost} h-9 text-xs`} onClick={() => archiv(p, false)}><ArchiveRestore className="w-3.5 h-3.5" />Wiederherstellen</button>

@@ -1,7 +1,7 @@
 # Konzept: Baustein-Bibliothek im App-Designer
 
 **Stand:** 2026-10-22 22:30 · Wer: Claude (Konzept), Anweisung Gerhard 22:16 („Kacheln, Diagramme und sonstiges, alles was die App
-oder du für die App erstellst, einbinden, ändern/umgestalten, mit Chat – erst Konzept, im Internet prüfen“) · **Status: ENTWURF, Entscheidungen 22:33 eingearbeitet, noch nicht freigegeben**
+oder du für die App erstellst, einbinden, ändern/umgestalten, mit Chat – erst Konzept, im Internet prüfen“) · **Status: umgesetzt in 0.8.0** (Tabellen-Varianten, Icon-Stil, Verzeichnis, Galerie, Neuer Baustein mit Chat; Datenbank 0017)
 
 ## Ziel
 Alles, was eine App sichtbar zusammensetzt, ist im App-Designer der Codeschmiede als **Baustein** sichtbar, mit allen Varianten und

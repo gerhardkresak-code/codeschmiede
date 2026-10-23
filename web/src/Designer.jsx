@@ -4,6 +4,9 @@ import {
   Sun, Moon, CircleCheck, CircleAlert, TriangleAlert, Loader2, Bot, ShieldCheck, Sparkles, Check, X, ExternalLink, LayoutTemplate, Home, Users, Calendar, Trophy, Settings, Bell, Search,
 } from "lucide-react";
 import { supabase } from "./supabase";
+import { BausteineModus, MarkeModus, BAUSTEIN_BASIS, bausteinWerteBereinigen } from "./DesignerBausteine";
+import { MARKE_BASIS } from "./Logo";
+import { Markdown } from "./Markdown";
 
 // App-Designer · Etappe 1 (Entwurf 0.9, freigegeben von Gerhard 2026-10-22 22:40) · Etappe 2: Chat mit Claude + erweiterte Prüfungen (2026-10-23)
 // Ein Grunddesign je Projekt (nicht je Rolle). Ändern → Entwurf speichern (jede Fassung bleibt) → vergleichen → als Auftrag senden.
@@ -29,6 +32,9 @@ export const BASIS = {
   form: { radius: 8, radius_karte: 16, abstand: 16, schatten: "leicht" },
   menue: { position: "links", aufklappbar: true, breite: 248, tablet: "eingeklappt", handy: "unten" },
   logo: { platz: "menue-oben", groesse: 36 },
+  // Etappe 4/5: Tabellen-Varianten, Icon-Stil, Marke (gleich wie src/lib/design/grunddesign.js in Trainer to go)
+  ...JSON.parse(JSON.stringify(BAUSTEIN_BASIS)),
+  marke: { ...MARKE_BASIS },
 };
 
 const FARBEN = [["primaer", "Hauptfarbe"], ["primaer_text", "Text auf Hauptfarbe"], ["hintergrund", "Hintergrund"], ["flaeche", "Flächen (Karten)"],
@@ -43,7 +49,9 @@ const VERBOTEN = new Set(["__proto__", "constructor", "prototype"]);
 const mische = (b, w) => { const r = tief(b); const geh = (z, q) => { if (!q || typeof q !== "object" || Array.isArray(q)) return;
   Object.keys(z).forEach((k) => { if (VERBOTEN.has(k) || !Object.prototype.hasOwnProperty.call(q, k)) return; const v = q[k];
     if (z[k] && typeof z[k] === "object") geh(z[k], v);
-    else if (typeof v === typeof z[k] && (typeof z[k] !== "string" || !z[k].startsWith("#") || /^#[0-9a-f]{6}$/i.test(v))) z[k] = v; }); }; geh(r, w); return r; };
+    else if (typeof v === typeof z[k] && (typeof z[k] !== "string" || !z[k].startsWith("#") || /^#[0-9a-f]{6}$/i.test(v))) z[k] = v; }); }; geh(r, w);
+  // Zuweisung je Tabelle und Marke: nur aus w übernehmen, wenn w sie enthält (Vorschläge sind Teilwerte)
+  return bausteinWerteBereinigen(r, w, b); };
 const setze = (o, pfad, v) => { const r = tief(o); let z = r; pfad.slice(0, -1).forEach((k) => { z[k] = z[k] || {}; z = z[k]; }); z[pfad[pfad.length - 1]] = v; return r; };
 const flach = (o, p = "") => Object.entries(o || {}).filter(([k]) => !VERBOTEN.has(k)).flatMap(([k, v]) => (v && typeof v === "object" ? flach(v, p + k + ".") : [[p + k, v]]));
 
@@ -125,6 +133,7 @@ export default function Designer({ d, ich, toast }) {
   const [dialog, setDialog] = useState(null);
   const [arbeit, setArbeit] = useState(false);
   const [rechts, setRechts] = useState("chat");
+  const [chatText, setChatText] = useState("");
 
   const darf = useMemo(() => {
     if (ich.rolle === "admin") return true;
@@ -222,9 +231,11 @@ export default function Designer({ d, ich, toast }) {
       {!darf && <p className="text-sm text-slate-500">Nur ansehen: Gestalten dürfen Entwickler mit dem Recht „Aufträge geben“ im Bereich der Design-Gruppe.</p>}
       {fest && <p className="text-sm text-slate-600 dark:text-slate-300">Dieser Entwurf ist {STAND_TXT[aktiv.stand].toLowerCase()} und damit fest{aktiv.auftrag_id ? ` (Auftrag #${aktiv.auftrag_id})` : ""}. Für Änderungen eine Kopie anlegen.</p>}
 
-      {modus !== "grund" ? <Spaeter modus={modus} /> : (
+      {(
         <div className="grid gap-3 grid-cols-[minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_280px] lg:grid-cols-[300px_minmax(0,1fr)]">
-          <Einstellungen w={werte} aendere={aendere} bearbeitbar={bearbeitbar} />
+          {modus === "bausteine" ? <BausteineModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} projekt={projekt} d={d} ich={ich} toast={toast} dunkel={dunkel} Testseite={Testseite} breite={GERAETE[geraet][0]} onChat={(t) => { setRechts("chat"); setChatText(t); }} />
+            : modus === "marke" ? <MarkeModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} projekt={projekt} ich={ich} toast={toast} />
+            : <><Einstellungen w={werte} aendere={aendere} bearbeitbar={bearbeitbar} />
           <section className={`${card} min-w-0 flex flex-col`}>
             <div className="flex flex-wrap items-center gap-2 p-2 border-b border-slate-200 dark:border-slate-800">
               <div role="tablist" aria-label="Ansicht" className="flex gap-1">
@@ -242,7 +253,7 @@ export default function Designer({ d, ich, toast }) {
               {mitte === "testseite" && <Testseite projekt={projekt} breite={GERAETE[geraet][0]} werte={werte} modus={dunkel ? "dunkel" : "hell"} />}
               {mitte === "vergleich" && <Vergleich entwuerfe={entwuerfe} gueltig={gueltig} aktuell={{ name: aktiv ? `${aktiv.name}${geaendert ? " (ungespeichert)" : ""}` : "Im Editor", werte }} modus={dunkel ? "dunkel" : "hell"} name={projekt.name} />}
             </div>
-          </section>
+          </section></>}
           <aside className={`${card} lg:col-span-2 xl:col-span-1 self-start flex flex-col min-h-[520px] max-h-[calc(100vh-140px)]`}>
             <div role="tablist" aria-label="Seitenleiste" className="flex gap-1 p-2 border-b border-slate-200 dark:border-slate-800">
               {[["chat", "Chat mit Claude", Bot], ["pruef", "Prüfungen", ShieldCheck]].map(([id, t, I]) => (
@@ -251,9 +262,9 @@ export default function Designer({ d, ich, toast }) {
                   <I className="w-4 h-4" />{t}{id === "pruef" && (rot ? <span className="text-[11px] font-bold bg-red-600 text-white rounded-full px-1.5">{rot}</span> : hinweise ? <span className="text-[11px] font-bold bg-amber-500 text-amber-950 rounded-full px-1.5">{hinweise}</span> : null)}</button>))}
             </div>
             {rechts === "pruef" ? <Pruefliste befunde={befunde} rot={rot} hinweise={hinweise} onFragen={() => setRechts("chat")} />
-              : <DesignChat d={d} ich={ich} projekt={projekt} entwurf={aktiv} werte={werte} befunde={befunde} darf={darf} toast={toast}
+              : <DesignChat d={d} ich={ich} projekt={projekt} entwurf={aktiv} werte={werte} befunde={befunde} darf={darf} toast={toast} modus={modus} text={chatText} setText={setChatText}
                   onUebernehmen={(v) => { if (!bearbeitbar) { toast(fest ? "Dieser Entwurf ist fest – lege eine Kopie an" : "Kein Recht zum Gestalten"); return false; }
-                    setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, v)); setGeaendert(true); setMitte("geruest"); return true; }} />}
+                    setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, v)); setGeaendert(true); if (modus === "grund") setMitte("geruest"); return true; }} />}
           </aside>
         </div>)}
 
@@ -458,11 +469,6 @@ function SendenDialog({ entwurf, werte, gueltig, rot, onClose, onGesendet, toast
     <div className="flex justify-end gap-2 mt-3"><button type="button" className={ghost} onClick={onClose}>Abbrechen</button><button type="button" className={btn} onClick={senden} disabled={laeuft || text.trim().length < 10}>{laeuft ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}Senden</button></div>
   </Hulle>;
 }
-function Spaeter({ modus }) {
-  const t = modus === "bausteine" ? ["Bausteine & Seiten-Vorlagen", "Kacheln, Diagramme, Listen, Formulare und Seiten-Vorlagen – mit Chat bearbeitbar. Kommt in Etappe 4 (zuerst Bestandsaufnahme der vorhandenen Bausteine in Trainer to go)."]
-    : ["Marke", "Logo-Designer (Teile verschieben, hell/dunkel, 64/32/16 px) und Projektlogos in der Projektliste. Kommt in Etappe 5 – das Codeschmiede-Logo „Glühendes C“ ist bereits gewählt."];
-  return <div className={`${card} p-8 text-center`}><h3 className="font-display font-bold text-xl">{t[0]}</h3><p className="text-sm text-slate-500 max-w-xl mx-auto mt-1">{t[1]}</p></div>;
-}
 
 function Pruefliste({ befunde, rot, hinweise, onFragen }) {
   const gruppen = [...new Set(befunde.map((b) => b.gruppe))];
@@ -482,9 +488,8 @@ function Pruefliste({ befunde, rot, hinweise, onFragen }) {
 
 // Chat mit Claude: läuft über die eigene Werkstatt (Abo), Claude bekommt nur die Werte, keine Werkzeuge.
 const IDEEN = ["Mach die Knöpfe besser lesbar", "Wärmer und freundlicher, aber seriös", "Moderner Dunkelmodus", "Löse die offenen Prüfungen", "Passt das für Dorf- und Profivereine?"];
-function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onUebernehmen }) {
+function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onUebernehmen, modus = "grund", text, setText }) {
   const [liste, setListe] = useState([]);
-  const [text, setText] = useState("");
   const [senden, setSenden] = useState(false);
   const ende = React.useRef(null);
   const holen = useCallback(async () => {
@@ -503,7 +508,9 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
   const schicke = async (t) => {
     const inhalt = (t ?? text).trim(); if (!inhalt) return;
     const offen = befunde.filter((b) => !b.ok).map((b) => `${b.text} (${b.wert})`);
-    const frage = /prüfung/i.test(inhalt) && offen.length ? `${inhalt}\nOffene Prüfungen: ${offen.join("; ")}` : inhalt;
+    const basis = /prüfung/i.test(inhalt) && offen.length ? `${inhalt}\nOffene Prüfungen: ${offen.join("; ")}` : inhalt;
+    // Bereich mitschicken: die Werkstatt wählt danach die KI-Zuständigkeit (Marke → „Bilder & Grafiken“)
+    const frage = modus === "marke" ? `[Marke] ${basis}` : modus === "bausteine" ? `[Bausteine] ${basis}` : basis;
     setSenden(true);
     const { error } = await supabase.from("ws_design_chat").insert({ projekt_id: projekt.id, entwurf_id: entwurf?.id || null, text: frage.slice(0, 8000), werte });
     setSenden(false);
@@ -523,13 +530,13 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
         {liste.map((m) => m.frage_id ? (
           <div key={m.id} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-2.5 max-w-[95%]">
             <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Bot className="w-3.5 h-3.5" />Claude{fragen[m.frage_id] && fragen[m.frage_id].von !== ich.id ? ` · über die Werkstatt von ${d.benutzer.find((u) => u.id === fragen[m.frage_id].von)?.name || "Mitglied"}` : ""}</div>
-            <p className="whitespace-pre-wrap">{m.text}</p>
+            <Markdown text={m.text} klein />
             {m.werte && <Vorschlag m={m} werte={werte} kann={fragen[m.frage_id]?.von === ich.id && darf} onEntscheid={(e) => entscheide(m, e)} />}
           </div>
         ) : (
           <div key={m.id} className="ml-auto rounded-xl bg-emerald-50 dark:bg-emerald-950/50 p-2.5 max-w-[90%]">
             <div className="text-[11px] font-bold text-slate-500">{m.von === ich.id ? "Du" : d.benutzer.find((u) => u.id === m.von)?.name || "Mitglied"} · {fmt(m.erstellt)}</div>
-            <p className="whitespace-pre-wrap">{m.text}</p>
+            <Markdown text={m.text} klein />
             {m.stand === "fehler" && <p className="text-xs text-red-600 mt-1">Nicht beantwortet</p>}
           </div>))}
         {wartet.length > 0 && <div className="flex items-center gap-2 text-slate-500">{werkstattAn ? <><Loader2 className="w-4 h-4 animate-spin" />Claude denkt nach … (über deine Werkstatt, ca. 20–60 Sek.)</> : <span className="text-amber-700 dark:text-amber-400">Deine Werkstatt ist aus – schalte sie oben ein, dann antwortet Claude.</span>}</div>}
