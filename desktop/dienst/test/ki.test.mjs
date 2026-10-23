@@ -87,8 +87,24 @@ test("Sandbox (Prüfung 0.8.0): keine Symlinks zurück, keine zu weiten Freigabe
   assert.equal(await sicherLesen(p.join(a, "ordner", "geheim.json"), a), null);
   assert.ok(zuWeit("/home/g", "/home/g") && zuWeit("/home", "/home/g") && zuWeit("/", "/home/g"));
   assert.ok(!zuWeit("/home/g/.nvm/versions/node/v22", "/home/g") && !zuWeit("/usr/lib/node_modules", "/home/g"));
-  const m = macProfil({ home: "/Users/g", frei: ["/opt/homebrew/lib/node_modules"], schreibbar: ["/var/t/cs-1"], temp: "/var/t" });
+  const m = macProfil({ home: "/Users/g", frei: ["/opt/homebrew/lib/node_modules"], schreibbar: ["/var/t/T/cs-1"], temp: "/var/t/T" });
   assert.match(m, /deny process-exec/); assert.match(m, /com\.apple\.SecurityServer/); assert.match(m, /deny file-read\* \(subpath "\/var\/t"\)/);
-  assert.ok(m.indexOf('deny file-read* (subpath "/var/t")') < m.indexOf('allow file-read* file-write* (subpath "/var/t/cs-1")'));
+  assert.ok(m.indexOf('deny file-read* (subpath "/var/t")') < m.indexOf('allow file-read* file-write* (subpath "/var/t/T/cs-1")'));
   await fs.rm(a, { recursive: true }); await fs.rm(draussen, { recursive: true });
+});
+test("Nachprüfung 0.8.0: Anmeldedateien nur mit erwartetem Aufbau, Mac ohne Schreiben außerhalb, freie Argumente", async () => {
+  const { anmeldungBereinigen, macProfil, zuWeit } = await import("../lib/sandbox.mjs");
+  const ok = anmeldungBereinigen("auth.json", Buffer.from('{"tokens":{"refresh_token":"r","x":"y"},"fremd":"geheim"}'));
+  assert.deepEqual(JSON.parse(ok.toString()), { tokens: { refresh_token: "r" } });
+  assert.equal(anmeldungBereinigen("auth.json", Buffer.from('{"claudeAiOauth":{"accessToken":"a"}}')), null);
+  assert.equal(anmeldungBereinigen("oauth_creds.json", Buffer.from('{"foo":1}')), null);
+  assert.equal(anmeldungBereinigen("installation_id", Buffer.from("-----BEGIN")), null);
+  const m = macProfil({ home: "/Users/g", frei: ["/Users/g/.nvm/versions/node/v22"], schreibbar: ["/var/t/x/T/cs-1"], temp: "/var/t/x/T" });
+  assert.match(m, /deny file-write\* \(subpath "\/"\)/);
+  assert.match(m, /deny file-read\* \(subpath "\/var\/t\/x"\)/);
+  assert.match(m, /allow file-read-metadata \(literal "\/Users\/g\/\.nvm"\)/);
+  assert.ok(zuWeit("/home/g", "/home/g/..x") && !zuWeit("/home/g/..x", "/home/g"));
+  assert.ok(anmeldungBereinigen("installation_id", Buffer.from("123e4567-e89b-12d3-a456-426614174000\n")));
+  const { freieArgumente } = await import("../lib/ki.mjs");
+  assert.deepEqual(freieArgumente({ argumente: ["--p={prompt}"] }, "Hi", ""), { args: ["--p=Hi"], stdin: null });
 });

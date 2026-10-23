@@ -121,7 +121,7 @@ function AnbieterDialog({ wert, toast, onClose, onFertig }) {
         {feld("installieren", "Installieren (Hinweis zum Kopieren)", "npm install -g …", true)}
         {feld("anmelden", "Anmelden (Hinweis)", "copilot (dann /login)", true)}
         {feld("hinweis", "Beschreibung", "")}
-        <p className="text-xs text-slate-500">Sicherheit: Es läuft nur genau dieses Programm mit diesen Argumenten, ohne Shell, im leeren Ordner – und erst, wenn die Person es auf ihrem PC zulässt. Nach jeder Änderung muss es neu zugelassen werden.</p>
+        <p className="text-xs text-slate-500">Sicherheit: Das Programm läuft mit den Rechten der Person – darum nur echte KI-Programme eintragen (Shells und Skript-Sprachen sind gesperrt). Es startet erst, wenn die Person genau diese Fassung auf ihrem PC zulässt; nach jeder Änderung muss sie neu zulassen. Für Prüfungen und Bauen werden eigene Anbieter nie verwendet.</p>
         <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={onClose}>Abbrechen</button>
           <button type="button" className="inline-flex items-center gap-2 h-9 px-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-display font-bold text-sm" disabled={busy || !w.id || !w.name || !w.programm} onClick={speichern}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}Speichern</button></div>
       </div>
@@ -168,7 +168,8 @@ export default function KiAnbieter({ d, ich, toast }) {
       setZust(z.error ? { fehlt: true } : Object.fromEntries((z.data || []).map((x) => [x.aufgabe, x])));
       setKopplung(k.data || []);
     })();
-    const kanal = supabase.channel(`ki-${Math.random()}`).on("postgres_changes", { event: "*", schema: "public", table: "ws_ki_kopplung" }, () => setTick((t) => t + 1)).subscribe();
+    const kanal = supabase.channel(`ki-${Math.random()}`).on("postgres_changes", { event: "*", schema: "public", table: "ws_ki_kopplung" }, () => setTick((t) => t + 1))
+      .on("postgres_changes", { event: "*", schema: "public", table: "ws_ki_anbieter" }, () => setTick((t) => t + 1)).subscribe();
     return () => { aus = true; supabase.removeChannel(kanal); };
   }, [d.projektId, tick]);
   // Jeder PC nur einmal (Gerhard 16:22): je Name der zuletzt aktive Eintrag – alte Einträge nach Neuinstallation fallen weg
@@ -176,8 +177,9 @@ export default function KiAnbieter({ d, ich, toast }) {
     .sort((a, b) => (b.an ? 1 : 0) - (a.an ? 1 : 0) || Date.parse(b.zuletzt || 0) - Date.parse(a.zuletzt || 0))
     .reduce((m, p) => { if (!m[p.name]) m[p.name] = p; return m; }, {}));
   const liste = { ...ANBIETER, ...Object.fromEntries(eigeneAnbieter.map((a) => [a.id, { name: a.name, programm: a.programm, modelle: ["automatisch", ...(a.modelle || [])], install: a.installieren || "", login: a.anmelden || "", eigen: a }])) };
-  const zulassen = async (pc, anbieter, an) => {
-    const { error } = await supabase.from("ws_ki_kopplung").upsert({ pc_id: pc, benutzer_id: ich.id, anbieter, zugelassen: an, aktion: "pruefen" }, { onConflict: "pc_id,anbieter" });
+  // Zulassung gilt nur für genau die angezeigte Definition (Fingerabdruck fp, Nachprüfung 0.8.0 H1) – ändert der Admin etwas, ist sie weg
+  const zulassen = async (pc, anbieter, an, fp) => {
+    const { error } = await supabase.from("ws_ki_kopplung").upsert({ pc_id: pc, benutzer_id: ich.id, anbieter, zugelassen: an, zugelassen_fp: an ? fp : null, aktion: "pruefen" }, { onConflict: "pc_id,anbieter" });
     if (error) toast(fehler(error)); else { toast(an ? "Auf diesem PC zugelassen" : "Auf diesem PC gesperrt"); setTick((t) => t + 1); }
   };
   const name = (id) => d.benutzer.find((u) => u.id === id)?.name || "Mitglied";
@@ -242,8 +244,8 @@ export default function KiAnbieter({ d, ich, toast }) {
                         <span className="text-slate-500">2. Mit dem eigenen Konto anmelden{a.login ? `: im Terminal „${a.login}“` : ""}{key === "gemini" ? " und „Login with Google“ wählen" : ""}.</span>
                       </div>}
                       {a.eigen && <label className="flex items-start gap-1.5 rounded bg-amber-50 dark:bg-amber-950/40 p-1.5">
-                        <input type="checkbox" className="mt-0.5 accent-emerald-700" checked={!!k?.zugelassen} onChange={(e) => zulassen(pc.id, key, e.target.checked)} />
-                        <span>Auf diesem PC zulassen – startet <span className="font-mono">{a.programm} {(a.eigen.argumente || []).join(" ")}</span> im leeren Ordner (ohne Shell).</span></label>}
+                        <input type="checkbox" className="mt-0.5 accent-emerald-700" checked={!!k?.zugelassen} onChange={(e) => zulassen(pc.id, key, e.target.checked, a.eigen.fp)} />
+                        <span>Auf diesem PC zulassen – startet <span className="font-mono break-all">{a.programm} {(a.eigen.argumente || []).join(" ")}</span> mit deinen Rechten im leeren Ordner. Nur zulassen, wenn du dem Programm vertraust.</span></label>}
                       <div className="flex flex-wrap gap-1.5 mt-auto">
                         <button type="button" className={ghost} onClick={() => aktion(pc.id, key, "pruefen")}><RefreshCw className="w-3.5 h-3.5" />Prüfen</button>
                         {key === "chatgpt" && !k?.gekoppelt && <button type="button" className={ghost} onClick={() => aktion(pc.id, key, "anmelden")}><LogIn className="w-3.5 h-3.5" />Anmelden</button>}

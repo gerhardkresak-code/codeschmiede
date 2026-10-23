@@ -563,7 +563,7 @@ async function station(a) {
         for (const e of ohneClaude.reihe) {
           if (kiLimitBis[e.anbieter] > Date.now() || (kiKopplung[e.anbieter] && !kiKopplung[e.anbieter].gekoppelt)) continue;
           try {
-            const t = await (e.anbieter === "chatgpt" ? codexFrage : geminiFrage)(textPrompt, { modell: e.modell, signal: abort.signal });
+            const t = await (e.anbieter === "chatgpt" ? codexFrage : geminiFrage)(textPrompt, { modell: e.modell, signal: abort.signal, nurSandbox: true });
             if (!/PR(Ü|UE)FUNG: (GR(Ü|UE)N|ROT)\**\s*$/.test(t.trim())) { await log(a.id, "info", `${ANBIETER[e.anbieter].name} lieferte kein eindeutiges Ergebnis – nächster Anbieter`); continue; }   // Prüfung N3
             pruefText = t; pruefKi = kiKennung(e); break;
           }
@@ -661,10 +661,15 @@ async function kiAntwort(projekt, aufgabe, prompt, { claudeLesenIn = null, dokuL
         return { roh: await claudeOhneWerkzeuge(prompt, { lesenIn: claudeLesenIn, modell: e.modell || "sonnet" }), ki: kiKennung(e) };
       }
       if (kiKopplung[e.anbieter] && !kiKopplung[e.anbieter].gekoppelt) { fehler.push(`${e.anbieter}: nicht gekoppelt`); continue; }
-      const frei = !ANBIETER[e.anbieter] ? (await holeFreieAnbieter())[e.anbieter] : null;
+      let frei = null;
       if (!ANBIETER[e.anbieter]) {
-        // Eigener Anbieter: nur, wenn auf diesem PC ausdrücklich zugelassen
-        if (!frei || !kiKopplung[e.anbieter]?.zugelassen) { fehler.push(`${e.anbieter}: auf diesem PC nicht zugelassen`); continue; }
+        // Eigener Anbieter: Definition und Zulassung frisch lesen (kein Zwischenspeicher) – nur, wenn genau DIESE Fassung
+        // auf diesem PC zugelassen ist (Fingerabdruck, Nachprüfung 0.8.0 H1)
+        const [{ data: def }, { data: zu }] = await Promise.all([
+          db.from("ws_ki_anbieter").select("*").eq("id", e.anbieter).maybeSingle(),
+          db.from("ws_ki_kopplung").select("zugelassen, zugelassen_fp").eq("pc_id", pcId).eq("anbieter", e.anbieter).maybeSingle()]);
+        if (!def?.fp || !zu?.zugelassen || zu.zugelassen_fp !== def.fp) { fehler.push(`${e.anbieter}: auf diesem PC nicht zugelassen`); continue; }
+        frei = def;
       }
       if (dokuLesen && doku == null) doku = await dokuText(projekt, frage).catch(() => "");
       const fragen = frei ? (p, o) => freiFrage(frei, p, o) : e.anbieter === "chatgpt" ? codexFrage : geminiFrage;
@@ -696,12 +701,15 @@ async function kopplungAbgleich(zwingend = false) {
   }
   if (!zwingend && !auftraege.some((a) => a.aktion === "pruefen") && Date.now() - kopplungZuletzt < 10 * 60 * 1000) return;
   kopplungZuletzt = Date.now();
-  const frei = await holeFreieAnbieter(); freieZeit = 0;
+  freieZeit = 0; const frei = await holeFreieAnbieter();   // beim Abgleich immer frisch
   let zugelassen = {};
-  try { const { data } = await db.from("ws_ki_kopplung").select("anbieter, zugelassen").eq("pc_id", pcId); zugelassen = Object.fromEntries((data || []).map((x) => [x.anbieter, x.zugelassen])); } catch { /* egal */ }
+  try {
+    const { data } = await db.from("ws_ki_kopplung").select("anbieter, zugelassen, zugelassen_fp").eq("pc_id", pcId);
+    zugelassen = Object.fromEntries((data || []).map((x) => [x.anbieter, !!x.zugelassen && !!frei[x.anbieter]?.fp && x.zugelassen_fp === frei[x.anbieter].fp]));
+  } catch { /* egal */ }
   for (const anbieter of [...Object.keys(ANBIETER), ...Object.keys(frei)]) {
     try {
-      const k = ANBIETER[anbieter] ? await kopplungPruefen(anbieter) : await freiPruefen(frei[anbieter]);
+      const k = ANBIETER[anbieter] ? await kopplungPruefen(anbieter) : await freiPruefen(frei[anbieter], !!zugelassen[anbieter]);
       kiKopplung[anbieter] = { ...k, zugelassen: !!zugelassen[anbieter] };
       await kopplungMelden(anbieter, { gekoppelt: k.gekoppelt, version: k.version, hinweis: k.hinweis, aktion: null, geprueft: new Date().toISOString(),
         ...(kiLimitBis[anbieter] > Date.now() ? { limit_bis: new Date(kiLimitBis[anbieter]).toISOString() } : { limit_bis: null }) });

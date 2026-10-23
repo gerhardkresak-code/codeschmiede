@@ -91,9 +91,13 @@ function FeatureVorschlag({ m, d, ich, kann, toast }) {
     try {
       if (v.feature_neu) {
         const id = `N-G${m.id}`;   // feste Kennung je Vorschlag: ein zweiter Klick legt nichts doppelt an (Prüfung 0.8.0)
-        const { error } = await supabase.from("ws_features").upsert({ id, gruppe_id: v.feature_neu.gruppe_id, name: v.feature_neu.name, beschreibung: v.feature_neu.beschreibung || null,
-          stand: "geplant", quelle: "gespraech", neu_bis: new Date(Date.now() + 7 * 864e5).toISOString(), erstellt_von: ich.id }, { onConflict: "id", ignoreDuplicates: true });
+        const { data, error } = await supabase.from("ws_features").upsert({ id, gruppe_id: v.feature_neu.gruppe_id, name: v.feature_neu.name, beschreibung: v.feature_neu.beschreibung || null,
+          stand: "geplant", quelle: "gespraech", neu_bis: new Date(Date.now() + 7 * 864e5).toISOString(), erstellt_von: ich.id }, { onConflict: "id", ignoreDuplicates: true }).select("id");
         if (error) throw error;
+        if (!data?.length) {   // gab es schon – nur in Ordnung, wenn es genau dieses Feature von mir ist
+          const { data: da } = await supabase.from("ws_features").select("name, erstellt_von").eq("id", id).maybeSingle();
+          if (!da || da.name !== v.feature_neu.name || da.erstellt_von !== ich.id) throw new Error("Diese Kennung ist schon vergeben – bitte neu fragen");
+        }
         toast(`Feature „${v.feature_neu.name}“ angelegt`);
       } else {
         const { error } = await supabase.rpc("ws_bezug_setzen", { p_von: v.bezug.von, p_zu: v.bezug.zu });

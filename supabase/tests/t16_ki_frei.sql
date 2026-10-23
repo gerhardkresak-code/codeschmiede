@@ -23,13 +23,29 @@ select ws_ki_anbieter_speichern('{"id":"x1","name":"X","programm":"x","argumente
 :ADM
 select ws_ki_zustaendigkeit_setzen('trainer-to-go','chat','[{"anbieter":"copilot","modell":"gpt-5"},{"anbieter":"claude"}]',90);
 select ws_ki_zustaendigkeit_setzen('trainer-to-go','chat','[{"anbieter":"unbekannt"}]',90);
-\echo [3] D1 laesst Copilot auf eigenem PC zu -> OK; Admin aendert Anbieter -> Zulassung zurueckgesetzt (f)
+\echo [3] Zulassen ohne/mit falschem Fingerabdruck -> FEHLER; mit richtigem -> OK; Admin aendert -> Zulassung weg (f, leer); alter Abdruck -> FEHLER
 :D1
+\set FP '(select fp from ws_ki_anbieter where id=''copilot'')'
 insert into ws_ki_kopplung(pc_id,benutzer_id,anbieter,zugelassen) values ((select id from ws_werkstatt_pcs where name='PC-D1'),auth.uid(),'copilot',true);
+insert into ws_ki_kopplung(pc_id,benutzer_id,anbieter,zugelassen,zugelassen_fp) values ((select id from ws_werkstatt_pcs where name='PC-D1'),auth.uid(),'copilot',true,'falsch');
+select fp as alt_fp from ws_ki_anbieter where id='copilot' \gset
+insert into ws_ki_kopplung(pc_id,benutzer_id,anbieter,zugelassen,zugelassen_fp) values ((select id from ws_werkstatt_pcs where name='PC-D1'),auth.uid(),'copilot',true,:FP);
 :ADM
 select ws_ki_anbieter_speichern('{"id":"copilot","name":"GitHub Copilot","programm":"copilot","argumente":["-p","{prompt}"]}');
 reset role;
-select zugelassen from ws_ki_kopplung where anbieter='copilot';
+select zugelassen, zugelassen_fp is null as ohne_fp from ws_ki_kopplung where anbieter='copilot';
+set role authenticated;
+:D1
+update ws_ki_kopplung set zugelassen = true, zugelassen_fp = :'alt_fp' where anbieter='copilot';
+reset role;
+\echo [3b] Shells/Interpreter als Programm -> FEHLER (bash, python3, powershell.exe, node)
+set role authenticated;
+:ADM
+select ws_ki_anbieter_speichern('{"id":"s1","name":"S1","programm":"bash","argumente":["-c","x"]}');
+select ws_ki_anbieter_speichern('{"id":"s2","name":"S2","programm":"python3","argumente":["-c","x"]}');
+select ws_ki_anbieter_speichern('{"id":"s3","name":"S3","programm":"powershell.exe","argumente":[]}');
+select ws_ki_anbieter_speichern('{"id":"s4","name":"S4","programm":"node","argumente":[]}');
+reset role;
 \echo [4] Loeschen -> Zustaendigkeit ohne copilot
 set role authenticated;
 :ADM

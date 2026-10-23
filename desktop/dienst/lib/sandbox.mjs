@@ -41,18 +41,28 @@ const sb = (p) => String(p).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 export function zuWeit(p, home = os.homedir()) {
   if (!p) return false;
   const r = path.relative(echt(p), echt(home));
-  return r === "" || (!r.startsWith("..") && !path.isAbsolute(r));
+  return r === "" || (r !== ".." && !r.startsWith(`..${path.sep}`) && !path.isAbsolute(r));
 }
 
 /** macOS-Profil: Benutzerverzeichnis und Temp gesperrt außer den freigegebenen Ordnern; Programmstarts nur aus den Freigaben; kein Schlüsselbund. */
+/** Alle Elternordner eines Pfads (für file-read-metadata: node löst Pfade stufenweise auf, Nachprüfung 0.8.0 M6). */
+function eltern(p) { const r = []; let d = path.dirname(p); while (d && d !== path.dirname(d)) { r.push(d); d = path.dirname(d); } return r; }
+
 export function macProfil({ home, frei = [], schreibbar = [], temp = os.tmpdir(), starten = frei }) {
-  const h = sb(echt(home)); const t = sb(echt(temp));
+  const h = sb(echt(home));
+  // Temp: auch der Elternordner (/var/folders/xx/yyy mit C = Caches anderer Programme) ist gesperrt
+  const t = sb(path.dirname(echt(temp)));
+  const meta = [...new Set([...frei, ...schreibbar].flatMap((p) => eltern(echt(p))))];
   return [
     "(version 1)", "(allow default)",
-    `(deny file-read* (subpath "${h}"))`, `(deny file-write* (subpath "${h}"))`,
-    `(deny file-read* (subpath "${t}"))`, `(deny file-write* (subpath "${t}"))`,
+    // Schreiben überall gesperrt – sonst könnte ein fremdes Programm z. B. /opt/homebrew/bin/git austauschen (Nachprüfung 0.8.0 M4)
+    `(deny file-write* (subpath "/"))`,
+    `(allow file-write* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/tty") (literal "/dev/dtracehelper") (regex #"^/dev/fd/") (regex #"^/dev/ttys[0-9]+$"))`,
+    `(deny file-read* (subpath "${h}"))`,
+    `(deny file-read* (subpath "${t}"))`,
     `(deny file-read* (subpath "/Volumes"))`, `(deny file-read* (subpath "/Users/Shared"))`,
     `(allow file-read-metadata (literal "${h}"))`,
+    ...meta.map((p) => `(allow file-read-metadata (literal "${sb(p)}"))`),
     // Schlüsselbund (dort liegen Claude-/GitHub-Zugänge) und fremde Programme gesperrt (Prüfung A3)
     `(deny mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.securityd") (global-name "com.apple.security.agent"))`,
     "(deny process-exec)",
@@ -80,19 +90,56 @@ export function bwrapArgs({ frei = [], schreibbar = [], arbeit, home }) {
  */
 export async function sicherLesen(datei, arbeit, max = 64 * 1024) {
   try {
-    const ordner = await realpath(path.dirname(datei));
     const basis = await realpath(arbeit);
-    if (ordner !== basis && !ordner.startsWith(basis + path.sep)) return null;
-    const l = await lstat(datei);
+    const rel = path.relative(path.resolve(arbeit), path.resolve(datei));
+    if (!rel || rel.startsWith(`..${path.sep}`) || rel === ".." || path.isAbsolute(rel)) return null;
+    // Jede Stufe vom Arbeitsordner bis zur Datei: echter Ordner, kein Symlink – vor UND nach dem Öffnen gleich (Nachprüfung 0.8.0 M5)
+    const stufen = rel.split(path.sep).slice(0, -1).reduce((a, t) => [...a, path.join(a.length ? a[a.length - 1] : basis, t)], []);
+    const kette = async () => { const r = []; for (const o of stufen) { const l = await lstat(o); if (!l.isDirectory() || l.isSymbolicLink()) return null; r.push(`${l.dev}:${l.ino}`); } return r.join("|"); };
+    const vorher = await kette(); if (vorher === null) return null;
+    const ziel = path.join(basis, rel);
+    const l = await lstat(ziel);
     if (!l.isFile() || l.isSymbolicLink() || l.nlink !== 1 || l.size > max) return null;
-    const fh = await open(path.join(ordner, path.basename(datei)), constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
+    const fh = await open(ziel, constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
     try {
       const s = await fh.stat();
-      if (!s.isFile() || s.nlink !== 1 || s.size > max || s.ino !== l.ino) return null;
+      if (!s.isFile() || s.nlink !== 1 || s.size > max || s.ino !== l.ino || s.dev !== l.dev) return null;
       const b = Buffer.alloc(s.size); await fh.read(b, 0, s.size, 0);
+      if ((await kette()) !== vorher) return null;
+      const l2 = await lstat(ziel); if (l2.ino !== s.ino || l2.dev !== s.dev) return null;
       return b;
     } finally { await fh.close(); }
   } catch { return null; }
+}
+
+// Erwarteter Aufbau der Anmeldedateien – zurück geht nur, was dazu passt, und nur diese Felder (Nachprüfung 0.8.0 M5)
+const KURZ = (v) => v == null || typeof v === "number" || typeof v === "boolean" || (typeof v === "string" && v.length <= 8192);
+const AUFBAU = {
+  "auth.json": (j) => {
+    const o = {}; let ok = false;
+    for (const k of ["OPENAI_API_KEY", "last_refresh", "auth_mode"]) if (k in j) { if (!KURZ(j[k])) return null; o[k] = j[k]; }
+    if (j.tokens != null) {
+      if (typeof j.tokens !== "object" || Array.isArray(j.tokens)) return null;
+      o.tokens = {}; for (const k of ["id_token", "access_token", "refresh_token", "account_id"]) if (k in j.tokens) { if (!KURZ(j.tokens[k])) return null; o.tokens[k] = j.tokens[k]; ok = true; }
+    }
+    return ok || typeof o.OPENAI_API_KEY === "string" ? o : null;
+  },
+  "oauth_creds.json": (j) => {
+    const o = {}; for (const k of ["access_token", "refresh_token", "scope", "token_type", "id_token", "expiry_date"]) if (k in j) { if (!KURZ(j[k])) return null; o[k] = j[k]; }
+    return typeof o.refresh_token === "string" || typeof o.access_token === "string" ? o : null;
+  },
+  "google_accounts.json": (j) => {
+    const o = {}; if ("active" in j) { if (!KURZ(j.active)) return null; o.active = j.active; }
+    if ("old" in j) { if (!Array.isArray(j.old) || j.old.length > 20 || !j.old.every((x) => typeof x === "string" && x.length <= 320)) return null; o.old = j.old; }
+    return o;
+  },
+};
+/** Prüft eine zurückgeschriebene Anmeldedatei; liefert den bereinigten Inhalt oder null. */
+export function anmeldungBereinigen(name, buf) {
+  const s = buf.toString("utf8");
+  if (name === "installation_id") return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$/i.test(s) ? Buffer.from(s) : null;   // UUID
+  const f = AUFBAU[name]; if (!f) return null;
+  try { const j = JSON.parse(s); if (!j || typeof j !== "object" || Array.isArray(j)) return null; const o = f(j); return o ? Buffer.from(JSON.stringify(o, null, 2)) : null; } catch { return null; }
 }
 
 /** Freigabe-Ordner für ein Programm: bei npm-Paketen der globale node_modules-Ordner, sonst der Ordner der Datei. */
@@ -123,7 +170,7 @@ export async function sandboxLauf({ anbieter, prog, arbeit, env }) {
   // Zertifikate (Firmen-Proxy) nur als einzelne Datei freigeben
   const zert = [process.env.NODE_EXTRA_CA_CERTS, process.env.SSL_CERT_FILE].filter((p) => p && existsSync(p)).map(echt);
   const frei = [...new Set([progOrdner, nodeOrdner, ordnerVon(start.befehl)].filter(Boolean))];
-  if ([...frei, arbeit].some((p) => zuWeit(p, home) || p === "/")) return null;   // Prüfung A2: lieber keine Sandbox als eine offene
+  if ([...frei, arbeit].some((p) => zuWeit(p, home) || p === "/") || frei.some((p) => zuWeit(p, os.tmpdir()))) return null;   // Prüfung A2: lieber keine Sandbox als eine offene
   const kiHome = path.join(arbeit, "home"); await mkdir(kiHome, { recursive: true });
   const kiTemp = path.join(arbeit, "tmp"); await mkdir(kiTemp, { recursive: true });
   const nachher = [];
@@ -132,14 +179,12 @@ export async function sandboxLauf({ anbieter, prog, arbeit, env }) {
   for (const k of ["NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE"]) if (process.env[k] && existsSync(process.env[k])) neueEnv[k] = echt(process.env[k]);
   const kopiere = async (von, nach) => { if (existsSync(von)) { await mkdir(path.dirname(nach), { recursive: true }); await copyFile(von, nach); return true; } return false; };
   // Zurück nur, was sich wie die erwartete Anmeldedatei verhält (JSON bzw. kurze Kennung) – nie einem Symlink folgen (Prüfung A1)
-  const zurueck = (von, nach, art2 = "json") => nachher.push(async () => {
+  const zurueck = (von, nach) => nachher.push(async () => {
     try {
-      const b = await sicherLesen(von, arbeit); if (!b) return;
-      const s = b.toString("utf8");
-      if (art2 === "json") { const j = JSON.parse(s); if (!j || typeof j !== "object") return; }
-      else if (!/^[A-Za-z0-9-]{8,80}\s*$/.test(s)) return;
+      const roh = await sicherLesen(von, arbeit); if (!roh) return;
       let alt = null; try { alt = await readFile(nach); } catch { /* neu */ }
-      if (alt && alt.equals(b)) return;
+      if (alt && alt.equals(roh)) return;                   // unverändert
+      const b = anmeldungBereinigen(path.basename(nach), roh); if (!b) return;
       const tmp = `${nach}.cs-${process.pid}`;
       await writeFile(tmp, b, { mode: 0o600, flag: "wx" }); await rename(tmp, nach);
     } catch { /* bleibt wie es war */ }
@@ -153,8 +198,8 @@ export async function sandboxLauf({ anbieter, prog, arbeit, env }) {
     neueEnv.CODEX_HOME = ziel;
   } else if (anbieter === "gemini") {
     const quelle = path.join(home, ".gemini"); const ziel = path.join(kiHome, ".gemini");
-    for (const [f, a2] of [["oauth_creds.json", "json"], ["google_accounts.json", "json"], ["installation_id", "id"]]) {
-      if (await kopiere(path.join(quelle, f), path.join(ziel, f))) zurueck(path.join(ziel, f), path.join(quelle, f), a2);
+    for (const f of ["oauth_creds.json", "google_accounts.json", "installation_id"]) {
+      if (await kopiere(path.join(quelle, f), path.join(ziel, f))) zurueck(path.join(ziel, f), path.join(quelle, f));
     }
     // Nur das Nötigste aus den Einstellungen übernehmen (Art der Anmeldung), keine MCP-Server/Werkzeuge der Person
     try {
