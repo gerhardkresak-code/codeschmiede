@@ -3,8 +3,9 @@
 // Soll gebaut werden: letzte Zeile „AUFTRAG: {…}“ – angelegt wird der Auftrag erst per Klick in der Codeschmiede.
 const kurz = (s, n) => (String(s || "").length > n ? String(s).slice(0, n) + " …" : String(s || ""));
 
-export function assistentPrompt({ projekt, ort, kontext, frage, verlauf = [], gruppen = [] }) {
+export function assistentPrompt({ projekt, ort, kontext, frage, verlauf = [], gruppen = [], features = [] }) {
   const alt = verlauf.slice(-10).map((m) => `${m.von ? "Gerhard" : "Assistent"}: ${kurz(m.text, 900)}`).join("\n");
+  const fl = features.slice(0, 300).map((x) => `${x.id} = ${x.name} (Gruppe ${x.gruppe_id})`).join("; ");
   const gl = gruppen.slice(0, 80).map((g) => `${g.id} = ${g.name}${g.global ? " (Globale Einstellungen – gilt für die ganze App)" : ""}`).join("; ");
   return `Du bist der Assistent in der Codeschmiede – Gerhards Programmierumgebung – und arbeitest mit ihm am Projekt „${projekt.name}“ (Repository ${projekt.repo || "–"}).
 Halte dich an die Regeln in AGENTS.md des Projekts (falls im Ordner vorhanden).
@@ -25,12 +26,31 @@ So antwortest du:
 - Wenn etwas gebaut oder geändert werden soll: schreibe als LETZTE Zeile genau
   AUFTRAG: {"gruppe_id":"<id>","feature_id":"<F-Nummer oder null>","titel":"<kurz, max. 80 Zeichen>","text":"<vollständiger Auftrag für die Werkstatt>","konzept":{"ziel":"…","umfang":"…","datenschutz":"…","entscheidungen":["…"],"offen":["noch offene Frage …"],"abnahme":["woran man sieht, dass es fertig ist …"]}}
   (eine Zeile JSON). Solange Fragen offen sind, stehen sie in "offen" – dann kann Gerhard das Konzept noch nicht freigeben.
-  Gruppen dieses Projekts: ${gl || "–"}. Ohne Bauvorhaben diese Zeile weglassen.`;
+  Gruppen dieses Projekts: ${gl || "–"}. Ohne Bauvorhaben diese Zeile weglassen.
+- Erkennst du im Gespräch ein NEUES Feature, das es noch nicht gibt, frag nach und schreibe als LETZTE Zeile
+  FEATURE-NEU: {"gruppe_id":"<id>","name":"<kurzer Name>","beschreibung":"<1–2 Sätze>"} – angelegt wird es nur, wenn Gerhard „Ja“ klickt.
+- Bezieht sich Gerhard auf ein anderes Feature als Vorbild („wie bei Liga“, „@Liga“), frag nach und schreibe als LETZTE Zeile
+  BEZUG: {"von":"<Feature-ID, das gebaut wird>","zu":"<Feature-ID der Vorlage>"} – gesetzt wird der Bezug nur nach „Ja“.
+- Höchstens EINE dieser Zeilen (AUFTRAG, FEATURE-NEU oder BEZUG) je Antwort. Features dieses Projekts: ${fl || "–"}.`;
 }
 
 export function assistentAntwort(roh) {
   const zeilen = String(roh || "").trim().split(/\r?\n/);
   let vorschlag = null;
+  // Feature anlegen oder Bezug setzen (je nur nach „Ja“ in der Codeschmiede)
+  const j = zeilen.map((z) => z.trim()).findLastIndex((z) => /^\**(FEATURE-NEU|BEZUG):/i.test(z));
+  if (j >= 0) {
+    const art = /^\**FEATURE-NEU/i.test(zeilen[j].trim()) ? "feature_neu" : "bezug";
+    const json = zeilen[j].trim().replace(/^\**(FEATURE-NEU|BEZUG):\**\s*/i, "").replace(/^`+|`+$/g, "");
+    try {
+      const v = JSON.parse(json);
+      if (art === "feature_neu" && typeof v?.gruppe_id === "string" && typeof v?.name === "string" && v.name.trim().length >= 2)
+        vorschlag = { feature_neu: { gruppe_id: v.gruppe_id, name: v.name.trim().slice(0, 80), ...(typeof v.beschreibung === "string" && v.beschreibung.trim() ? { beschreibung: v.beschreibung.trim().slice(0, 1000) } : {}) } };
+      if (art === "bezug" && typeof v?.von === "string" && typeof v?.zu === "string" && v.von !== v.zu) vorschlag = { bezug: { von: v.von, zu: v.zu } };
+    } catch { /* kein gültiges JSON */ }
+    zeilen.splice(j, 1);
+    if (vorschlag) { const text = zeilen.join("\n").trim().slice(0, 7900) || "Mein Vorschlag:"; return { text, vorschlag }; }
+  }
   const i = zeilen.map((z) => z.trim()).findLastIndex((z) => /^\**AUFTRAG:/i.test(z));
   if (i >= 0) {
     const json = zeilen[i].trim().replace(/^\**AUFTRAG:\**\s*/i, "").replace(/^`+|`+$/g, "");

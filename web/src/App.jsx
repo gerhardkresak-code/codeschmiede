@@ -13,6 +13,7 @@ import ClaudeSpalte from "./ClaudeSpalte";
 import { ZweigeVersionen, Pruefstand, Wissensdatenbank, Aenderungsprotokoll, Dokumentation } from "./Ablauf";
 import KiAnbieter from "./KiAnbieter";
 import Einrichtung, { EinrichtungChip, useEinrichtung } from "./Einrichtung";
+import { MitErwaehnung, erwaehnte, FeatureBezuege } from "./Bezuege";
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
 // Konzept: docs/KONZEPT.md · Datenbank: supabase/migrations/
@@ -398,7 +399,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onOrt }) {
           </div>
         </section>
 
-        {f ? <FeatureKurzinfo f={f} g={g} d={d} onOeffnen={() => setPlatz(f.id)} onGruppe={() => setSel({ g: g.id, f: null })} onVerschieben={kannVerschieben ? () => setDlg({ art: "verschieben", f }) : null} />
+        {f ? <FeatureKurzinfo f={f} g={g} d={d} ich={ich} toast={toast} darfAuftrag={darf(g.bereich_id, "auftraege")} onOeffnen={() => setPlatz(f.id)} onGruppe={() => setSel({ g: g.id, f: null })} onVerschieben={kannVerschieben ? () => setDlg({ art: "verschieben", f }) : null} />
           : <AuftragsChat g={g} f={null} d={d} ich={ich} darf={darf} toast={toast} kanal="gruppe" />}
       </div>}
       {dlg?.art === "feature" && <NeuesFeature g={g} ich={ich} texter={rolle === "texter"} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: g.id, f: id })} />}
@@ -436,6 +437,11 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
         if (error) throw error;
         const r = await supabase.from("ws_nachrichten").insert({ auftrag_id: data.id, von: ich.id, art: "text", text: bausteinText(t), kanal });
         if (r.error) throw r.error; toast(`Auftrag #${data.id} an Werkstatt ${g.name} gestellt`);
+      }
+      // @Feature im Text = fester Bezug „Vorlage“ für dieses Feature (Entscheidung 2026-10-22 22:31)
+      if (f) for (const x of erwaehnte(t, d.features).filter((x) => x.id !== f.id)) {
+        const { error: eb } = await supabase.rpc("ws_bezug_setzen", { p_von: f.id, p_zu: x.id });
+        if (!eb) toast(`Vorlage gesetzt: ${x.name}`);
       }
       setText(""); onBausteinFertig?.();
     } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
@@ -500,7 +506,7 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
       )}
       {kannAuftrag ? (
         <div className="border-t border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-2">
-          <textarea id="ws-auftrag" className={`${input} min-h-[72px]`} value={text} onChange={(e) => setText(e.target.value)} placeholder={frage ? "Antwort auf die Rückfrage …" : f ? `Was soll sich bei „${f.name}“ ändern?` : `Was soll sich in ${g.name} ändern?`} aria-label="Nachricht" />
+          <MitErwaehnung id="ws-auftrag" className={`${input} min-h-[72px]`} value={text} onChange={setText} features={d.features.filter((x) => !x.ausgebaut)} placeholder={frage ? "Antwort auf die Rückfrage …" : f ? `Was soll sich bei „${f.name}“ ändern? (@ verweist auf ein Feature als Vorlage)` : `Was soll sich in ${g.name} ändern?`} aria-label="Nachricht" />
           <div className="flex items-center justify-between gap-2 flex-wrap"><span className="text-xs text-slate-500">{frage ? "Antwort geht an den laufenden Auftrag" : laufend ? "Neuer Auftrag kommt in die Warteschlange" : "Wird vom nächsten freien Werkstatt-PC übernommen"}</span>
             <button type="button" className={btn} disabled={busy || !text.trim()} onClick={senden}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}{frage ? "Antworten" : "Senden"}</button></div>
         </div>
@@ -592,7 +598,7 @@ function Verschieben({ f, d, onClose, onWahl }) {
     </Dialog>);
 }
 
-function FeatureKurzinfo({ f, g, d, onOeffnen, onGruppe, onVerschieben }) {
+function FeatureKurzinfo({ f, g, d, ich, toast, darfAuftrag, onOeffnen, onGruppe, onVerschieben }) {
   const js = d.auftraege.filter((a) => a.feature_id === f.id);
   const letzter = js[js.length - 1];
   const laufend = js.find((a) => a.stand === "laeuft");
@@ -608,6 +614,7 @@ function FeatureKurzinfo({ f, g, d, onOeffnen, onGruppe, onVerschieben }) {
         <dt className="text-slate-500">Gerade</dt><dd>{laufend ? <span className="inline-flex items-center gap-1.5 text-blue-600 font-semibold"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />Werkstatt {pc?.name || ""} arbeitet</span> : "niemand"}</dd>
         <dt className="text-slate-500">Aufträge</dt><dd>{js.length} ({js.filter((a) => ABGESCHLOSSEN.includes(a.stand)).length} abgeschlossen)</dd>
       </dl>
+      <FeatureBezuege f={f} d={d} ich={ich} toast={toast} darfAuftrag={darfAuftrag} />
       <button type="button" className={btn} onClick={onOeffnen}><Layers className="w-4 h-4" />Öffnen: Chat & Live-Vorschau</button>
       <button type="button" className={ghost} onClick={onGruppe}><MessageSquare className="w-4 h-4" />Zum Chat der Gruppe</button>
       {onVerschieben && <button type="button" className={ghost} onClick={onVerschieben}><FolderInput className="w-4 h-4" />Verschieben …</button>}

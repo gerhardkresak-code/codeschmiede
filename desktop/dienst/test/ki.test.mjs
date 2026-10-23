@@ -54,3 +54,12 @@ test("Sandbox: macOS-Profil sperrt das Benutzerverzeichnis, bwrap bindet nur Fre
   const a = bwrapArgs({ frei: ["/usr/lib/node_modules"], schreibbar: ["/tmp/x"], arbeit: "/tmp/x", home: "/tmp/x/home" });
   assert.ok(a.includes("--unshare-all") && !a.includes(os.homedir()));
 });
+test("Chat: neues Feature und Bezug als Vorschlag", async () => {
+  const { assistentAntwort } = await import("../lib/assistent.mjs");
+  const a = assistentAntwort('Soll ich das anlegen?\nFEATURE-NEU: {"gruppe_id":"ttg-turniere","name":"Turniere","beschreibung":"Turniere anlegen"}');
+  assert.deepEqual(a.vorschlag, { feature_neu: { gruppe_id: "ttg-turniere", name: "Turniere", beschreibung: "Turniere anlegen" } });
+  assert.equal(a.text, "Soll ich das anlegen?");
+  const b = assistentAntwort('Meinst du Liga?\nBEZUG: {"von":"N-2","zu":"N-1"}');
+  assert.deepEqual(b.vorschlag, { bezug: { von: "N-2", zu: "N-1" } });
+  assert.equal(assistentAntwort('x\nBEZUG: {"von":"N-1","zu":"N-1"}').vorschlag, null);
+});

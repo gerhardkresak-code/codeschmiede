@@ -216,13 +216,32 @@ async function verarbeiteNachricht(auftrag, m, ordner) {
 }
 
 // ---------- Auftrag ausführen ----------
-function auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, neuesProjekt) {
+// Referenz-Features eines Features (ws_feature_bezuege) mit den zuletzt live gegangenen Aufträgen
+async function vorlagenFuer(feature) {
+  if (!feature) return [];
+  try {
+    const { data: b } = await db.from("ws_feature_bezuege").select("zu_feature").eq("von_feature", feature.id);
+    const ids = (b || []).map((x) => x.zu_feature); if (!ids.length) return [];
+    const { data: fs } = await db.from("ws_features").select("id, name, beschreibung").in("id", ids);
+    const { data: as } = await db.from("ws_auftraege").select("id, titel, zweig, feature_id").in("feature_id", ids).eq("stand", "wissen").order("id", { ascending: false }).limit(30);
+    return (fs || []).map((f) => ({ ...f, auftraege: (as || []).filter((a) => a.feature_id === f.id).slice(0, 5) }));
+  } catch { return []; }
+}
+
+function auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, neuesProjekt, vorlagen = []) {
   const verlauf = nachrichten.map((n) => `${n.von ? "Gerhard/Team" : "Werkstatt"} (${n.art}): ${n.text}`).join("\n");
   return [
     `Du bist die Werkstatt der Codeschmiede für das Projekt „${projekt.name}“ (Repository ${projekt.repo}).`,
     `Auftrag #${auftrag.id} – Gruppe „${gruppe?.name || "?"}“${feature ? `, Feature „${feature.name}“ (${feature.id})` : ", ganze Gruppe"}. Art: ${auftrag.art}.`,
     gruppe?.ws_bereiche?.global ? "GLOBALE EINSTELLUNG: Dieses Feature gilt für die ganze App und alle Nutzer und Rollen (z. B. Anmeldung, Sitzung, App-Rahmen). Es ist in der App kein eigener Bereich/Menüpunkt – setze es zentral um (gemeinsamer Code, Einstellungen, Datenbank), nicht in einer einzelnen Seite, und prüfe die Wirkung auf alle Bereiche und Rollen (Dorfverein und Profiverein)." : "",
     auftrag.baustein ? `Gezeigter Baustein: ${JSON.stringify(auftrag.baustein)}` : "",
+    // Feature-Bezüge (KONZEPT-FEATURE-BEZUEGE.md): Referenz-Features gezielt mitgeben, vorher melden, was übernommen wird
+    vorlagen.length ? [
+      "VORLAGEN (Referenz-Features im selben Projekt – baue nach diesem Vorbild):",
+      ...vorlagen.map((v) => `- ${v.id} „${v.name}“${v.beschreibung ? `: ${v.beschreibung}` : ""}${v.auftraege.length ? `\n  Zuletzt live: ${v.auftraege.map((a) => `#${a.id} ${a.titel}${a.zweig ? ` (${a.zweig})` : ""}`).join("; ")}` : ""}`),
+      "Sieh dir den Code dieser Features im Repository an (Seiten, Komponenten, Datenbank, Handbuch). Melde VOR dem Bauen mit einer Zeile „RÜCKFRAGE:“,",
+      "was du übernimmst und was bei diesem Feature anders wird („Übernehme aus …: … · Anders: … · Passt das?“) – außer der Verlauf bestätigt das schon.",
+    ].join("\n") : "",
     `Verlauf:\n${verlauf}`,
     "",
     "Regeln:",
@@ -262,7 +281,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
       ? `Nacharbeit aus der Prüfung (nichts ist live gegangen):\n${nachrichten.slice(-1)[0]?.text || ""}\n\nBehebe die Befunde auf demselben Zweig ${zweig}, prüfe, committe, \`git push origin HEAD\` und antworte wieder mit „ERGEBNIS-PR: #${auftrag.pr_nummer || "<Nummer>"} ${zweig}“ (denselben Pull Request weiterverwenden).`
       : fortsetzen
       ? `Antwort von Gerhard/Team auf deine Rückfrage:\n${nachrichten.filter((n) => n.von).slice(-1)[0]?.text || ""}\n\nArbeite weiter nach denselben Regeln.`
-      : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go");
+      : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature));
 
     // Erlaubnis-Brücke (MCP) für Werkzeuge außerhalb der freigegebenen Liste
     const mcp = { mcpServers: { werkstatt: { command: process.execPath, args: [path.join(HIER, "erlaubnis-mcp.mjs")], env: {
@@ -773,8 +792,10 @@ async function claudeChat() {
     const { data: alle } = await db.from("ws_claude_chat").select("id, von, text, frage_id").eq("projekt_id", f.projekt_id).eq("ort", f.ort).lt("id", f.id).order("id", { ascending: false }).limit(30);
     const verlauf = (alle || []).reverse().slice(-10);
     let lesenIn = null; try { lesenIn = await leseOrdner(projekt); } catch (e) { melde("fehler", `Lese-Ordner: ${ohneGeheimnisse(e?.message || String(e))}`); }
+    const gids = (gruppen || []).map((g) => g.id);
+    const { data: feats } = gids.length ? await db.from("ws_features").select("id, name, gruppe_id").in("gruppe_id", gids).eq("ausgebaut", false).limit(300) : { data: [] };
     const prompt = assistentPrompt({ projekt, ort: f.ort, kontext: f.kontext, frage: f.text, verlauf,
-      gruppen: (gruppen || []).map((g) => ({ id: g.id, name: g.name, global: g.ws_bereiche?.global })) });
+      gruppen: (gruppen || []).map((g) => ({ id: g.id, name: g.name, global: g.ws_bereiche?.global })), features: feats || [] });
     const aufgabe = istKonzeptFrage(f.text, verlauf) ? "konzept" : "chat";
     const { roh, ki } = await kiAntwort(projekt, aufgabe, prompt, { claudeLesenIn: lesenIn || null, dokuLesen: true, frage: f.text });
     const { text, vorschlag } = assistentAntwort(ohneGeheimnisse(roh));

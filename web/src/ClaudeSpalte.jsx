@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Send, Loader2, ClipboardList, Check, X, ChevronDown, ChevronUp, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { supabase } from "./supabase";
 import { Markdown } from "./Markdown";
+import { MitErwaehnung } from "./Bezuege";
 
 // Chat mit Claude überall (Neue Anweisung Gerhard 2026-10-23 10:45, Entscheidungen 10:50): fest eingeblendete Spalte auf jeder Seite.
 // Persönliches Gespräch; Claude antwortet über die eigene Werkstatt (Abo) und liest das Projekt nur (nichts ändern, nichts ausführen).
@@ -73,15 +74,53 @@ export default function ClaudeSpalte({ d, ich, ort, kontext, toast }) {
         <div ref={ende} />
       </div>
       <form className="border-t border-slate-200 dark:border-slate-800 p-2.5 flex gap-1.5" onSubmit={(e) => { e.preventDefault(); schicke(); }}>
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={8000} placeholder="Schreib Claude …"
+        <div className="flex-1 min-w-0"><MitErwaehnung value={text} onChange={setText} features={d.features.filter((x) => !x.ausgebaut)} rows={2} maxLength={8000} placeholder="Schreib Claude … (@ für ein Feature)"
           className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 py-1.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); schicke(); } }} />
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); schicke(); } }} /></div>
         <button className={`${btn} self-end`} disabled={senden || !text.trim()} title="Senden">{senden ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}</button>
       </form>
     </aside>);
 }
 
-function Vorschlag({ m, d, ich, kann, toast }) {
+// Feature anlegen / Bezug setzen aus dem Gespräch (nur nach „Ja“, mit eigenen Rechten – KONZEPT-FEATURE-BEZUEGE.md)
+function FeatureVorschlag({ m, d, ich, kann, toast }) {
+  const v = m.vorschlag; const [busy, setBusy] = useState(false);
+  const fname = (id) => d.features.find((x) => x.id === id)?.name || id;
+  const ja = async () => {
+    setBusy(true);
+    try {
+      if (v.feature_neu) {
+        const id = `N-${Date.now()}`;
+        const { error } = await supabase.from("ws_features").insert({ id, gruppe_id: v.feature_neu.gruppe_id, name: v.feature_neu.name, beschreibung: v.feature_neu.beschreibung || null,
+          stand: "geplant", quelle: "gespraech", neu_bis: new Date(Date.now() + 7 * 864e5).toISOString(), erstellt_von: ich.id });
+        if (error) throw error;
+        toast(`Feature „${v.feature_neu.name}“ angelegt`);
+      } else {
+        const { error } = await supabase.rpc("ws_bezug_setzen", { p_von: v.bezug.von, p_zu: v.bezug.zu });
+        if (error) throw error;
+        toast(`Vorlage gesetzt: ${fname(v.bezug.zu)} für ${fname(v.bezug.von)}`);
+      }
+      await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "uebernommen" });
+    } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
+  };
+  const nein = async () => { const { error } = await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "abgelehnt" }); if (error) toast(fehler(error)); };
+  const g = v.feature_neu ? d.gruppen.find((x) => x.id === v.feature_neu.gruppe_id) : null;
+  return (
+    <div className="mt-2 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 p-2">
+      <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1"><ClipboardList className="w-3.5 h-3.5" />{v.feature_neu ? "Neues Feature" : "Vorlage setzen"}</div>
+      {v.feature_neu ? <><p className="font-semibold mt-0.5">Feature „{v.feature_neu.name}“ in Gruppe „{g?.name || v.feature_neu.gruppe_id}“ anlegen?</p>{v.feature_neu.beschreibung && <p className="text-xs text-slate-500">{v.feature_neu.beschreibung}</p>}</>
+        : <p className="font-semibold mt-0.5">„{fname(v.bezug.zu)}“ als Vorlage für „{fname(v.bezug.von)}“ verwenden?</p>}
+      {m.entscheidung ? <p className="text-xs mt-1.5 font-semibold text-slate-500">{m.entscheidung === "uebernommen" ? "Erledigt" : "Abgelehnt"}</p>
+        : kann && <div className="flex gap-1.5 mt-2"><button type="button" className={btn} disabled={busy} onClick={ja}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Ja</button><button type="button" className={ghost} onClick={nein}><X className="w-4 h-4" />Nein</button></div>}
+    </div>);
+}
+
+function Vorschlag(props) {
+  const v = props.m.vorschlag;
+  return v?.feature_neu || v?.bezug ? <FeatureVorschlag {...props} /> : <AuftragVorschlag {...props} />;
+}
+
+function AuftragVorschlag({ m, d, ich, kann, toast }) {
   // Auftragstext immer sichtbar, bevor er angelegt wird (Prüfung 2026-10-23)
   const v = m.vorschlag; const [offen, setOffen] = useState(true); const [busy, setBusy] = useState(false);   // Auftragstext immer sichtbar (Prüfung M4)
   const g = d.gruppen.find((x) => x.id === v.gruppe_id); const f = v.feature_id ? d.features.find((x) => x.id === v.feature_id) : null;
