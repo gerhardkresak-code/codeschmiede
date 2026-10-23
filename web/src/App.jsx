@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
-  Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power, Hammer,
+  Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power,
   ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale,
 } from "lucide-react";
 import { supabase } from "./supabase";
@@ -16,6 +16,7 @@ import Einrichtung, { EinrichtungChip, useEinrichtung } from "./Einrichtung";
 import { MitErwaehnung, erwaehnte, FeatureBezuege } from "./Bezuege";
 import Regelwerk from "./Regelwerk";
 import { LogoZeichen } from "./Logo";
+import CodeschmiedeZeichen from "./Zeichen";
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
 // Konzept: docs/KONZEPT.md · Datenbank: supabase/migrations/
@@ -179,7 +180,7 @@ export default function App() {
     <div className={`min-h-screen grid grid-cols-[minmax(0,1fr)] md:grid-cols-[248px_minmax(0,1fr)] ${ansicht !== "designer" ? "xl:grid-cols-[248px_minmax(0,1fr)_auto]" : ""} bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-body`}>
       <aside className="bg-[#0f2a22] text-emerald-50 flex md:flex-col gap-1 p-3 md:sticky md:top-0 md:h-screen overflow-x-auto">
         <div className="flex items-center gap-2.5 px-2 pb-0 md:pb-3">
-          <span className="w-9 h-9 rounded-lg bg-emerald-500 text-emerald-950 grid place-items-center"><Hammer className="w-5 h-5" /></span>
+          <CodeschmiedeZeichen groesse={36} className="ring-1 ring-emerald-400/30 rounded-[9px]" />
           <div className="hidden md:block leading-tight"><b className="font-display text-[19px] tracking-wide">Codeschmiede</b><div className="text-xs text-emerald-200/70">Deine Apps. Ein Ort.</div></div>
         </div>
         <div className="hidden md:block mb-2">
@@ -266,7 +267,7 @@ function EinladungAnnehmen({ sitzung, onFertig }) {
   };
   return (
     <Zentriert>
-      <Hammer className="w-8 h-8 text-emerald-700" />
+      <CodeschmiedeZeichen groesse={48} />
       <h1 className="font-display font-bold text-2xl">Codeschmiede</h1>
       <p className="text-sm">Hast du eine Einladung bekommen? Gib deinen Namen ein (Vorname Nachname) und tritt bei.</p><button type="button" className="text-xs text-slate-500 underline" onClick={() => supabase.auth.signOut()}>Mit anderem Konto anmelden</button>
       <input id="ws-name" className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Vorname Nachname" />
@@ -986,7 +987,7 @@ function Anmelden() {
   };
   return (
     <Zentriert>
-      <span className="w-14 h-14 rounded-2xl bg-emerald-700 text-white grid place-items-center"><Hammer className="w-7 h-7" /></span>
+      <CodeschmiedeZeichen groesse={64} />
       <h1 className="font-display font-bold text-3xl">Codeschmiede</h1>
       <p className="text-sm text-slate-500">Deine Apps. Ein Ort.</p>
       <form onSubmit={los} className="w-full flex flex-col gap-2.5 text-left">

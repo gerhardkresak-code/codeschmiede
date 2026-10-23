@@ -111,6 +111,7 @@ jobs:
               "windows-x86_64":{signature:$ws,url:$wu}, "windows-aarch64":{signature:$ws,url:$wu},
               "darwin-aarch64":{signature:$ms,url:$mu}, "darwin-x86_64":{signature:$ms,url:$mu}}}' > site/latest.json
           printf '/latest.json\n  Cache-Control: no-cache\n' > site/_headers
+          cp marke/zeichen.svg site/favicon.svg; cp marke/updates-index.html site/index.html   # Logo „Glühendes C“ (2026-10-23)
           cat site/latest.json | head -c 400
       - name: Auf Cloudflare Pages veröffentlichen (codeschmiede-updates)
         env:

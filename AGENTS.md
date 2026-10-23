@@ -40,6 +40,9 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-23 17:30 – Logo der Codeschmiede:** Ab jetzt immer das Zeichen „Glühendes C“ (Quellen `marke/zeichen.svg`, `marke/zeichen-klein.svg`,
+  `marke/logo-hell.svg`, `marke/logo-dunkel.svg`; in der Oberfläche `web/src/Zeichen.jsx`). Der frühere Hammer wird nicht mehr als Logo verwendet.
+  Programm-Symbol, Favicon, App-Symbole und Update-Seite kommen aus diesen Dateien; bei Änderungen alle zusammen erneuern.
 - **2026-10-22 16:25 – Automatische Updates:** Jede neue Version des Programms wird automatisch eingespielt (im Hintergrund laden,
   beim nächsten Start aktiv, Knopf „Jetzt neu starten“, nie mitten in einem Auftrag). Jede Programmänderung in `main` erhöht die Version
   in `desktop/src-tauri/tauri.conf.json`, `Cargo.toml` und `desktop/dienst/package.json`; der Ablauf „Programm bauen“ veröffentlicht sie signiert.
