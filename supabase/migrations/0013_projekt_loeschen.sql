@@ -15,7 +15,9 @@ begin
     'features', (select count(*) from public.ws_features f join public.ws_gruppen g on g.id = f.gruppe_id join public.ws_bereiche b on b.id = g.bereich_id where b.projekt_id = p_projekt),
     'auftraege', (select count(*) from public.ws_auftraege a join public.ws_gruppen g on g.id = a.gruppe_id join public.ws_bereiche b on b.id = g.bereich_id where b.projekt_id = p_projekt),
     'laufend', (select count(*) from public.ws_auftraege a join public.ws_gruppen g on g.id = a.gruppe_id join public.ws_bereiche b on b.id = g.bereich_id
-                where b.projekt_id = p_projekt and a.stand in ('laeuft','sicherheit','feature')),
+                where b.projekt_id = p_projekt and a.stand in ('laeuft','frage','nacharbeit','sicherheit','feature'))
+              + (select count(*) from public.ws_claude_chat where projekt_id = p_projekt and stand = 'laeuft')
+              + (select count(*) from public.ws_design_chat where projekt_id = p_projekt and stand = 'laeuft'),
     'mitglieder', (select count(*) from public.ws_projekt_mitglieder where projekt_id = p_projekt));
 end $$;
 
@@ -36,13 +38,16 @@ begin
   select * into p from public.ws_projekte where id = p_projekt for update;
   if p.id is null then raise exception 'Projekt nicht gefunden'; end if;
   if p_bestaetigung is distinct from p.name then raise exception 'Zur Bestätigung genau den Projektnamen „%“ eingeben', p.name; end if;
-  umfang := public.ws_projekt_umfang(p_projekt);
-  if (umfang->>'laufend')::int > 0 then raise exception 'Es läuft noch ein Auftrag oder eine Prüfung – erst abschließen oder abbrechen'; end if;
-
   select coalesce(array_agg(id), '{}') into bids from public.ws_bereiche where projekt_id = p_projekt;
   select coalesce(array_agg(id), '{}') into gids from public.ws_gruppen where bereich_id = any(bids);
+  perform 1 from public.ws_auftraege where gruppe_id = any(gids) for update;   -- kein Wettlauf mit einer Werkstatt (Prüfung 3)
+  umfang := public.ws_projekt_umfang(p_projekt);
+  if (umfang->>'laufend')::int > 0 then raise exception 'Es läuft noch ein Auftrag, eine Rückfrage, Nacharbeit, Prüfung oder ein Chat – erst abschließen oder abbrechen'; end if;
 
-  update public.ws_projekte set design_gruppe_id = null where id = p_projekt;
+  -- Verweise von außen lösen (Prüfung 1): Chats/Projekte, die auf Aufträge bzw. Gruppen dieses Projekts zeigen
+  update public.ws_projekte set design_gruppe_id = null where id = p_projekt or design_gruppe_id = any(gids);
+  update public.ws_claude_chat set auftrag_id = null where auftrag_id in (select id from public.ws_auftraege where gruppe_id = any(gids));
+  update public.ws_design_entwuerfe set auftrag_id = null where auftrag_id in (select id from public.ws_auftraege where gruppe_id = any(gids)) and projekt_id <> p_projekt;
   delete from public.ws_claude_chat where projekt_id = p_projekt;
   delete from public.ws_design_chat where projekt_id = p_projekt;
   delete from public.ws_design_entwuerfe where projekt_id = p_projekt;

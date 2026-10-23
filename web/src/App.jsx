@@ -1158,7 +1158,7 @@ function ProjekteVerwalten({ toast, aktiv, onClose, onWeg }) {
   const vorbereiten = async (p) => {
     setWeg(p); setName(""); setUmfang(null);
     const { data, error } = await supabase.rpc("ws_projekt_umfang", { p_projekt: p.id });
-    if (error) toast(fehler(error)); else setUmfang(data);
+    if (error) { toast(fehler(error)); setWeg(null); } else setUmfang(data);
   };
   const loeschen = async () => {
     setBusy(true);
