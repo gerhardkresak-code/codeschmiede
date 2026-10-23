@@ -40,6 +40,8 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-24 00:17 – Nur Deutsch (verbindlich):** Alles an Gerhard ausnahmslos auf Deutsch – Antworten, Zwischenstände, Rückfragen,
+  Zusammenfassungen, Push-Nachrichten, Dokumentation, Commit- und PR-Texte. Auch nach Unterbrechung oder Zusammenfassung des Chats.
 - **2026-10-23 22:54/23:03 – KI-Vorschläge und Kopplung:** Vorschläge je Zuständigkeit immer 3 Anbieter, ehrlich nach aktuellen unabhängigen
   Ranglisten mit Begründung (Bauen: Claude + ChatGPT-Ersatz bleibt); jeder Anbieter eigene Farbe; „Hinzufügen“ muss für alle Assistenten klappen
   (offizielle Installer aus dem festen Katalog, Anmeldung nur beim Anbieter, keine Zugangsdaten in der Codeschmiede).
