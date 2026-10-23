@@ -211,6 +211,7 @@ function auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, neu
   return [
     `Du bist die Werkstatt der Codeschmiede für das Projekt „${projekt.name}“ (Repository ${projekt.repo}).`,
     `Auftrag #${auftrag.id} – Gruppe „${gruppe?.name || "?"}“${feature ? `, Feature „${feature.name}“ (${feature.id})` : ", ganze Gruppe"}. Art: ${auftrag.art}.`,
+    gruppe?.ws_bereiche?.global ? "GLOBALE EINSTELLUNG: Dieses Feature gilt für die ganze App und alle Nutzer und Rollen (z. B. Anmeldung, Sitzung, App-Rahmen). Es ist in der App kein eigener Bereich/Menüpunkt – setze es zentral um (gemeinsamer Code, Einstellungen, Datenbank), nicht in einer einzelnen Seite, und prüfe die Wirkung auf alle Bereiche und Rollen (Dorfverein und Profiverein)." : "",
     auftrag.baustein ? `Gezeigter Baustein: ${JSON.stringify(auftrag.baustein)}` : "",
     `Verlauf:\n${verlauf}`,
     "",
@@ -232,7 +233,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
   laeuft = { id: auftrag.id, abort };
   melde("status", fortsetzen ? "Setzt Auftrag fort" : "Übernimmt Auftrag", auftrag.id);
   try {
-    const { data: gruppe } = await db.from("ws_gruppen").select("*, ws_bereiche!inner(projekt_id)").eq("id", auftrag.gruppe_id).single();
+    const { data: gruppe } = await db.from("ws_gruppen").select("*, ws_bereiche!inner(projekt_id, global)").eq("id", auftrag.gruppe_id).single();
     const { data: projekt } = await db.from("ws_projekte").select("*").eq("id", gruppe.ws_bereiche.projekt_id).single();
     const feature = auftrag.feature_id ? (await db.from("ws_features").select("*").eq("id", auftrag.feature_id).single()).data : null;
     const { data: nachrichten } = await db.from("ws_nachrichten").select("*").eq("auftrag_id", auftrag.id).order("id");
