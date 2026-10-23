@@ -37,6 +37,7 @@ drop policy if exists ws_pruefungen_lesen on public.ws_pruefungen;
 -- Befunde können offene Lücken beschreiben (Prüfung O1): lesen nur Admin und Entwickler des Projekts; die ganze App nur der Admin
 create policy ws_pruefungen_lesen on public.ws_pruefungen for select to authenticated using (
   public.ws_ist_admin() or (umfang <> 'app' and exists (select 1 from public.ws_projekt_mitglieder m
+    join public.ws_benutzer b on b.id = m.benutzer_id and b.aktiv
     where m.projekt_id = ws_pruefungen.projekt_id and m.benutzer_id = auth.uid() and m.rolle = 'entwickler')));
 revoke insert, update, delete on public.ws_pruefungen from anon, authenticated;
 grant select on public.ws_pruefungen to authenticated;
@@ -188,6 +189,7 @@ create table if not exists public.ws_live_auftraege (
   check ((art = 'zurueck') = (version_id is not null)),
   check ((art = 'live') = (ziel_commit is not null))
 );
+alter table public.ws_live_auftraege add column if not exists ziel_commit text check (ziel_commit is null or ziel_commit ~ '^[0-9a-f]{40}$');
 create unique index if not exists ws_live_auftraege_einer_offen on public.ws_live_auftraege (projekt_id) where stand in ('wartet','laeuft');
 alter table public.ws_live_auftraege enable row level security;
 drop policy if exists ws_live_auftraege_lesen on public.ws_live_auftraege;
