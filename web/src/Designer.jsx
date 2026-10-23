@@ -102,7 +102,8 @@ const auftragsText = (name, liste, werte) => `Grunddesign-Entwurf „${name}“ 
 ${liste.length ? liste.map((x) => `- ${x.k}: ${x.alt ?? "–"} → ${x.neu}`).join("\n") : "- (keine – nur bestätigen)"}
 
 So umsetzen:
-- Nur zentral über die Design-Werte der App (CSS-Variablen in src/index.css, tailwind.config.js), keine Einzelfarben in Seiten.
+- Trage ALLE Werte unten unverändert in src/design/grunddesign.json ein (Trainer to go wendet sie über src/lib/design/grunddesign.js an).
+- Nichts in einzelnen Seiten ändern; was die Grunddesign-Ebene noch nicht kann (z. B. Menü-Aufbau, Logo-Platz, Abstände), zentral ergänzen.
 - Hell- und Dunkelmodus, PC/Tablet/Handy prüfen; Kontrast mind. 4,5 : 1.
 - Handbuch/DESIGN.md und CHANGELOG mitführen.
 
@@ -222,7 +223,7 @@ export default function Designer({ d, ich, toast }) {
       {fest && <p className="text-sm text-slate-600 dark:text-slate-300">Dieser Entwurf ist {STAND_TXT[aktiv.stand].toLowerCase()} und damit fest{aktiv.auftrag_id ? ` (Auftrag #${aktiv.auftrag_id})` : ""}. Für Änderungen eine Kopie anlegen.</p>}
 
       {modus !== "grund" ? <Spaeter modus={modus} /> : (
-        <div className="grid gap-3 xl:grid-cols-[320px_minmax(0,1fr)_280px] lg:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="grid gap-3 grid-cols-[minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_280px] lg:grid-cols-[300px_minmax(0,1fr)]">
           <Einstellungen w={werte} aendere={aendere} bearbeitbar={bearbeitbar} />
           <section className={`${card} min-w-0 flex flex-col`}>
             <div className="flex flex-wrap items-center gap-2 p-2 border-b border-slate-200 dark:border-slate-800">
@@ -238,7 +239,7 @@ export default function Designer({ d, ich, toast }) {
             </div>
             <div className="p-3 bg-slate-100 dark:bg-slate-950 flex-1 overflow-auto min-h-[520px]">
               {mitte === "geruest" && <Rahmen breite={GERAETE[geraet][0]}><Geruest w={werte} modus={dunkel ? "dunkel" : "hell"} geraet={geraet} name={projekt.name} /></Rahmen>}
-              {mitte === "testseite" && <Testseite projekt={projekt} breite={GERAETE[geraet][0]} />}
+              {mitte === "testseite" && <Testseite projekt={projekt} breite={GERAETE[geraet][0]} werte={werte} modus={dunkel ? "dunkel" : "hell"} />}
               {mitte === "vergleich" && <Vergleich entwuerfe={entwuerfe} gueltig={gueltig} aktuell={{ name: aktiv ? `${aktiv.name}${geaendert ? " (ungespeichert)" : ""}` : "Im Editor", werte }} modus={dunkel ? "dunkel" : "hell"} name={projekt.name} />}
             </div>
           </section>
@@ -381,13 +382,24 @@ function Geruest({ w, modus, geraet, name }) {
     </div>);
 }
 
-function Testseite({ projekt, breite }) {
+function Testseite({ projekt, breite, werte, modus }) {
+  // Etappe 3: Entwurf sofort in der echten Testseite zeigen – die App (vorschauHelfer.js) übernimmt die Werte nur dort, nichts wird gespeichert
   const url = projekt.live_url ? `${projekt.live_url.replace(/\/$/, "")}${projekt.vorschau_pfad || "/"}?cs=1` : null;
+  const rahmen = React.useRef(null);
+  const [bereit, setBereit] = useState(null);   // null = noch nicht, true = Testseite übernimmt Entwürfe
+  const ziel = url ? new URL(url).origin : null;
+  const senden = useCallback(() => { try { rahmen.current?.contentWindow?.postMessage({ cs: "design", werte, modus }, ziel); } catch { /* egal */ } }, [werte, modus, ziel]);
+  useEffect(() => { senden(); }, [senden]);
+  useEffect(() => {
+    const h = (e) => { if (e.origin === ziel && e.source === rahmen.current?.contentWindow && e.data?.cs === "design-ok") setBereit(true); };
+    window.addEventListener("message", h); return () => window.removeEventListener("message", h);
+  }, [ziel]);
   if (!url) return <p className="text-sm text-slate-500 p-4">Für dieses Projekt ist keine Adresse der App hinterlegt.</p>;
   return (
     <div className="mx-auto" style={{ width: breite, maxWidth: "100%" }}>
-      <p className="text-xs text-slate-600 dark:text-slate-300 mb-1.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg px-2.5 py-1.5">Echte Testseite der App – zeigt das <b>gültige</b> Design. Ein Entwurf erscheint hier, sobald sein Auftrag eine Testseite hat (Live-Vorschau beim Auftrag). Ab Etappe 3 auch sofort.</p>
-      <iframe title="Testseite der App" src={url} className="w-full h-[640px] rounded-xl bg-white ring-1 ring-black/10" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" />
+      <p className={`text-xs mb-1.5 rounded-lg px-2.5 py-1.5 border ${bereit ? "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-900 text-green-800 dark:text-green-300" : "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-slate-600 dark:text-slate-300"}`}>
+        {bereit ? "Echte Testseite – zeigt deinen Entwurf sofort (nur hier, nichts wird gespeichert). Darüber liegt wie in der App die Vereinsfarbe." : "Echte Testseite der App. Sobald sie geladen ist, zeigt sie deinen Entwurf sofort (ab Trainer to go mit Grunddesign-Ebene)."}</p>
+      <iframe ref={rahmen} title="Testseite der App" src={url} onLoad={() => setTimeout(senden, 400)} className="w-full h-[640px] rounded-xl bg-white ring-1 ring-black/10" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" />
     </div>);
 }
 

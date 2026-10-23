@@ -168,7 +168,7 @@ export default function App() {
   const PIcon = WS_ICON[aktuell?.symbol] || Layers;
 
   return (
-    <div className={`min-h-screen grid md:grid-cols-[248px_minmax(0,1fr)] ${ansicht !== "designer" ? "xl:grid-cols-[248px_minmax(0,1fr)_auto]" : ""} bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-body`}>
+    <div className={`min-h-screen grid grid-cols-[minmax(0,1fr)] md:grid-cols-[248px_minmax(0,1fr)] ${ansicht !== "designer" ? "xl:grid-cols-[248px_minmax(0,1fr)_auto]" : ""} bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-body`}>
       <aside className="bg-[#0f2a22] text-emerald-50 flex md:flex-col gap-1 p-3 md:sticky md:top-0 md:h-screen overflow-x-auto">
         <div className="flex items-center gap-2.5 px-2 pb-0 md:pb-3">
           <span className="w-9 h-9 rounded-lg bg-emerald-500 text-emerald-950 grid place-items-center"><Hammer className="w-5 h-5" /></span>
@@ -323,7 +323,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onOrt }) {
       </div>
       {station ? <StationsUebersicht station={station} d={d} darf={darf} toast={toast} onSchliessen={() => setStation(null)} onOeffne={(fid) => { setStation(null); setPlatz(fid); }} onGruppe={(gid) => { setStation(null); setSel({ g: gid, f: null }); }} />
       : platzF ? <FeatureArbeitsplatz f={platzF} g={platzG} d={d} ich={ich} darf={darf} toast={toast} onZurueck={() => setPlatz(null)} onLoeschen={() => setDlg({ art: "loeschen", f: platzF })} />
-      : <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_400px] items-start">
+      : <div className="grid gap-5 grid-cols-[minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_400px] items-start">
         <nav className={`${card} overflow-hidden`} aria-label="Bereiche und Gruppen">
           {d.bereiche.map((b) => (
             <div key={b.id} className="border-t first:border-t-0 border-slate-200 dark:border-slate-800 pb-1">
