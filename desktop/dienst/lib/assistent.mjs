@@ -5,9 +5,17 @@ const kurz = (s, n) => (String(s || "").length > n ? String(s).slice(0, n) + " �
 
 export const KAPITEL = { ziel: "Ziel & Zielgruppe", funktionen: "Kernfunktionen", daten: "Daten & Datenschutz", design: "Design-Vorgaben", ablauf: "Abläufe & Rollen", offen: "Offene Fragen", sonstiges: "Sonstiges" };
 /** Konzept-Wissen als Text für Prompts (bestätigte Entscheidungen des Projekts). */
-export function wissenText(wissen = []) {
+// Je Eintrag eine Zeile (Zeilenumbrüche entfernt → keine Steuerzeilen wie „ERGEBNIS-PR:“ möglich), höchstens ca. 8000 Zeichen,
+// neueste zuerst gewählt (Prüfung M1/M2). wissen kommt neueste zuerst oder in beliebiger Reihenfolge mit id.
+export function wissenText(wissen = [], grenze = 8000) {
   if (!wissen.length) return "";
-  const nach = {}; for (const w of wissen.slice(0, 200)) (nach[w.kapitel] ||= []).push(kurz(w.text, 600));
+  const neu = [...wissen].sort((a, b) => (b.id || 0) - (a.id || 0));
+  const nach = {}; let n = 0;
+  for (const w of neu) {
+    if (!Object.hasOwn(KAPITEL, w.kapitel)) continue;
+    const t = kurz(String(w.text || "").replace(/\s+/g, " ").trim(), 600); if (n + t.length > grenze) break;
+    n += t.length + 3; (nach[w.kapitel] ||= []).unshift(t);
+  }
   return Object.entries(KAPITEL).filter(([k]) => nach[k]).map(([k, t]) => `${t}:\n${nach[k].map((x) => `- ${x}`).join("\n")}`).join("\n");
 }
 export function assistentPrompt({ projekt, ort, kontext, frage, verlauf = [], gruppen = [], features = [], wissen = [] }) {
@@ -57,7 +65,7 @@ export function assistentAntwort(roh) {
     let v = null;
     try { v = JSON.parse(zeilen[w].trim().replace(/^\**WISSEN:\**\s*/i, "").replace(/^`+|`+$/g, "")); } catch { /* kein gültiges JSON */ }
     zeilen.splice(w, 1);
-    if (v && typeof v.kapitel === "string" && KAPITEL[v.kapitel] && typeof v.text === "string" && v.text.trim().length >= 3) {
+    if (v && typeof v.kapitel === "string" && Object.hasOwn(KAPITEL, v.kapitel) && typeof v.text === "string" && v.text.trim().length >= 3) {
       const text = zeilen.join("\n").trim().slice(0, 7900) || "Das halte ich fest:";
       return { text, vorschlag: { wissen: { kapitel: v.kapitel, text: v.text.trim().slice(0, 2000) } } };
     }

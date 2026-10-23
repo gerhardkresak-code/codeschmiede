@@ -9,7 +9,7 @@ import { Markdown } from "./Markdown";
 import { WS_ICON, STAND, ROLLEN, BEREICH_RECHTE } from "./config";
 import { isDesktop, tauri } from "./desktop";
 import Designer from "./Designer";
-import KonzeptArbeitsplatz from "./Konzept";
+import KonzeptArbeitsplatz, { KonzeptAuto } from "./Konzept";
 import { ZweigeVersionen, Pruefstand, Wissensdatenbank, Aenderungsprotokoll, Dokumentation } from "./Ablauf";
 import KiAnbieter from "./KiAnbieter";
 import Einrichtung, { EinrichtungChip, useEinrichtung } from "./Einrichtung";
@@ -237,6 +237,7 @@ export default function App() {
       {/* Die Chat-Spalte rechts entfällt (Gerhard 2026-10-23 17:52): Gespräche mit Claude laufen in der Gruppe „Konzept“ */}
       {einrichtung && !daten.laden && <Einrichtung ich={ich} d={daten} toast={setToast} onClose={() => setEinrichtung(false)} />}
       {!daten.laden && daten.projektId && <EinrichtungAuto ich={ich} d={daten} onOeffnen={() => setEinrichtung(true)} />}
+      {!daten.laden && daten.projektId && <KonzeptAuto d={daten} ich={ich} />}
       {projekteVerwalten && <ProjekteVerwalten toast={setToast} aktiv={daten.projektId} onClose={() => setProjekteVerwalten(false)} onWeg={(id) => { if (id === daten.projektId) { const n = daten.projekte.find((p) => p.id !== id); if (n) waehle(n.id); } }} />}
       {neuesProjekt && <NeuesProjekt toast={setToast} onClose={() => setNeuesProjekt(false)} onFertig={(id) => waehle(id)} />}
       <Toast text={toast} onDone={() => setToast("")} />
@@ -286,7 +287,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner }) {
     const fids = new Set(alle.features.filter((f) => gids.has(f.gruppe_id)).map((f) => f.id));
     return { ...alle, bereiche, gruppen, auftraege: nurGlobal ? alle.auftraege.filter((a) => gids.has(a.gruppe_id) || fids.has(a.feature_id)) : alle.auftraege };
   }, [alle, nurGlobal]);
-  // Start im Konzept, solange das Grundkonzept noch nicht steht – sonst erste Gruppe (Konzept zuerst, 2026-10-23)
+  // Start immer im Konzept (erste Gruppe im Bereich App, Konzept zuerst 2026-10-23); ohne Konzept-Gruppe die erste Gruppe
   const [sel, setSel] = useState(() => { const k = !nurGlobal && alle.projekte.find((p) => p.id === alle.projektId)?.konzept_gruppe_id; return { g: (k && d.gruppen.some((x) => x.id === k) ? k : d.gruppen[0]?.id), f: null }; });
   const [dlg, setDlg] = useState(null);
   const rolle = ich.rolle === "admin" ? "admin" : d.mitglieder.find((m) => m.projekt_id === d.projektId && m.benutzer_id === ich.id)?.rolle;

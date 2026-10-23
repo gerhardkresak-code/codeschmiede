@@ -103,3 +103,15 @@ export function KonzeptWissen({ projektId }) {
       })}
     </div>);
 }
+
+/** Fehlt einem Projekt die Konzept-Gruppe (z. B. wiederhergestellt), richtet sie sich für Admin/Entwickler selbst ein (Prüfung N2). */
+export function KonzeptAuto({ d, ich }) {
+  const projekt = d.projekte.find((p) => p.id === d.projektId);
+  const rolle = ich.rolle === "admin" ? "admin" : d.mitglieder.find((m) => m.projekt_id === d.projektId && m.benutzer_id === ich.id)?.rolle;
+  const noetig = !!projekt && !projekt.konzept_gruppe_id && "konzept_gruppe_id" in projekt && (rolle === "admin" || rolle === "entwickler");
+  useEffect(() => {
+    if (!noetig) return;
+    supabase.rpc("ws_konzept_einrichten", { p_projekt: projekt.id }).then(({ error }) => { if (!error) d.holen?.(); });
+  }, [noetig, projekt?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}

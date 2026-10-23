@@ -58,5 +58,16 @@ select ws_wissen_loeschen((select min(id) from ws_wissen where projekt_id='neu')
 :ADM
 select ws_wissen_loeschen((select min(id) from ws_wissen where projekt_id='neu'));
 select count(*) as rest from ws_wissen where projekt_id='neu';
+\echo [8] Feature/Auftrag in der Konzept-Gruppe -> FEHLER (2x); Vorschlag feature_neu in Konzept -> f
+:ADM
+insert into ws_features(id,gruppe_id,name,stand,quelle,erstellt_von) values ('N-K1','neu-konzept','Darf nicht','geplant','manuell',auth.uid());
+insert into ws_auftraege(gruppe_id,titel,art,erstellt_von) values ('neu-konzept','Darf nicht','aendern',auth.uid());
+reset role;
+select ws_vorschlag_ok('neu','{"feature_neu":{"gruppe_id":"neu-konzept","name":"X"}}') as konzept_ziel, ws_vorschlag_ok('neu','{"feature_neu":{"gruppe_id":"neu-funktionen","name":"Xy"}}') as normal;
+\echo [9] Konzept einrichten nach Verlust (Admin) -> Gruppe wieder da
+update ws_projekte set konzept_gruppe_id = null where id='neu';
+set role authenticated;
+:ADM
+select ws_konzept_einrichten('neu');
 reset role;
 rollback;

@@ -19,15 +19,17 @@ begin
   if not found then raise exception 'Projekt nicht gefunden'; end if;
   if g is not null and public.ws_projekt_von_gruppe(g) = p_projekt then return g; end if;
   g := p_projekt || '-konzept';
-  if exists (select 1 from public.ws_gruppen where id = g) then
-    if public.ws_projekt_von_gruppe(g) is distinct from p_projekt then raise exception 'Kennung % gehört zu einem anderen Projekt', g; end if;
-  else
+  -- Kennung schon von einem anderen Projekt belegt? Dann mit Zusatz (Prüfung N1 – nie abbrechen, nie fremd zeigen)
+  while exists (select 1 from public.ws_gruppen where id = g) and public.ws_projekt_von_gruppe(g) is distinct from p_projekt loop
+    g := p_projekt || '-konzept-' || substr(md5(random()::text), 1, 4);
+  end loop;
+  if not exists (select 1 from public.ws_gruppen where id = g) then
     -- Bereich „App“: <projekt>-app, sonst ein Bereich namens „App“, sonst neu als erster Bereich
     select id into b from public.ws_bereiche where projekt_id = p_projekt and not global and (id = p_projekt || '-app' or name = 'App')
       order by (id = p_projekt || '-app') desc limit 1;
     if b is null then
       b := p_projekt || '-app';
-      if exists (select 1 from public.ws_bereiche where id = b) then raise exception 'Kennung % gehört zu einem anderen Projekt', b; end if;
+      while exists (select 1 from public.ws_bereiche where id = b) loop b := p_projekt || '-app-' || substr(md5(random()::text), 1, 4); end loop;
       insert into public.ws_bereiche (id, projekt_id, name, reihenfolge)
         values (b, p_projekt, 'App', coalesce((select min(reihenfolge) from public.ws_bereiche where projekt_id = p_projekt), 1) - 1);
     end if;
@@ -125,7 +127,52 @@ end $$;
 revoke execute on function public.ws_wissen_uebernehmen(bigint), public.ws_wissen_eintragen(text, text, text), public.ws_wissen_loeschen(bigint) from public, anon;
 grant execute on function public.ws_wissen_uebernehmen(bigint), public.ws_wissen_eintragen(text, text, text), public.ws_wissen_loeschen(bigint) to authenticated;
 
--- Vorschlag {"wissen":{"kapitel","text"}} zusätzlich erlauben (Rest wie 0015)
+-- Konzept-Gruppe fehlt (z. B. wiederhergestelltes Projekt): Admin/Entwickler richten sie aus der Zentrale ein (Prüfung N2)
+create or replace function public.ws_konzept_einrichten(p_projekt text) returns text
+language plpgsql security definer set search_path = public as $$
+declare g text;
+begin
+  if not public.ws_wissen_darf(p_projekt) then raise exception 'Die Konzept-Gruppe richtet der Admin oder ein Entwickler des Projekts ein'; end if;
+  if exists (select 1 from public.ws_projekte where id = p_projekt and konzept_gruppe_id is not null) then
+    return (select konzept_gruppe_id from public.ws_projekte where id = p_projekt); end if;
+  g := public.ws_konzept_gruppe_sicher(p_projekt);
+  insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'konzept_eingerichtet', jsonb_build_object('projekt', p_projekt, 'gruppe', g));
+  return g;
+end $$;
+revoke execute on function public.ws_konzept_einrichten(text) from public, anon;
+grant execute on function public.ws_konzept_einrichten(text) to authenticated;
+
+-- In der Konzept-Gruppe gibt es keine Features und keine Bau-Aufträge – sie wären dort unsichtbar (Prüfung M3)
+create or replace function public.ws_ist_konzept_gruppe(p_gruppe text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.ws_projekte where konzept_gruppe_id = p_gruppe)
+$$;
+revoke execute on function public.ws_ist_konzept_gruppe(text) from public, anon, authenticated;
+create or replace function public.ws_nicht_in_konzept() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if public.ws_ist_konzept_gruppe(new.gruppe_id) then raise exception 'In der Gruppe „Konzept“ gibt es keine Features und Aufträge – bitte eine andere Gruppe wählen'; end if;
+  return new;
+end $$;
+revoke execute on function public.ws_nicht_in_konzept() from public, anon, authenticated;
+drop trigger if exists ws_features_nicht_konzept on public.ws_features;
+create trigger ws_features_nicht_konzept before insert or update of gruppe_id on public.ws_features for each row execute function public.ws_nicht_in_konzept();
+drop trigger if exists ws_auftraege_nicht_konzept on public.ws_auftraege;
+create trigger ws_auftraege_nicht_konzept before insert or update of gruppe_id on public.ws_auftraege for each row execute function public.ws_nicht_in_konzept();
+
+-- Höchstens 300 Einträge je Projekt (Prompt-Länge, Prüfung M2)
+create or replace function public.ws_wissen_grenze() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if (select count(*) from public.ws_wissen where projekt_id = new.projekt_id) >= 300 then
+    raise exception 'Das Konzept-Wissen ist voll (300 Einträge) – bitte zusammenfassen oder alte Einträge entfernen'; end if;
+  return new;
+end $$;
+revoke execute on function public.ws_wissen_grenze() from public, anon, authenticated;
+drop trigger if exists ws_wissen_grenze on public.ws_wissen;
+create trigger ws_wissen_grenze before insert on public.ws_wissen for each row execute function public.ws_wissen_grenze();
+
+-- Vorschlag {"wissen":{"kapitel","text"}} zusätzlich erlauben (Rest wie 0015, ohne Konzept-Gruppe als Ziel)
 create or replace function public.ws_vorschlag_ok(p_projekt text, v jsonb) returns boolean
 language plpgsql stable security definer set search_path = public as $$
 begin
@@ -145,7 +192,7 @@ begin
        or exists (select 1 from jsonb_object_keys(v->'feature_neu') k where k not in ('gruppe_id','name','beschreibung')) then return false; end if;
     if jsonb_typeof(v->'feature_neu'->'gruppe_id') <> 'string' or jsonb_typeof(v->'feature_neu'->'name') <> 'string' then return false; end if;
     if char_length(v->'feature_neu'->>'name') not between 2 and 80 or char_length(coalesce(v->'feature_neu'->>'beschreibung','')) > 1000 then return false; end if;
-    return public.ws_projekt_von_gruppe(v->'feature_neu'->>'gruppe_id') is not distinct from p_projekt;
+    return public.ws_projekt_von_gruppe(v->'feature_neu'->>'gruppe_id') is not distinct from p_projekt and not public.ws_ist_konzept_gruppe(v->'feature_neu'->>'gruppe_id');
   end if;
   -- b) Bezug: {"bezug":{"von","zu"}}
   if v ? 'bezug' then
@@ -159,7 +206,7 @@ begin
   if exists (select 1 from jsonb_object_keys(v) k where k not in ('gruppe_id','feature_id','titel','text','konzept')) then return false; end if;
   if jsonb_typeof(v->'gruppe_id') <> 'string' or jsonb_typeof(v->'titel') <> 'string' or jsonb_typeof(v->'text') <> 'string' then return false; end if;
   if char_length(v->>'titel') not between 3 and 80 or char_length(v->>'text') not between 10 and 8000 then return false; end if;
-  if public.ws_projekt_von_gruppe(v->>'gruppe_id') is distinct from p_projekt then return false; end if;
+  if public.ws_projekt_von_gruppe(v->>'gruppe_id') is distinct from p_projekt or public.ws_ist_konzept_gruppe(v->>'gruppe_id') then return false; end if;
   if v ? 'feature_id' and v->'feature_id' <> 'null'::jsonb then
     if jsonb_typeof(v->'feature_id') <> 'string' or not exists (select 1 from public.ws_features f where f.id = v->>'feature_id' and f.gruppe_id = v->>'gruppe_id') then return false; end if;
   end if;

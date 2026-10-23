@@ -77,7 +77,10 @@ export default function ClaudeChat({ d, ich, ort = "konzept", kontext, toast, le
 }
 
 // Konzept-Entscheidung ins Wissen übernehmen (Datenbank 0020): Text kommt aus dem gespeicherten Vorschlag
-function WissenVorschlag({ m, kann, toast }) {
+function WissenVorschlag({ m, d, ich, kann: gefragt, toast }) {
+  // Übernehmen dürfen nur Admin und Entwickler (wie in der Datenbank) – Texter sehen den Vorschlag nur (Prüfung N3)
+  const rolle = ich.rolle === "admin" ? "admin" : d.mitglieder.find((x) => x.projekt_id === d.projektId && x.benutzer_id === ich.id)?.rolle;
+  const kann = gefragt && (rolle === "admin" || rolle === "entwickler");
   const v = m.vorschlag.wissen; const [busy, setBusy] = useState(false);
   const ja = async () => { setBusy(true); const { error } = await supabase.rpc("ws_wissen_uebernehmen", { p_antwort: m.id }); setBusy(false); if (error) toast(fehler(error)); else toast("Ins Wissen übernommen"); };
   const nein = async () => { const { error } = await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "abgelehnt" }); if (error) toast(fehler(error)); };
