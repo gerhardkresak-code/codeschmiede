@@ -20,3 +20,7 @@ Antworten (17:55): Aufgaben der Chat-Spalte → Gruppe Konzept · neue **und** b
   Bau-Aufträge der Werkstatt („PROJEKTWISSEN aus dem Konzept“).
 - Die Chat-Spalte rechts entfällt. Projektfragen, Konzept-Karte („Konzept freigeben & bauen“), Feature- und Bezugsvorschläge laufen im
   Konzept-Chat; bisherige Gespräche erscheinen dort. Es bleiben der Chat im Feature-Arbeitsplatz und der Design-Chat.
+
+## Ergänzung 18:33 – Konzept-Dokument
+„Konzept hat keine Gruppen und/oder Features. Hier schreibt man nur, und alles Relevante wird ins Wissen und als Konzept gespeichert.“
+Antwort: Konzept-Dokument. Umsetzung: Ansicht „Konzept-Dokument“ im Konzept-Arbeitsplatz, automatisch aus `ws_wissen`, Download als `.md`.
