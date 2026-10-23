@@ -28,7 +28,9 @@ const AUFGABEN = [
   ["bilder", "Bilder & Grafiken", "wird mit Etappe 5 (Marke, Logo) genutzt; nur Anbieter, die Bilder erzeugen können"],
   ["bauen", "Bauen & Programmieren", "fest Claude – nie ein anderer Anbieter"],
 ];
-const STANDARD = {
+// Ohne Admin-Einstellung gilt nur Claude (Prüfung M5). VORSCHLAG = Entwurf 1.2 zum Übernehmen.
+const STANDARD = Object.fromEntries(["chat", "konzept", "design", "pruefung", "doku", "texte", "bilder", "bauen"].map((a) => [a, [{ anbieter: "claude", ...({ konzept: { modell: "opus" }, pruefung: { modell: "opus" }, texte: { modell: "haiku" } }[a] || {}) }]]));
+const VORSCHLAG = {
   chat: [{ anbieter: "chatgpt" }, { anbieter: "gemini" }, { anbieter: "claude", modell: "sonnet" }],
   konzept: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "opus" }],
   design: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }],
@@ -38,7 +40,7 @@ const STANDARD = {
   bilder: [{ anbieter: "gemini" }, { anbieter: "chatgpt" }],
   bauen: [{ anbieter: "claude" }],
 };
-const MODELL = /^[A-Za-z0-9._:-]{1,60}$/;
+const MODELL = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$/;
 
 function Zeile({ id, titel, hinweis, eintrag, admin, onSpeichern }) {
   const fest = id === "bauen";
@@ -76,6 +78,7 @@ function Zeile({ id, titel, hinweis, eintrag, admin, onSpeichern }) {
         })}
         {admin && eigen != null && <span className="inline-flex items-center gap-1"><input id={`ki-modell-${id}`} className={`${sel} w-36`} placeholder="Modellname, z. B. gpt-5" value={eigenText} onChange={(ev) => setEigenText(ev.target.value)} />
           <button type="button" className={ghost} disabled={!MODELL.test(eigenText)} onClick={() => { setze(eigen, "modell", eigenText); setEigen(null); }}>OK</button></span>}
+        {admin && !fest && !eintrag && JSON.stringify(reihe) !== JSON.stringify(VORSCHLAG[id]) && <button type="button" className={ghost} onClick={() => setReihe(VORSCHLAG[id])}>Vorschlag einsetzen</button>}
         {admin && !fest && frei.length > 0 && <select className={sel} value="" aria-label="Anbieter hinzufügen" onChange={(ev) => ev.target.value && setReihe([...reihe, { anbieter: ev.target.value }])}>
           <option value="">+ Anbieter</option>{frei.map((a) => <option key={a} value={a}>{ANBIETER[a].name}</option>)}</select>}
       </div>
@@ -151,7 +154,7 @@ export default function KiAnbieter({ d, ich, toast }) {
         {zust?.fehlt ? <p className="p-4 text-sm text-amber-700 dark:text-amber-300">Die Datenbank-Erweiterung 0012 (KI-Anbieter) ist noch nicht eingespielt.</p>
           : !zust ? <div className="p-4"><Loader2 className="w-5 h-5 animate-spin text-emerald-700" /></div>
           : AUFGABEN.map(([id, titel, hinweis]) => <Zeile key={id} id={id} titel={titel} hinweis={hinweis} eintrag={zust[id]} admin={admin} onSpeichern={speichern} />)}
-        <p className="px-3 py-2 text-xs text-slate-500 border-t border-slate-100 dark:border-slate-800">Andere Anbieter als Claude sehen nur die Dokumentation und eine Dateiliste des Projekts – nie ausführbaren Code – und ändern nichts. „Automatisch“ = Standardmodell des Anbieters bzw. nach Aufwand.</p>
+        <p className="px-3 py-2 text-xs text-slate-500 border-t border-slate-100 dark:border-slate-800">Solange hier nichts gespeichert ist, antwortet nur Claude. Andere Anbieter bekommen alles als Text (Dokumentation, Dateiliste, bei Prüfungen die Änderung) und laufen in einem leeren Ordner ohne Projekt-Dateien; sie ändern nichts. „Automatisch“ = Standardmodell des Anbieters.</p>
       </div>
 
       <div className={`${card} overflow-hidden`}>

@@ -26,3 +26,10 @@ test("Kennung und Konzept", () => {
   assert.ok(istKonzeptFrage("Ich möchte ein neues Feature für Turniere"));
   assert.ok(!istKonzeptFrage("Was steht in AGENTS.md?"));
 });
+test("Modell darf nie mit Bindestrich beginnen (kein --yolo)", () => {
+  assert.deepEqual(reiheFuer("chat", { reihe: [{ anbieter: "gemini", modell: "--yolo" }] }), [{ anbieter: "gemini" }]);
+  assert.deepEqual(reiheFuer("chat", { reihe: [{ anbieter: "chatgpt", modell: "-c" }] }), [{ anbieter: "chatgpt" }]);
+});
+test("Ohne Admin-Einstellung nur Claude", () => {
+  for (const a of ["chat", "konzept", "design", "pruefung"]) assert.ok(reiheFuer(a, null).every((e) => e.anbieter === "claude"));
+});

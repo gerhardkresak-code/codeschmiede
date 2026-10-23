@@ -17,7 +17,7 @@ begin
   for e in select * from jsonb_array_elements(r) loop
     if jsonb_typeof(e) <> 'object' or exists (select 1 from jsonb_object_keys(e) k where k not in ('anbieter','modell')) then return false; end if;
     if (e->>'anbieter') is null or (e->>'anbieter') not in ('claude','chatgpt','gemini') then return false; end if;
-    if e ? 'modell' and (jsonb_typeof(e->'modell') <> 'string' or (e->>'modell') !~ '^[A-Za-z0-9._:-]{1,60}$') then return false; end if;
+    if e ? 'modell' and (jsonb_typeof(e->'modell') <> 'string' or (e->>'modell') !~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$') then return false; end if;
   end loop;
   if (select count(distinct x->>'anbieter') from jsonb_array_elements(r) x) <> jsonb_array_length(r) then return false; end if;
   -- Bauen nie durch einen anderen Anbieter (Gerhard 2026-10-23 14:27: „NEIN NIE“)
@@ -84,14 +84,14 @@ do $$ begin
 end $$;
 
 -- ---------- Protokoll: wer hat geantwortet ----------
-alter table public.ws_claude_chat add column if not exists ki text check (ki is null or ki ~ '^(claude|chatgpt|gemini)(/[A-Za-z0-9._:-]{1,60})?$');
-alter table public.ws_design_chat add column if not exists ki text check (ki is null or ki ~ '^(claude|chatgpt|gemini)(/[A-Za-z0-9._:-]{1,60})?$');
+alter table public.ws_claude_chat add column if not exists ki text check (ki is null or ki ~ '^(claude|chatgpt|gemini)(/[A-Za-z0-9][A-Za-z0-9._:-]{0,59})?$');
+alter table public.ws_design_chat add column if not exists ki text check (ki is null or ki ~ '^(claude|chatgpt|gemini)(/[A-Za-z0-9][A-Za-z0-9._:-]{0,59})?$');
 
 create or replace function public.ws_ki_vermerken(p_art text, p_antwort bigint, p_ki text) returns void
 language plpgsql security definer set search_path = public as $$
 declare v uuid; alt text;
 begin
-  if p_ki is null or p_ki !~ '^(claude|chatgpt|gemini)(/[A-Za-z0-9._:-]{1,60})?$' then raise exception 'Ungültige Angabe'; end if;
+  if p_ki is null or p_ki !~ '^(claude|chatgpt|gemini)(/[A-Za-z0-9][A-Za-z0-9._:-]{0,59})?$' then raise exception 'Ungültige Angabe'; end if;
   if p_art = 'chat' then
     select f.von, a.ki into v, alt from public.ws_claude_chat a join public.ws_claude_chat f on f.id = a.frage_id where a.id = p_antwort and a.von is null;
   elsif p_art = 'design' then
@@ -138,7 +138,8 @@ begin
   if not public.ws_konzept_ok(v->'konzept') then return false; end if;
   return true;
 end $$;
-revoke execute on function public.ws_vorschlag_ok(text, jsonb) from public, anon;
+revoke execute on function public.ws_vorschlag_ok(text, jsonb) from public, anon, authenticated;   -- Prüfung N6
+revoke execute on function public.ws_konzept_ok(jsonb), public.ws_ki_reihe_ok(text, jsonb) from public, anon;
 
 commit;
 
