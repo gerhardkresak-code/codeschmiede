@@ -48,7 +48,7 @@ export default function ClaudeSpalte({ d, ich, ort, kontext, toast }) {
       <Bot className="w-5 h-5 text-emerald-700" />{wartet && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
     </aside>);
   return (
-    <aside className="flex flex-col md:col-span-2 xl:col-span-1 xl:w-[360px] border-t xl:border-t-0 xl:border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 xl:sticky xl:top-0 xl:h-screen min-h-[420px]" aria-label="Chat mit Claude">
+    <aside className="flex flex-col min-w-0 md:col-start-2 xl:col-start-auto xl:w-[360px] border-t xl:border-t-0 xl:border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 xl:sticky xl:top-0 xl:h-screen min-h-[420px]" aria-label="Chat mit Claude">
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-200 dark:border-slate-800">
         <Bot className="w-5 h-5 text-emerald-700" /><b className="font-display text-[17px]">Claude</b>
         <span className="text-xs text-slate-500 truncate">· {ORT_NAME(ort || "zentrale")}</span>
