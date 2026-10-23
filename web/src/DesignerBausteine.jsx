@@ -179,14 +179,17 @@ function Eingabe({ wert, muster, onWert, max, ...rest }) {
 // das Logo als bearbeitbares Vektor-Logo nachbauen → mit Klick in den Entwurf → wie jedes Design als Auftrag senden (dann überall in der App).
 const BILD_ARTEN = { "image/png": 1, "image/jpeg": 1, "image/webp": 1, "image/svg+xml": 1 };
 function LogoEinlesen({ projekt, bearbeitbar, toast, onUebernehmen }) {
-  const [liste, setListe] = useState([]); const [busy, setBusy] = useState(false); const [wunsch, setWunsch] = useState({});
+  const [liste, setListe] = useState([]); const [busy, setBusy] = useState(false); const [wunsch, setWunsch] = useState({}); const [bilder, setBilder] = useState({});
+  // Liste ohne Bild (klein); Originalbilder nur einmal je Logo nachladen (Prüfung 0.8.6 O3)
   const holen = async () => {
-    const { data } = await supabase.from("ws_marke_vorlagen").select("id, dateiname, stand, ergebnis, hinweis, ki, erstellt, bild").eq("projekt_id", projekt.id).order("id", { ascending: false }).limit(3);
+    const { data } = await supabase.from("ws_marke_vorlagen").select("id, dateiname, stand, ergebnis, hinweis, ki, erstellt").eq("projekt_id", projekt.id).order("id", { ascending: false }).limit(3);
     setListe(data || []);
+    const fehlt = (data || []).map((v) => v.id).filter((id) => !(id in bilder));
+    if (fehlt.length) { const { data: b } = await supabase.from("ws_marke_bilder").select("vorlage_id, bild").in("vorlage_id", fehlt); setBilder((alt) => ({ ...alt, ...Object.fromEntries((b || []).map((x) => [x.vorlage_id, x.bild])) })); }
   };
   useEffect(() => {
     holen().catch(() => {});
-    const ch = supabase.channel(`marke-${projekt.id}-${Math.random()}`).on("postgres_changes", { event: "*", schema: "public", table: "ws_marke_vorlagen" }, () => holen().catch(() => {})).subscribe();
+    const ch = supabase.channel(`marke-${projekt.id}-${Math.random()}`).on("postgres_changes", { event: "*", schema: "public", table: "ws_marke_vorlagen", filter: `projekt_id=eq.${projekt.id}` }, () => holen().catch(() => {})).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [projekt.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const datei = (f) => {
@@ -213,7 +216,7 @@ function LogoEinlesen({ projekt, bearbeitbar, toast, onUebernehmen }) {
       {liste.map((v) => (
         <div key={v.id} className="rounded-lg border border-slate-200 dark:border-slate-800 p-2 flex flex-col gap-2 text-xs">
           <div className="flex items-center gap-2 flex-wrap">
-            <img src={v.bild} alt={`Original ${v.dateiname || ""}`} className="w-12 h-12 object-contain rounded bg-white ring-1 ring-black/5" />
+            <img src={bilder[v.id] || undefined} alt={`Original ${v.dateiname || ""}`} className="w-12 h-12 object-contain rounded bg-white ring-1 ring-black/5" />
             <ArrowRight className="w-4 h-4 text-slate-400" />
             {v.ergebnis ? <LogoZeichen werte={{ zeichen: "eigen", vektor: v.ergebnis }} groesse={48} titel="Nachgebaut" />
               : <span className="w-12 h-12 grid place-items-center rounded bg-slate-50 dark:bg-slate-950">{v.stand === "fehler" ? <CircleAlert className="w-5 h-5 text-amber-600" /> : <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />}</span>}

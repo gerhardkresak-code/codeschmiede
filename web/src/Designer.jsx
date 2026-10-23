@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Palette, Shapes, Stamp, Save, Send, Copy, Plus, Trash2, Undo2, Redo2, History, GitCompareArrows, Monitor, Tablet, Smartphone,
   Sun, Moon, CircleCheck, CircleAlert, TriangleAlert, Loader2, Bot, ShieldCheck, Sparkles, Check, X, ExternalLink, LayoutTemplate, Home, Users, Calendar, Trophy, Settings, Bell, Search,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { useKiName } from "./kiName";
+import { useAutoHoehe } from "./autoHoehe";
 import { BausteineModus, MarkeModus, BAUSTEIN_BASIS, bausteinWerteBereinigen } from "./DesignerBausteine";
 import { MARKE_BASIS } from "./Logo";
 import { Markdown } from "./Markdown";
@@ -524,6 +525,7 @@ const IDEEN_START = ["Lass uns das Design von Grund auf planen", "Schlag mir 3 G
 const IDEEN = ["Mach die Knöpfe besser lesbar", "Wärmer und freundlicher, aber seriös", "Moderner Dunkelmodus", "Löse die offenen Prüfungen", "Passt das für Dorf- und Profivereine?"];
 function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onUebernehmen, modus = "grund", text, setText, start = false }) {
   const ki = useKiName(projekt.id, "design");
+  const chatFeld = useRef(null); useAutoHoehe(chatFeld, text);
   const [liste, setListe] = useState([]);
   const [senden, setSenden] = useState(false);
   const ende = React.useRef(null);
@@ -586,7 +588,7 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
         <form className="border-t border-slate-200 dark:border-slate-800 p-2.5 space-y-2" onSubmit={(e) => { e.preventDefault(); schicke(); }}>
           <div className="flex flex-wrap gap-1">{(start && !liste.length ? IDEEN_START : IDEEN).map((i) => <button key={i} type="button" disabled={senden} onClick={() => schicke(i)} className="text-xs rounded-full border border-slate-300 dark:border-slate-700 px-2 py-0.5 hover:bg-slate-50 dark:hover:bg-slate-800">{i}</button>)}</div>
           <div className="flex gap-1.5">
-            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={4000} placeholder="Was soll sich am Design ändern?" className={`${input} resize-none`}
+            <textarea ref={chatFeld} value={text} onChange={(e) => setText(e.target.value)} rows={4} maxLength={4000} placeholder="Was soll sich am Design ändern?" className={`${input} resize-none`}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); schicke(); } }} />
             <button className={`${btn} self-end`} disabled={senden || !text.trim()} title="Senden"><Send className="w-4 h-4" /></button>
           </div>

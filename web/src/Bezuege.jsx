@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useAutoHoehe } from "./autoHoehe";
 import { Link2, X, Plus, RefreshCw, Check, Loader2 } from "lucide-react";
 import { supabase } from "./supabase";
 
@@ -29,9 +30,10 @@ export function MitErwaehnung({ value, onChange, features, className, ...rest })
     onChange(v); setTreffer(null);
     requestAnimationFrame(() => { const el = ref.current; if (el) { const p = treffer.start + f.name.length + 2; el.focus(); el.setSelectionRange(p, p); } });
   };
+  useAutoHoehe(ref, value);
   return (
     <div className="relative">
-      <textarea ref={ref} value={value} className={className} {...rest}
+      <textarea ref={ref} value={value} className={`${className || ""} resize-none`} {...rest}
         onChange={(e) => { onChange(e.target.value); pruefe(e.target.value, e.target.selectionStart); }}
         onKeyDown={(e) => {
           if (treffer) {

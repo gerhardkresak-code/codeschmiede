@@ -63,6 +63,7 @@ language sql immutable set search_path = public as $$
     or (e.key = 'vektor' and public.ws_marke_vektor_ok(e.value))))
 $$;
 -- Hilfsfunktionen laufen in CHECK-Bedingungen mit den Rechten des Aufrufers (Prüfung 0022)
+revoke execute on function public.ws_marke_zahl_ok(jsonb, numeric, numeric), public.ws_marke_farbe_ok(jsonb), public.ws_marke_vektor_ok(jsonb) from public, anon;
 grant execute on function public.ws_marke_zahl_ok(jsonb, numeric, numeric), public.ws_marke_farbe_ok(jsonb), public.ws_marke_vektor_ok(jsonb), public.ws_marke_ok(jsonb) to authenticated;
 
 alter table public.ws_projekte drop constraint if exists ws_projekte_logo_check;
@@ -74,7 +75,6 @@ create table if not exists public.ws_marke_vorlagen (
   projekt_id text not null references public.ws_projekte(id) on delete cascade,
   von uuid not null default auth.uid() references auth.users(id),
   dateiname text check (char_length(dateiname) <= 120),
-  bild text not null check (char_length(bild) <= 2900000 and bild ~ '^data:image/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$'),
   wunsch text check (char_length(wunsch) <= 500),                     -- z. B. „Schrift moderner“ beim erneuten Nachbauen
   stand text not null default 'wartet' check (stand in ('wartet','laeuft','fertig','fehler')),
   ergebnis jsonb check (ergebnis is null or public.ws_marke_vektor_ok(ergebnis)),
@@ -85,6 +85,17 @@ create table if not exists public.ws_marke_vorlagen (
   geaendert timestamptz not null default now()
 );
 create index if not exists ws_marke_vorlagen_projekt on public.ws_marke_vorlagen (projekt_id, id desc);
+-- Das Bild selbst liegt getrennt (nicht in Realtime, Prüfung 0.8.6 O3) und wird nur bei Bedarf geladen
+create table if not exists public.ws_marke_bilder (
+  vorlage_id bigint primary key references public.ws_marke_vorlagen(id) on delete cascade,
+  bild text not null check (char_length(bild) <= 2900000 and bild ~ '^data:image/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$')
+);
+alter table public.ws_marke_bilder enable row level security;
+drop policy if exists ws_marke_bilder_lesen on public.ws_marke_bilder;
+create policy ws_marke_bilder_lesen on public.ws_marke_bilder for select to authenticated
+  using (exists (select 1 from public.ws_marke_vorlagen v where v.id = vorlage_id and public.ws_darf_design(v.projekt_id)));
+revoke insert, update, delete on public.ws_marke_bilder from anon, authenticated;
+grant select on public.ws_marke_bilder to authenticated;
 alter table public.ws_marke_vorlagen enable row level security;
 drop policy if exists ws_marke_vorlagen_lesen on public.ws_marke_vorlagen;
 create policy ws_marke_vorlagen_lesen on public.ws_marke_vorlagen for select to authenticated using (public.ws_darf_design(projekt_id));
@@ -97,12 +108,14 @@ language plpgsql security definer set search_path = public as $$
 declare neu bigint;
 begin
   if not public.ws_darf_design(p_projekt) then raise exception 'Logos einlesen dürfen Admin und Entwickler des Projekts'; end if;
-  if (select count(*) from public.ws_marke_vorlagen where von = auth.uid() and erstellt > now() - interval '1 day') >= 20 then
-    raise exception 'Heute schon 20 Logos eingelesen – morgen wieder';
+  if (select count(*) from public.ws_protokoll where wer = auth.uid() and was in ('logo_eingelesen','logo_nochmal') and wann > now() - interval '1 day') >= 20 then
+    raise exception 'Heute schon 20 Logos eingelesen oder nachgebaut – morgen wieder';
   end if;
-  insert into public.ws_marke_vorlagen (projekt_id, bild, dateiname, wunsch)
-    values (p_projekt, p_bild, left(regexp_replace(coalesce(p_dateiname, ''), '[^A-Za-z0-9ÄÖÜäöüß ._-]', '', 'g'), 120), nullif(left(btrim(coalesce(p_wunsch, '')), 500), ''))
+  if p_bild is null or char_length(p_bild) > 2900000 or p_bild !~ '^data:image/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$' then raise exception 'Bitte PNG, JPG, WebP oder SVG bis 2 MB'; end if;
+  insert into public.ws_marke_vorlagen (projekt_id, dateiname, wunsch)
+    values (p_projekt, left(regexp_replace(coalesce(p_dateiname, ''), '[^A-Za-z0-9ÄÖÜäöüß ._-]', '', 'g'), 120), nullif(left(btrim(coalesce(p_wunsch, '')), 500), ''))
     returning id into neu;
+  insert into public.ws_marke_bilder (vorlage_id, bild) values (neu, p_bild);
   insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'logo_eingelesen', jsonb_build_object('projekt', p_projekt, 'id', neu));
   return neu;
 end $$;
@@ -111,10 +124,14 @@ end $$;
 create or replace function public.ws_marke_nochmal(p_id bigint, p_wunsch text default null) returns void
 language plpgsql security definer set search_path = public as $$
 begin
+  if (select count(*) from public.ws_protokoll where wer = auth.uid() and was in ('logo_eingelesen','logo_nochmal') and wann > now() - interval '1 day') >= 20 then
+    raise exception 'Heute schon 20 Logos eingelesen oder nachgebaut – morgen wieder';
+  end if;
   update public.ws_marke_vorlagen set stand = 'wartet', pc = null, hinweis = null, geaendert = now(),
          wunsch = nullif(left(btrim(coalesce(p_wunsch, '')), 500), '')
    where id = p_id and von = auth.uid() and stand in ('fertig','fehler') and public.ws_darf_design(projekt_id);
   if not found then raise exception 'Nicht gefunden, läuft gerade oder nicht von dir eingelesen'; end if;
+  insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'logo_nochmal', jsonb_build_object('id', p_id));
 end $$;
 
 -- Eigene Werkstatt nimmt nur eigene Logos (wie der Design-Chat)
@@ -133,7 +150,7 @@ begin
     return;
   end if;
   update public.ws_marke_vorlagen x set stand = 'laeuft', pc = p_pc, geaendert = now() where x.id = m.id;
-  return query select m.id, m.projekt_id, m.bild, m.dateiname, m.wunsch;
+  return query select m.id, m.projekt_id, (select b.bild from public.ws_marke_bilder b where b.vorlage_id = m.id), m.dateiname, m.wunsch;
 end $$;
 
 create or replace function public.ws_marke_ergebnis(p_pc uuid, p_id bigint, p_ergebnis jsonb, p_hinweis text, p_ki text default null) returns void
