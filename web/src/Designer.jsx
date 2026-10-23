@@ -384,10 +384,11 @@ function Geruest({ w, modus, geraet, name }) {
 
 function Testseite({ projekt, breite, werte, modus }) {
   // Etappe 3: Entwurf sofort in der echten Testseite zeigen – die App (vorschauHelfer.js) übernimmt die Werte nur dort, nichts wird gespeichert
-  const url = projekt.live_url ? `${projekt.live_url.replace(/\/$/, "")}${projekt.vorschau_pfad || "/"}?cs=1` : null;
+  // Nur echte https-Adressen; eine ungültige Adresse darf den Designer nicht abstürzen lassen
+  const url = /^https:\/\/[^/\s]+/i.test(projekt.live_url || "") ? `${projekt.live_url.replace(/\/$/, "")}${projekt.vorschau_pfad || "/"}?cs=1` : null;
   const rahmen = React.useRef(null);
   const [bereit, setBereit] = useState(null);   // null = noch nicht, true = Testseite übernimmt Entwürfe
-  const ziel = url ? new URL(url).origin : null;
+  const ziel = (() => { try { return url ? new URL(url).origin : null; } catch { return null; } })();
   const senden = useCallback(() => { try { rahmen.current?.contentWindow?.postMessage({ cs: "design", werte, modus }, ziel); } catch { /* egal */ } }, [werte, modus, ziel]);
   useEffect(() => { senden(); }, [senden]);
   useEffect(() => {
