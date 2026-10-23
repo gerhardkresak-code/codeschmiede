@@ -4,7 +4,7 @@
 // Andere Anbieter laufen in einem LEEREN Ordner, schreibgeschützt, mit minimaler Umgebung; alles Nötige (Doku, Dateiliste) steht im Text.
 // Restrisiko (dokumentiert): Ihre eingebauten Werkzeuge könnten technisch trotzdem Dateien des PCs lesen. Darum: Standard nur Claude,
 // Prüfungen und Bauen nur Claude, Antworten mit verdächtigem Inhalt werden verworfen. Nächster Schritt: Betriebssystem-Sandbox.
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { sandboxLauf, sandboxArt, sicherLesen } from "./sandbox.mjs";
@@ -247,28 +247,73 @@ export function anmeldungStarten(anbieter) {
 // Anbieter auf IHREM PC zugelassen hat; immer im leeren Ordner, minimale Umgebung, ohne Shell; verdächtige Antworten werden verworfen.
 const PROGRAMM = /^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$/;
 // Ordner, in die die offiziellen Installer legen. Ein laufender Dienst sieht einen neu gesetzten PATH erst nach dem Neustart –
-// darum werden diese Ordner immer mit durchsucht (Gerhard 22:50 „Grok und Mistral werden nicht verknüpft“).
+// darum werden diese Ordner und (Windows) der aktuelle PATH aus der Registry immer mit durchsucht (Gerhard 22:50/23:03 „alle koppeln“).
 export function installOrdner({ env = process.env, home = os.homedir(), plattform = process.platform } = {}) {
+  const lokal = env.LOCALAPPDATA || path.join(home, "AppData", "Local");
   return plattform === "win32"
     ? [path.join(env.APPDATA || path.join(home, "AppData", "Roaming"), "npm"), path.join(home, ".local", "bin"), path.join(home, ".grok", "bin"),
-       path.join(env.LOCALAPPDATA || path.join(home, "AppData", "Local"), "cursor-agent")]
-    : [path.join(home, ".local", "bin"), path.join(home, ".grok", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
+       path.join(lokal, "cursor-agent"), path.join(home, "scoop", "shims"), path.join(lokal, "Programs", "agy"), path.join(home, ".antigravity", "bin")]
+    : [path.join(home, ".local", "bin"), path.join(home, ".grok", "bin"), path.join(home, ".antigravity", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
 }
-export function findeFreiesProgramm(programm) {
-  if (!PROGRAMM.test(programm || "")) return null;
-  const ordner = [...(process.env.PATH || "").split(path.delimiter), ...installOrdner()].filter((o) => o && path.isAbsolute(o));   // nur absolute Ordner (kein „.“)
-  if (process.platform !== "win32") { const f = ordner.map((o) => path.join(o, programm)).find((p) => existsSync(p)); return f ? { befehl: f, vorne: [] } : null; }
-  for (const o of ordner) { const exe = path.join(o, `${programm}.exe`); if (existsSync(exe)) return { befehl: exe, vorne: [] }; }
-  // npm-Kurzbefehl (programm.cmd): darin steht das Skript – direkt mit Node starten (ohne Shell)
-  for (const o of ordner) {
-    const cmd = path.join(o, `${programm}.cmd`);
-    if (!existsSync(cmd)) continue;
+// Windows: PATH so, wie ihn ein NEU gestartetes Programm sähe (Benutzer + System aus der Registry), 60 Sekunden zwischengespeichert.
+// reg.exe mit festem Pfad und festen Argumenten, ohne Shell.
+let regPfad = { zeit: 0, ordner: [] };
+export function registryPfad({ env = process.env, plattform = process.platform } = {}) {
+  if (plattform !== "win32") return [];
+  if (Date.now() - regPfad.zeit < 60000) return regPfad.ordner;
+  const reg = path.join(env.SystemRoot || env.SYSTEMROOT || "C:\\Windows", "System32", "reg.exe");
+  const lies = (schluessel) => {
     try {
-      const m = /"%~?dp0%?\\([^"%]+\.(?:js|mjs|cjs))"/i.exec(readFileSync(cmd, "utf8"));
-      if (m) { const js = path.join(o, m[1]); if (existsSync(js)) return { befehl: process.execPath, vorne: [js] }; }
-    } catch { /* weiter */ }
+      const t = execFileSync(reg, ["query", schluessel, "/v", "Path"], { encoding: "utf8", timeout: 3000, windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+      const m = /\sPath\s+REG_(?:EXPAND_)?SZ\s+(.*)/i.exec(t); return m ? m[1].trim() : "";
+    } catch { return ""; }
+  };
+  const roh = [lies("HKCU\\Environment"), lies("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment")].join(";");
+  const ordner = roh.split(";").map((o) => o.replace(/%([A-Za-z0-9_()]+)%/g, (_, n) => env[n] ?? env[n.toUpperCase()] ?? "")).filter((o) => o && path.isAbsolute(o) && !o.includes("%"));
+  regPfad = { zeit: Date.now(), ordner };
+  return ordner;
+}
+/** Alle Suchordner: PATH, Registry-PATH (Windows), Installer-Ordner – nur absolute Ordner (kein „.“). */
+export function suchOrdner({ env = process.env, home = os.homedir(), plattform = process.platform, mitRegistry = true } = {}) {
+  const trenner = plattform === "win32" ? ";" : ":";
+  const absolut = plattform === "win32" ? (o) => /^[A-Za-z]:[\\/]/.test(o) || /^\\\\/.test(o) : (o) => o.startsWith("/");
+  return [...new Set([...(env.PATH || env.Path || "").split(trenner), ...(mitRegistry ? registryPfad({ env, plattform }) : []), ...installOrdner({ env, home, plattform })])].filter((o) => o && absolut(o));
+}
+/**
+ * Windows-Startdatei (.cmd von npm oder einem Installer) auflösen, OHNE sie über cmd.exe zu starten:
+ * nur „%dp0%\…\x.exe“, „%dp0%\…\x.js“ oder „"…\node.exe" "…\x.js"“ – der Zielpfad muss im Ordner der Startdatei liegen und existieren.
+ */
+export function startdateiAufloesen(cmdPfad, { lies = (p) => readFileSync(p, "utf8"), gibt = existsSync } = {}) {
+  let t; try { t = lies(cmdPfad); } catch { return null; }
+  if (typeof t !== "string" || t.length > 8000) return null;
+  const o = path.win32.dirname(cmdPfad);
+  const drin = (p) => { const n = path.win32.normalize(p); return (n.toLowerCase().startsWith(o.toLowerCase() + "\\")) && gibt(n) ? n : null; };
+  const pfade = [...t.matchAll(/"%~?dp0%?\\?([^"%<>|&]+\.(exe|js|mjs|cjs))"/gi)].map((m) => ({ p: drin(path.win32.join(o, m[1])), art: m[2].toLowerCase() })).filter((x) => x.p);
+  const js = pfade.find((x) => x.art !== "exe"); const exe = pfade.find((x) => x.art === "exe");
+  if (js) {
+    // „node.exe“ daneben (Installer mit eigenem Node) oder sonst das Node des Dienstes
+    if (exe && /\\node\.exe$/i.test(exe.p)) return { befehl: exe.p, vorne: [js.p] };
+    return { befehl: process.execPath, vorne: [js.p] };
+  }
+  if (exe && !/\\node\.exe$/i.test(exe.p)) return { befehl: exe.p, vorne: [] };
+  return null;
+}
+/** Programm finden (für eingebaute Katalog-Einträge und eigene Anbieter). */
+export function findeIn(namen, { env = process.env, home = os.homedir(), plattform = process.platform, gibt = existsSync, lies, mitRegistry = true } = {}) {
+  const ordner = suchOrdner({ env, home, plattform, mitRegistry });
+  for (const name of namen) {
+    if (!PROGRAMM.test(name || "")) continue;
+    for (const o of ordner) {
+      if (plattform !== "win32") { const p = path.join(o, name); if (gibt(p)) return { befehl: p, vorne: [], pfad: p }; continue; }
+      const exe = path.win32.join(o, `${name}.exe`); if (gibt(exe)) return { befehl: exe, vorne: [], pfad: exe };
+      const cmd = path.win32.join(o, `${name}.cmd`);
+      if (gibt(cmd)) { const r = startdateiAufloesen(cmd, { gibt, ...(lies ? { lies } : {}) }); if (r) return { ...r, pfad: cmd }; }
+    }
   }
   return null;
+}
+export function findeFreiesProgramm(programm) {
+  return findeIn([programm]);
 }
 export function freieArgumente(def, prompt, modell) {
   const m = modell && MODELL.test(modell) ? modell : "";

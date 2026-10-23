@@ -40,6 +40,9 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-23 22:54/23:03 – KI-Vorschläge und Kopplung:** Vorschläge je Zuständigkeit immer 3 Anbieter, ehrlich nach aktuellen unabhängigen
+  Ranglisten mit Begründung (Bauen: Claude + ChatGPT-Ersatz bleibt); jeder Anbieter eigene Farbe; „Hinzufügen“ muss für alle Assistenten klappen
+  (offizielle Installer aus dem festen Katalog, Anmeldung nur beim Anbieter, keine Zugangsdaten in der Codeschmiede).
 - **2026-10-23 22:38 – Symbole und Grundbausteine umdesignen (Entwurf 1.0 frei):** Rechtsklick auf Symbol (Galerie) oder Grundbaustein
   (Verzeichnis) öffnet einen Entwurf; Symbol: anderes Lucide-Symbol oder eigenes im Lucide-Stil; Baustein: nur feste Einstellungen + Chat
   (kein freies CSS/SVG); Zuweisungen per Häkchen vorausgefüllt; Änderung läuft immer als Design-Auftrag (Freigabe, Prüfungen, Test, Live).

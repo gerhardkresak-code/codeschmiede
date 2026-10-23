@@ -22,16 +22,17 @@ export const ANBIETER = {
 // Wofür eignet sich welche KI? (Gerhard 2026-10-23 19:29) – Empfehlungen nach Stand Oktober 2026, keine Garantie;
 // „aufgaben“ = Kennungen aus AUFGABEN. Bauen bleibt immer Claude.
 export const STAERKEN = {
-  claude: { gut: "Programmieren, sorgfältige Prüfungen, lange Dokumente und genaue Anweisungen; sehr gutes Deutsch.", aufgaben: ["konzept", "pruefung", "doku", "chat"] },
-  chatgpt: { gut: "Vielseitig für Ideen, Konzepte und Texte; gute zweite Meinung zu Claudes Vorschlägen.", aufgaben: ["konzept", "chat", "texte"] },
-  gemini: { gut: "Sehr viel Text auf einmal (ganze Dokumentation), Zusammenfassungen. Für persönliche Google-Konten seit Juni 2026: Antigravity verwenden.", aufgaben: ["doku", "chat"] },
-  copilot: { gut: "Ein Abo, mehrere Modelle (GPT, Claude u. a.) – praktisch als Ausweich, wenn andere Limits voll sind; Fragen rund um Code.", aufgaben: ["chat", "konzept"] },
-  antigravity: { gut: "Google-Modelle mit großem Gedächtnis für lange Texte; gut für Dokumentation, Zusammenfassungen und Design-Ideen.", aufgaben: ["doku", "design", "chat"] },
-  grok: { gut: "Schnelle, lockere Antworten und Brainstorming; kennt aktuelle Themen.", aufgaben: ["chat", "texte"] },
-  cursor: { gut: "Mehrere Modelle, stark bei Fragen zu Code und Erklärungen von Programmteilen.", aufgaben: ["chat", "konzept"] },
-  opencode: { gut: "Nutzt Konten, die du schon hast (z. B. ChatGPT oder Copilot), über ein Programm – gut als Rückfall.", aufgaben: ["chat"] },
-  "mistral-vibe": { gut: "Europäischer Anbieter (Daten in der EU), gut für Texte auf Deutsch und Französisch, Übersetzungen.", aufgaben: ["texte", "doku"] },
+  claude: { gut: "Stand Oktober 2026 vorne bei Programmieren und Web-Oberflächen (LMArena WebDev Platz 1), beim unabhängigen Intelligenz-Index und bei der Faktentreue; sehr gutes Deutsch.", aufgaben: ["chat", "konzept", "design", "pruefung", "doku", "texte", "bauen"] },
+  chatgpt: { gut: "Knapp hinter Claude bei Programmieren und Design (WebDev Platz 2), vorne bei Logik-Tests und bei Bildern (GPT Image 2 Platz 1) – die beste zweite Meinung.", aufgaben: ["konzept", "design", "pruefung", "texte", "bilder"] },
+  gemini: { gut: "Vorne bei den allgemeinen Text-Abstimmungen und sehr stark bei sehr langen Dokumenten; bei Programmieren und Design hinter Claude und ChatGPT.", aufgaben: ["chat", "doku", "bilder"] },
+  copilot: { gut: "Kein eigenes Modell: ein GitHub-Abo mit Modellen von OpenAI, Anthropic und Google – nützlich als Rückfall, wenn andere Limits voll sind.", aufgaben: [] },
+  antigravity: { gut: "Googles Programmier-Werkzeug mit Gemini-Modellen – gleiche Stärken wie Gemini; für persönliche Google-Konten der empfohlene Weg zu Gemini.", aufgaben: [] },
+  grok: { gut: "Bei Bildern stark (Grok Imagine Platz 2), bei Texten und Programmieren hinter den drei Großen; locker, kennt aktuelle Themen.", aufgaben: [] },
+  cursor: { gut: "Kein eigenes Spitzenmodell: Programm, das Modelle von Anthropic, OpenAI und Google nutzt – als Rückfall brauchbar.", aufgaben: [] },
+  opencode: { gut: "Nutzt Konten, die du schon hast (z. B. ChatGPT oder Copilot), über ein Programm – nur als Rückfall.", aufgaben: [] },
+  "mistral-vibe": { gut: "Europäischer Anbieter (Daten in der EU) – die Datenschutz-Wahl; in den Vergleichen hinter Claude, ChatGPT und Gemini.", aufgaben: [] },
 };
+
 const AUFGABEN = [
   ["chat", "Chat überall (Fragen, Ausloten)", ""],
   ["konzept", "Konzept & Rückfragen vor dem Bauen", "Ergebnis ist die Konzept-Karte im Chat"],
@@ -44,16 +45,30 @@ const AUFGABEN = [
 ];
 // Ohne Admin-Einstellung gilt nur Claude (Prüfung M5). VORSCHLAG = Entwurf 1.2 zum Übernehmen.
 const STANDARD = Object.fromEntries(["chat", "konzept", "design", "pruefung", "doku", "texte", "bilder", "bauen"].map((a) => [a, [{ anbieter: "claude", ...({ konzept: { modell: "opus" }, pruefung: { modell: "opus" }, texte: { modell: "haiku" } }[a] || {}) }]]));
+// Vorschläge: je Zuständigkeit die 3 ehrlich besten Anbieter (Gerhard 2026-10-23 22:54 „ernst gemeint, 100 % ehrlich, immer 3“).
+// Grundlage Stand 23.10.2026: LMArena (WebDev, Text, Bild), Artificial Analysis Intelligence Index, LiveBench – siehe GRUND.
+// Reihenfolge = wer zuerst drankommt; bei vollem Limit geht es zum nächsten. Bauen bleibt nach Gerhards Regel Claude (+ ChatGPT nur als Ersatz).
 const VORSCHLAG = {
-  chat: [{ anbieter: "chatgpt" }, { anbieter: "gemini" }, { anbieter: "claude", modell: "sonnet" }],
-  konzept: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "opus" }],
-  design: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }],
-  pruefung: [{ anbieter: "chatgpt" }, { anbieter: "gemini" }, { anbieter: "claude", modell: "opus" }],
-  doku: [{ anbieter: "gemini" }, { anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }],
-  texte: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "haiku" }],
-  bilder: [{ anbieter: "gemini" }, { anbieter: "chatgpt" }],
-  bauen: [{ anbieter: "claude" }],
+  chat: [{ anbieter: "claude", modell: "sonnet" }, { anbieter: "gemini" }, { anbieter: "chatgpt" }],
+  konzept: [{ anbieter: "claude", modell: "opus" }, { anbieter: "chatgpt" }, { anbieter: "gemini" }],
+  design: [{ anbieter: "claude", modell: "opus" }, { anbieter: "chatgpt" }, { anbieter: "gemini" }],
+  pruefung: [{ anbieter: "claude", modell: "opus" }, { anbieter: "chatgpt" }, { anbieter: "gemini" }],
+  doku: [{ anbieter: "claude", modell: "sonnet" }, { anbieter: "gemini" }, { anbieter: "chatgpt" }],
+  texte: [{ anbieter: "claude", modell: "sonnet" }, { anbieter: "chatgpt" }, { anbieter: "gemini" }],
+  bilder: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "opus" }, { anbieter: "gemini" }],
+  bauen: [{ anbieter: "claude" }, { anbieter: "chatgpt" }],
 };
+const GRUND = {
+  chat: "Claude führt den unabhängigen Intelligenz-Index, Sonnet ist dabei schnell und günstig; Gemini liegt bei den Text-Abstimmungen (LMArena) vorne; ChatGPT ist der starke Dritte.",
+  konzept: "Konzepte brauchen Denken und Rückfragen: Claude Opus führt den Intelligenz-Index, ChatGPT (GPT-6) führt bei Logik-Tests (LiveBench, ARC-AGI-2) – gute zweite Meinung; Gemini als Dritter.",
+  design: "LMArena WebDev (23.10.2026): 1. Claude Opus, 2. ChatGPT, Gemini auf Platz 10 – Claude und ChatGPT sind hier klar vorne.",
+  pruefung: "Prüfen heißt Fehler finden: Claude Opus führt bei Programm-Tests (ProgramBench, SWE-Tests); ChatGPT und Gemini als unabhängige zweite und dritte Meinung. Fremde Anbieter prüfen nur auf PCs mit Sandbox (Mac/Linux) – unter Windows prüft Claude.",
+  doku: "Handbuch und Doku: Claude hat die höchste gemessene Faktentreue und sehr gutes Deutsch; Gemini ist stark bei sehr langen Dokumenten; ChatGPT als Dritter.",
+  texte: "Texte und Übersetzungen: Claude bleibt bei Fachbegriffen über lange Texte am einheitlichsten, ChatGPT formuliert flüssig, Gemini als Dritter. Mistral wäre die EU-Wahl, ist in den Vergleichen aber nicht vorne und wurde für Deutsch nicht getestet.",
+  bilder: "Bild-Rangliste (LMArena): 1. ChatGPT (GPT Image 2). Fürs Nachbauen von Logos als bearbeitbare Formen ist Claude Opus sehr gut; Gemini als Dritter. Grok liegt bei Bildern auf Platz 2, ist hier aber noch nicht als Bild-Anbieter angebunden.",
+  bauen: "Bauen ist nach deiner Regel fest Claude (führt WebDev und Programmier-Tests); ChatGPT nur als Ersatz, wenn Claudes Limit voll ist – darum hier nur 2.",
+};
+
 const MODELL = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$/;
 
 /** Übersicht: wofür eignet sich welche KI (eingebaute + angelegte Anbieter). */
@@ -132,7 +147,8 @@ function Zeile({ id, titel, hinweis, eintrag, admin, onSpeichern, anbieter = ANB
         })}
         {admin && eigen != null && <span className="inline-flex items-center gap-1"><input id={`ki-modell-${id}`} className={`${sel} w-36`} placeholder="Modellname, z. B. gpt-5" value={eigenText} onChange={(ev) => setEigenText(ev.target.value)} />
           <button type="button" className={ghost} disabled={!MODELL.test(eigenText)} onClick={() => { setze(eigen, "modell", eigenText); setEigen(null); }}>OK</button></span>}
-        {admin && !fest && !eintrag && JSON.stringify(reihe) !== JSON.stringify(VORSCHLAG[id]) && <button type="button" className={ghost} onClick={() => setReihe(VORSCHLAG[id])}>Vorschlag einsetzen</button>}
+        {admin && !fest && JSON.stringify(reihe) !== JSON.stringify(VORSCHLAG[id]) && <button type="button" className={ghost} title={GRUND[id]} onClick={() => setReihe(VORSCHLAG[id])}>Vorschlag einsetzen</button>}
+        {GRUND[id] && <span className="basis-full text-[11px] text-slate-500">Vorschlag: {VORSCHLAG[id].map((e, i) => `${i + 1}. ${anbieter[e.anbieter]?.name || e.anbieter}${e.modell ? ` (${e.modell})` : ""}`).join(" · ")} – {GRUND[id]}</span>}
         {admin && !fest && frei.length > 0 && <select className={sel} value="" aria-label="Anbieter hinzufügen" onChange={(ev) => ev.target.value && setReihe([...reihe, { anbieter: ev.target.value }])}>
           <option value="">+ Anbieter</option>{frei.map((a) => <option key={a} value={a}>{anbieter[a].name}</option>)}</select>}
       </div>
@@ -210,7 +226,7 @@ const EIN_KLICK = {
   codex: { art: "browser", install: "npm install -g @openai/codex" }, gemini: { art: "fenster", install: "npm install -g @google/gemini-cli" },
   copilot: { art: "browser", install: "npm install -g @github/copilot" }, opencode: { art: "fenster", install: "npm install -g opencode-ai" },
   "cursor-agent": { art: "browser", install: "offizielle Installation von cursor.com" },
-  grok: { art: "fenster", install: "Offizielle Installation von x.ai läuft automatisch" }, agy: { art: "fenster", install: "Installer-Seite von Google öffnet sich" },
+  grok: { art: "browser", install: "Offizielle Installation von x.ai läuft automatisch" }, agy: { art: "fenster", install: "Offizielle Installation von Google läuft automatisch (das Terminal-Programm agy – die Antigravity-App allein reicht nicht)" },
   vibe: { art: "fenster", install: "Offizielle Installation von Mistral läuft automatisch" },
 };
 const SCHRITTE = [["installieren", "Programm installieren"], ["anmelden", "Beim Anbieter anmelden"], ["pruefen", "Kopplung prüfen"]];

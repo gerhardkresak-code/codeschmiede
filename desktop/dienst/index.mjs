@@ -26,7 +26,7 @@ import { designPrompt, designAntwort } from "./lib/design.mjs";
 import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
 import { repoAnlegen, repoSichtbarkeit, repoIstPrivat } from "./lib/repo.mjs";
 import { liveAusfuehren, pruefPrompt, enthalten } from "./lib/live.mjs";
-import { katalogFuer, einrichten, einrichtUmgebung } from "./lib/einrichten.mjs";
+import { katalogFuer, einrichten, einrichtUmgebung, findeKatalogProgramm, angemeldet } from "./lib/einrichten.mjs";
 import { bildAusDataUrl, markePrompt, markeAntwort } from "./lib/marke.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen, codexBauen } from "./lib/ki.mjs";
 import { uebernehmen, prText } from "./lib/ersatz.mjs";
@@ -775,7 +775,8 @@ async function kopplungMelden(anbieter, felder) {
   const { error } = await db.from("ws_ki_kopplung").upsert({ pc_id: pcId, benutzer_id: cfg.user_id, anbieter, ...felder }, { onConflict: "pc_id,anbieter" });
   if (error) throw error;
 }
-const einrichtenLaeuft = new Set(); const einrichtenStand = {};   // anbieter -> letzter gemeldeter Schritt (für „Nochmal“ während eines Laufs)
+const einrichtenLaeuft = new Set(); const einrichtenStand = {};
+const einrichtFehler = {};   // letzte Fehlermeldung von „Hinzufügen“ – der Abgleich überschreibt sie nicht mehr (Gerhard 23:03 „Cursor tut sich gar nichts“)   // anbieter -> letzter gemeldeter Schritt (für „Nochmal“ während eines Laufs)
 async function einrichtenStarten(anbieter, aktion) {
   const jetzt = () => new Date().toISOString();
   const fertigMelden = (hinweis, geprueft = true) => kopplungMelden(anbieter, { aktion: null, schritt: "fertig", schritt_zeit: jetzt(), einricht_code: null, gekoppelt: true, hinweis, eingerichtet: jetzt(), ...(geprueft ? { geprueft: jetzt() } : {}) });
@@ -807,6 +808,7 @@ async function einrichtenStarten(anbieter, aktion) {
   einrichten(k, { env: einrichtUmgebung(), melde: async ({ schritt, hinweis, code }) => {
     try {
       einrichtenStand[anbieter] = { schritt, hinweis: kuerzen(ohneGeheimnisse(hinweis || ""), 480), einricht_code: code || null };
+      if (schritt === "fehler") einrichtFehler[anbieter] = kuerzen(ohneGeheimnisse(hinweis || ""), 480); else delete einrichtFehler[anbieter];
       if (schritt === "fertig") await fertigMelden(hinweis);
       else await kopplungMelden(anbieter, { schritt, schritt_zeit: jetzt(), hinweis: kuerzen(ohneGeheimnisse(hinweis || ""), 480), einricht_code: code || null, ...(schritt === "fehler" ? { gekoppelt: false } : {}) });
     } catch (e) { melde("fehler", `KI-Anbieter ${k.name}: ${ohneGeheimnisse(e?.message || String(e))}`); }
@@ -835,7 +837,15 @@ async function kopplungAbgleich(zwingend = false) {
   } catch { /* egal */ }
   for (const anbieter of [...Object.keys(ANBIETER), ...Object.keys(frei)]) {
     try {
-      const k = ANBIETER[anbieter] ? await kopplungPruefen(anbieter) : await freiPruefen(frei[anbieter], !!zugelassen[anbieter]);
+      let k = ANBIETER[anbieter] ? await kopplungPruefen(anbieter) : await freiPruefen(frei[anbieter], !!zugelassen[anbieter]);
+      // Gefunden heißt nicht angemeldet: wo der Katalog eine Prüfung kennt, wird die Anmeldung mit geprüft (ehrliche Anzeige)
+      const kat = ANBIETER[anbieter] ? null : katalogFuer(frei[anbieter]?.programm);
+      if (k.gekoppelt && zugelassen[anbieter] && kat?.status && !einrichtenLaeuft.has(anbieter)) {
+        const prog = findeKatalogProgramm(kat);
+        const an = prog ? await angemeldet(kat, prog, { env: einrichtUmgebung() }).catch(() => null) : null;
+        if (an === false) k = { ...k, gekoppelt: false, hinweis: "Installiert, aber noch nicht angemeldet – „Hinzufügen“ klicken" };
+      }
+      if (!k.gekoppelt && einrichtFehler[anbieter]) k = { ...k, hinweis: einrichtFehler[anbieter] };
       kiKopplung[anbieter] = { ...k, zugelassen: !!zugelassen[anbieter] };
       if (einrichtenLaeuft.has(anbieter)) continue;   // läuft gerade „Hinzufügen“: nicht dazwischenschreiben
       await kopplungMelden(anbieter, { gekoppelt: k.gekoppelt, version: k.version, hinweis: k.hinweis, ...(auftraege.some((x) => x.anbieter === anbieter && x.aktion === "pruefen") ? { aktion: null } : {}), geprueft: new Date().toISOString(),

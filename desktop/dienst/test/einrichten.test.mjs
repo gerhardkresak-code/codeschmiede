@@ -10,7 +10,7 @@ test("Katalog: nur bekannte Programme, Befehle fest im Programm", () => {
   assert.equal(katalogFuer("rm"), null); assert.equal(katalogFuer("__proto__"), null); assert.equal(katalogFuer(undefined), null);
   assert.equal(installText(katalogFuer("copilot")), "npm install -g @github/copilot");
   assert.match(installText(katalogFuer("cursor-agent"), "win32"), /^irm 'https:\/\/cursor\.com\/install\?win32=true' \| iex$/);
-  assert.match(installText(katalogFuer("agy")), /^Installer-Seite öffnen: https:\/\//);
+  assert.equal(installText(katalogFuer("agy"), "win32"), "irm https://antigravity.google/cli/install.ps1 | iex");
   for (const k of Object.values(KATALOG)) { assert.ok(k.login.every((a) => /^[A-Za-z0-9.-]+$/.test(a))); if (k.install.seite) assert.match(k.install.seite, /^https:\/\//); }
 });
 
@@ -57,4 +57,24 @@ test("Grok und Mistral: offizielle Installation, Grok im eigenen Ordner gefunden
   assert.deepEqual(KATALOG.grok.status.datei, [".grok", "auth.json"]);
   const gibt = (p) => p === "/home/x/.grok/bin/grok";
   assert.equal(findeKatalogProgramm(katalogFuer("grok"), { env: { PATH: "/usr/bin" }, home: "/home/x", plattform: "linux", gibt }).pfad, "/home/x/.grok/bin/grok");
+});
+
+test("Windows-Startdateien: npm-Skript, Programm daneben, nichts außerhalb (OpenCode, Gerhard 22:58)", async () => {
+  const { startdateiAufloesen, findeIn } = await import("../lib/ki.mjs");
+  const o = "C:\\Users\\g\\AppData\\Roaming\\npm";
+  const dateien = {
+    [`${o}\\opencode.cmd`]: '@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n"%dp0%\\node_modules\\opencode-ai\\bin\\opencode.exe"   %*\r\n',
+    [`${o}\\node_modules\\opencode-ai\\bin\\opencode.exe`]: "",
+    [`${o}\\codex.cmd`]: '@IF EXIST "%dp0%\\node.exe" (SET "_prog=%dp0%\\node.exe") ELSE (SET "_prog=node")\r\n"%_prog%"  "%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js" %*\r\n',
+    [`${o}\\node_modules\\@openai\\codex\\bin\\codex.js`]: "",
+    [`${o}\\boese.cmd`]: '"%dp0%\\..\\..\\Windows\\evil.exe" %*',
+    "C:\\Users\\g\\AppData\\Windows\\evil.exe": "",
+  };
+  const gibt = (p) => Object.hasOwn(dateien, p); const lies = (p) => { if (!gibt(p)) throw new Error("fehlt"); return dateien[p]; };
+  assert.equal(startdateiAufloesen(`${o}\\opencode.cmd`, { lies, gibt }).befehl, `${o}\\node_modules\\opencode-ai\\bin\\opencode.exe`);
+  assert.deepEqual(startdateiAufloesen(`${o}\\codex.cmd`, { lies, gibt }).vorne, [`${o}\\node_modules\\@openai\\codex\\bin\\codex.js`]);
+  assert.equal(startdateiAufloesen(`${o}\\boese.cmd`, { lies, gibt }), null);
+  const env = { PATH: "", APPDATA: "C:\\Users\\g\\AppData\\Roaming", LOCALAPPDATA: "C:\\Users\\g\\AppData\\Local" };
+  assert.equal(findeIn(["opencode"], { env, home: "C:\\Users\\g", plattform: "win32", gibt, lies, mitRegistry: false }).befehl, `${o}\\node_modules\\opencode-ai\\bin\\opencode.exe`);
+  assert.equal(findeIn(["grok"], { env, home: "C:\\Users\\g", plattform: "win32", gibt: (p) => p === "C:\\Users\\g\\.grok\\bin\\grok.exe", mitRegistry: false }).befehl, "C:\\Users\\g\\.grok\\bin\\grok.exe");
 });

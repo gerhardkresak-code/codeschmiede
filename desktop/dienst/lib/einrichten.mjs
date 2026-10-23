@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { minimaleUmgebung, installOrdner } from "./ki.mjs";
+import { minimaleUmgebung, findeIn } from "./ki.mjs";
 
 // art: "browser" = eigener Anmelde-Befehl öffnet den Browser (Ende mit Code 0 = angemeldet); "fenster" = Anmeldung beim ersten Start im Eingabefenster
 // install: { npm } = offizielles npm-Paket; { skript: { win, unix } } = offizielles Installationsskript; { seite } = Installer-Seite im Browser öffnen
@@ -28,11 +28,15 @@ export const KATALOG = {
   "cursor-agent": { name: "Cursor", programme: ["cursor-agent"], art: "browser", login: ["login"],
     install: { skript: { win: "irm 'https://cursor.com/install?win32=true' | iex", unix: "curl https://cursor.com/install -fsS | bash" } },
     status: { args: ["status"], ok: /logged in|authenticated|signed in/i, nein: /not (logged|authenticated|signed)/i } },
-  // Grok Build: offizielles Skript von x.ai (legt nach ~/.grok/bin); Anmeldung beim ersten Start im Browser, gespeichert in ~/.grok/auth.json
-  grok: { name: "Grok Build", programme: ["grok"], art: "fenster", login: [],
+  // Grok Build: offizielles Skript von x.ai (legt nach ~/.grok/bin); „grok login“ öffnet die Anmeldung bei auth.x.ai im Browser,
+  // gespeichert in ~/.grok/auth.json (nur eigene Rechte) – laut der mitgelieferten Anleitung (~/.grok/docs/user-guide/02-authentication.md)
+  grok: { name: "Grok Build", programme: ["grok"], art: "browser", login: ["login"],
     install: { skript: { win: "irm https://x.ai/cli/install.ps1 | iex", unix: "curl -fsSL https://x.ai/cli/install.sh | bash" } },
     status: { datei: [".grok", "auth.json"] } },
-  agy: { name: "Google Antigravity", programme: ["agy"], install: { seite: "https://antigravity.google/" }, art: "fenster", login: [] },
+  // Antigravity: die Desktop-App (Editor) reicht nicht – gekoppelt wird das Terminal-Programm „agy“ (offizielles Skript von Google).
+  // Anmeldung beim ersten Start: „Google OAuth“ wählen, im Browser anmelden, Code ins Fenster einfügen. Nicht prüfbar → Person bestätigt.
+  agy: { name: "Google Antigravity (agy)", programme: ["agy"], art: "fenster", login: [],
+    install: { skript: { win: "irm https://antigravity.google/cli/install.ps1 | iex", unix: "curl -fsSL https://antigravity.google/cli/install.sh | bash" } } },
   // Mistral Vibe: offizielles Skript (Mac/Linux); unter Windows über uv (offizieller Weg laut Mistral). Anmeldung im Einrichtungs-Assistenten
   // („Launch browser“); der Schlüssel liegt im Schlüsselbund – prüfbar ist nur die Einstellungsdatei, darum bestätigt die Person.
   vibe: { name: "Mistral Vibe", programme: ["vibe"], art: "fenster", login: ["--setup"],
@@ -70,25 +74,10 @@ export function einrichtUmgebung(env = process.env) {
   if (env.PSModulePath) extra.PSModulePath = env.PSModulePath;
   return minimaleUmgebung(extra);
 }
-const absolut = (o, plattform) => (plattform === "win32" ? /^(?:[A-Za-z]:\\|\\\\)/.test(o) : path.isAbsolute(o));   // Windows: nur mit Laufwerk oder UNC
 
 /** Programm suchen: PATH (nur absolute Ordner) plus die üblichen Ordner der Installer (~/.local/bin, npm global). */
-export function findeKatalogProgramm(k, { env = process.env, home = os.homedir(), plattform = process.platform, gibt = existsSync } = {}) {
-  const trenner = plattform === "win32" ? ";" : ":";
-  const extra = installOrdner({ env, home, plattform });
-  const ordner = [...(env.PATH || "").split(trenner), ...extra, path.dirname(process.execPath)].filter((o) => o && absolut(o, plattform));
-  for (const name of k.programme) {
-    for (const o of ordner) {
-      if (plattform !== "win32") { const p = path.join(o, name); if (gibt(p)) return { befehl: p, vorne: [], pfad: p }; continue; }
-      const exe = path.join(o, `${name}.exe`); if (gibt(exe)) return { befehl: exe, vorne: [], pfad: exe };
-      const cmd = path.join(o, `${name}.cmd`);
-      if (gibt(cmd)) {
-        // npm-Kurzbefehl: darin steht das Skript – direkt mit Node starten (ohne Shell)
-        try { const m = /"%~?dp0%?\\([^"%]+\.(?:js|mjs|cjs))"/i.exec(readFileSync(cmd, "utf8")); if (m) { const js = path.join(o, m[1]); if (gibt(js)) return { befehl: process.execPath, vorne: [js], pfad: cmd }; } } catch { /* weiter */ }
-      }
-    }
-  }
-  return null;
+export function findeKatalogProgramm(k, { env = process.env, home = os.homedir(), plattform = process.platform, gibt = existsSync, lies, mitRegistry } = {}) {
+  return findeIn(k.programme, { env, home, plattform, gibt, lies, mitRegistry: mitRegistry ?? plattform === process.platform });
 }
 
 /** npm finden (ohne Shell): npm-cli.js neben Node bzw. im globalen Ordner. */
