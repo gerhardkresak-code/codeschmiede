@@ -42,7 +42,8 @@ export function useEinrichtung(ich, d) {
   const pruefen = useCallback(async () => {
     if (!isDesktop()) { setSt({ desk: false }); return; }
     const [werk, lauf] = await Promise.all([tauri("ws_check").catch(() => null), tauri("ws_status").catch(() => null)]);
-    const pcs = (dRef.current?.pcs || []).filter((p) => p.benutzer_id === ich?.id);
+    const pcs = (dRef.current?.pcs || []).filter((p) => p.benutzer_id === ich?.id)
+      .sort((a, b) => (b.an ? 1 : 0) - (a.an ? 1 : 0) || Date.parse(b.zuletzt || 0) - Date.parse(a.zuletzt || 0));   // aktiver PC zuerst
     const { data: kopp } = await supabase.from("ws_ki_kopplung").select("*").eq("benutzer_id", ich?.id || "");
     setSt({ desk: true, werk: werk || {}, laeuft: !!lauf?.laeuft, pcs, kopp: kopp || [] });
   }, [ich?.id]);

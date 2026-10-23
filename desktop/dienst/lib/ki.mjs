@@ -34,7 +34,8 @@ export function reiheFuer(aufgabe, eintrag, mitSandbox = undefined) {
   if (aufgabe === "pruefung" && !(mitSandbox ?? sandboxArt())) { const c = (eintrag?.reihe || []).find((e) => e?.anbieter === "claude"); return [{ anbieter: "claude", ...(c?.modell && MODELL.test(c.modell) ? { modell: c.modell } : { modell: "opus" }) }]; }
   const r = Array.isArray(eintrag?.reihe) ? eintrag.reihe : STANDARD[aufgabe] || STANDARD.chat;
   const gesehen = new Set();
-  const reihe = r.filter((e) => e && ANBIETER[e.anbieter] && !gesehen.has(e.anbieter) && gesehen.add(e.anbieter))
+  // Eingebaute und vom Admin angelegte Anbieter (Kennung); eigene Anbieter nie für Prüfungen (keine Sandbox für unbekannte Programme)
+  const reihe = r.filter((e) => e && /^[a-z][a-z0-9-]{1,30}$/.test(e.anbieter || "") && !(aufgabe === "pruefung" && !ANBIETER[e.anbieter]) && !gesehen.has(e.anbieter) && gesehen.add(e.anbieter))
     .map((e) => ({ anbieter: e.anbieter, ...(typeof e.modell === "string" && MODELL.test(e.modell) && e.modell !== "automatisch" ? { modell: e.modell } : {}) }));
   if (aufgabe === "pruefung" && !reihe.some((e) => e.anbieter === "claude")) reihe.push({ anbieter: "claude", modell: "opus" });   // Rückfall
   return reihe.length ? reihe : (STANDARD[aufgabe] || STANDARD.chat);
@@ -182,4 +183,57 @@ export function anmeldungStarten(anbieter) {
   const kind = spawn(prog.befehl, [...prog.vorne, "login"], { cwd: os.tmpdir(), env: saubereUmgebung(), shell: false, windowsHide: false, stdio: "ignore", detached: true });
   kind.unref();
   return true;
+}
+
+// ---------- Beliebige KI-Anbieter (Gerhard 2026-10-23 16:22, z. B. GitHub Copilot) ----------
+// Definition kommt vom Admin (ws_ki_anbieter): Programmname + feste Argumente mit {prompt}/{modell}. Läuft nur, wenn die Person den
+// Anbieter auf IHREM PC zugelassen hat; immer im leeren Ordner, minimale Umgebung, ohne Shell; verdächtige Antworten werden verworfen.
+const PROGRAMM = /^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$/;
+export function findeFreiesProgramm(programm) {
+  if (!PROGRAMM.test(programm || "")) return null;
+  const ordner = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  if (process.platform !== "win32") return ordner.some((o) => existsSync(path.join(o, programm))) ? { befehl: programm, vorne: [] } : null;
+  for (const o of ordner) { const exe = path.join(o, `${programm}.exe`); if (existsSync(exe)) return { befehl: exe, vorne: [] }; }
+  // npm-Kurzbefehl (programm.cmd): darin steht das Skript – direkt mit Node starten (ohne Shell)
+  for (const o of ordner) {
+    const cmd = path.join(o, `${programm}.cmd`);
+    if (!existsSync(cmd)) continue;
+    try {
+      const m = /"%~?dp0%?\\([^"%]+\.(?:js|mjs|cjs))"/i.exec(readFileSync(cmd, "utf8"));
+      if (m) { const js = path.join(o, m[1]); if (existsSync(js)) return { befehl: process.execPath, vorne: [js] }; }
+    } catch { /* weiter */ }
+  }
+  return null;
+}
+export function freieArgumente(def, prompt, modell) {
+  const m = modell && MODELL.test(modell) ? modell : "";
+  const args = []; let mitPrompt = false;
+  for (const a of Array.isArray(def.argumente) ? def.argumente : []) {
+    if (typeof a !== "string") continue;
+    if (a.includes("{modell}") && !m) { if (args.length && /^-/.test(args[args.length - 1]) && a === "{modell}") args.pop(); continue; }
+    if (a === "{prompt}") { args.push(prompt); mitPrompt = true; continue; }
+    args.push(a.split("{modell}").join(m));
+  }
+  return { args, stdin: mitPrompt ? null : prompt };
+}
+export async function freiFrage(def, prompt, { modell, signal } = {}) {
+  const prog = findeFreiesProgramm(def.programm);
+  if (!prog) throw new Error(`${def.name}: Programm „${def.programm}“ nicht gefunden`);
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "cs-ki-"));
+  try {
+    const { args, stdin } = freieArgumente(def, OHNE_WERKZEUGE + prompt, modell);
+    const { aus } = await lauf(prog, args, { cwd: tmp, eingabe: stdin, env: minimaleUmgebung(), signal });
+    const t = aus.replace(/\x1b\[[0-9;]*m/g, "").trim();
+    if (!t) throw new Error(`${def.name} hat keine Antwort geliefert`);
+    if (verdaechtig(t)) throw new Error("Antwort verworfen (verdächtiger Inhalt)");
+    return t.slice(0, 20000);
+  } finally { await rm(tmp, { recursive: true, force: true }).catch(() => {}); }
+}
+export async function freiPruefen(def) {
+  const prog = findeFreiesProgramm(def.programm);
+  if (!prog) return { gekoppelt: false, version: null, hinweis: `Nicht installiert${def.installieren ? `. Installieren: ${def.installieren}` : ""}` };
+  try {
+    const v = (await lauf(prog, ["--version"], { cwd: os.tmpdir(), env: minimaleUmgebung(), minuten: 1 })).aus.trim().split(/\r?\n/)[0].slice(0, 80);
+    return { gekoppelt: true, version: v || null, hinweis: def.anmelden ? `Gefunden. Falls nötig anmelden: ${def.anmelden}` : "Gefunden" };
+  } catch { return { gekoppelt: true, version: null, hinweis: "Gefunden (Version unbekannt)" }; }
 }

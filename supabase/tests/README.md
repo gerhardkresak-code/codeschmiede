@@ -9,3 +9,4 @@ Ab Datenbank v11: `t12_abgleich.sql` (Projekt-Abgleich: nur eigener PC, nur Admi
 Ab Datenbank v12: `t13_ki.sql` (KI-Anbieter: nur Admin stellt ein, Bauen nur Claude, Kopplung nur eigener PC, Konzept im Vorschlag).
 Ab Datenbank v13: `t14_projekt_loeschen.sql` (Projekte archivieren/löschen: nur Admin, Name als Bestätigung, gesperrt bei laufendem Auftrag, anderes Projekt unberührt).
 Ab Datenbank v15: `t15_bezuege.sql` (Feature-Bezüge: gleiches Projekt, Auftragsrecht, Nachziehen-Hinweis, Vorschläge feature_neu/bezug). v14/v16/v17 ändern nur Prüffunktionen (Schema), getestet über t13 und ws_design_werte_ok.
+Ab Datenbank v18: `t16_ki_frei.sql` (eigene KI-Anbieter: nur Admin, nur Programmname ohne Pfad/Shell-Zeichen, Zulassung je PC wird bei Änderung zurückgesetzt).

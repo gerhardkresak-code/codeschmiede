@@ -63,3 +63,12 @@ test("Chat: neues Feature und Bezug als Vorschlag", async () => {
   assert.deepEqual(b.vorschlag, { bezug: { von: "N-2", zu: "N-1" } });
   assert.equal(assistentAntwort('x\nBEZUG: {"von":"N-1","zu":"N-1"}').vorschlag, null);
 });
+test("Eigene Anbieter: Argumente mit {prompt}/{modell}, nie für Prüfungen", async () => {
+  const { freieArgumente } = await import("../lib/ki.mjs");
+  const def = { argumente: ["-p", "{prompt}", "--model", "{modell}", "--silent"] };
+  assert.deepEqual(freieArgumente(def, "Hallo", "gpt-5"), { args: ["-p", "Hallo", "--model", "gpt-5", "--silent"], stdin: null });
+  assert.deepEqual(freieArgumente(def, "Hallo", ""), { args: ["-p", "Hallo", "--silent"], stdin: null });
+  assert.deepEqual(freieArgumente({ argumente: ["--model={modell}"] }, "X", "--yolo"), { args: [], stdin: "X" });
+  assert.deepEqual(reiheFuer("chat", { reihe: [{ anbieter: "copilot", modell: "gpt-5" }, { anbieter: "claude" }] }), [{ anbieter: "copilot", modell: "gpt-5" }, { anbieter: "claude" }]);
+  assert.deepEqual(reiheFuer("pruefung", { reihe: [{ anbieter: "copilot" }, { anbieter: "claude" }] }, "macos"), [{ anbieter: "claude" }]);
+});

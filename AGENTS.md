@@ -86,3 +86,5 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - **2026-10-23 15:53 – Alles fertig machen (Punkt 1–6):** Sandbox für fremde KI-Programme (Prüfen durch ChatGPT/Gemini nur mit Sandbox,
   Claude bleibt Rückfall), Einrichtungs-Assistent, Baustein-Bibliothek, Marke mit Projektlogos, Regelwerk-Editor, Feature-Bezüge.
   Regel für die Werkstatt: neue Bausteine nur über die Bibliothek (`docs/BAUSTEINE.md`, `node tools/bausteine.mjs`), nur Grundwerte nutzen.
+- **2026-10-23 16:22 – Beliebige KI-Anbieter:** Weitere Anbieter (z. B. GitHub Copilot) legt der Admin an; sie stehen in den Zuständigkeiten
+  zur Auswahl (nie Bauen, nicht Prüfen). Jede Person lässt sie auf ihrem PC selbst zu. Jeder PC erscheint nur einmal.
