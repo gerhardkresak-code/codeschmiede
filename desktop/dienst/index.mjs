@@ -711,7 +711,7 @@ async function kopplungMelden(anbieter, felder) {
   const { error } = await db.from("ws_ki_kopplung").upsert({ pc_id: pcId, benutzer_id: cfg.user_id, anbieter, ...felder }, { onConflict: "pc_id,anbieter" });
   if (error) throw error;
 }
-const einrichtenLaeuft = new Set();
+const einrichtenLaeuft = new Set(); const einrichtenStand = {};   // anbieter -> letzter gemeldeter Schritt (für „Nochmal“ während eines Laufs)
 async function einrichtenStarten(anbieter, aktion) {
   const jetzt = () => new Date().toISOString();
   const fertigMelden = (hinweis, geprueft = true) => kopplungMelden(anbieter, { aktion: null, schritt: "fertig", schritt_zeit: jetzt(), einricht_code: null, gekoppelt: true, hinweis, eingerichtet: jetzt(), ...(geprueft ? { geprueft: jetzt() } : {}) });
@@ -726,7 +726,7 @@ async function einrichtenStarten(anbieter, aktion) {
     else await kopplungMelden(anbieter, { aktion: null }).catch(() => {});
     return;
   }
-  if (einrichtenLaeuft.has(anbieter)) { await kopplungMelden(anbieter, { aktion: null }).catch(() => {}); return; }
+  if (einrichtenLaeuft.has(anbieter)) { await kopplungMelden(anbieter, { aktion: null, ...(einrichtenStand[anbieter] || {}), schritt_zeit: jetzt() }).catch(() => {}); return; }
   // Eigene Anbieter: nur mit Zustimmung zu GENAU der aktuellen Fassung (Fingerabdruck, Prüfung R1) – sonst nichts installieren
   if (def && !(zeile?.zugelassen && def.fp && zeile.zugelassen_fp === def.fp)) {
     await kopplungMelden(anbieter, { aktion: null, schritt: "fehler", schritt_zeit: jetzt(), hinweis: "Der Anbieter wurde geändert oder ist nicht zugelassen – bitte Seite neu laden und nochmal „Hinzufügen“." }).catch(() => {});
@@ -740,11 +740,12 @@ async function einrichtenStarten(anbieter, aktion) {
   melde("status", `KI-Anbieter ${k.name} wird eingerichtet`);
   einrichten(k, { env: einrichtUmgebung(), melde: async ({ schritt, hinweis, code }) => {
     try {
+      einrichtenStand[anbieter] = { schritt, hinweis: kuerzen(ohneGeheimnisse(hinweis || ""), 480), einricht_code: code || null };
       if (schritt === "fertig") await fertigMelden(hinweis);
       else await kopplungMelden(anbieter, { schritt, schritt_zeit: jetzt(), hinweis: kuerzen(ohneGeheimnisse(hinweis || ""), 480), einricht_code: code || null, ...(schritt === "fehler" ? { gekoppelt: false } : {}) });
     } catch (e) { melde("fehler", `KI-Anbieter ${k.name}: ${ohneGeheimnisse(e?.message || String(e))}`); }
   } }).catch((e) => kopplungMelden(anbieter, { schritt: "fehler", schritt_zeit: jetzt(), hinweis: kuerzen(ohneGeheimnisse(e?.message || String(e)), 300) }).catch(() => {}))
-    .finally(() => { einrichtenLaeuft.delete(anbieter); kopplungZuletzt = 0; });
+    .finally(() => { einrichtenLaeuft.delete(anbieter); delete einrichtenStand[anbieter]; kopplungZuletzt = 0; });
 }
 let kopplungZuletzt = 0;
 async function kopplungAbgleich(zwingend = false) {

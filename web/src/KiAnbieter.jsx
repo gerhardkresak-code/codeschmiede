@@ -259,7 +259,7 @@ export default function KiAnbieter({ d, ich, toast }) {
     if (error) toast(fehler(error)); else { toast(`${a.name} wird eingerichtet`); setTick((t) => t + 1); }
   };
   const abbrechen = async (pc, anbieter) => {
-    const { error } = await supabase.from("ws_ki_kopplung").upsert({ pc_id: pc, benutzer_id: ich.id, anbieter, aktion: null, schritt: "fehler", einricht_code: null, hinweis: "Abgebrochen – bei Bedarf nochmal „Hinzufügen“." }, { onConflict: "pc_id,anbieter" });
+    const { error } = await supabase.from("ws_ki_kopplung").upsert({ pc_id: pc, benutzer_id: ich.id, anbieter, aktion: null, schritt: "fehler", einricht_code: null, hinweis: "Zurückgesetzt – bei Bedarf nochmal „Hinzufügen“." }, { onConflict: "pc_id,anbieter" });
     if (error) toast(fehler(error)); else setTick((t) => t + 1);
   };
   const kopiere = (t) => { try { navigator.clipboard.writeText(t); toast("Kopiert"); } catch { /* Auswahl bleibt möglich */ } };
@@ -318,7 +318,7 @@ export default function KiAnbieter({ d, ich, toast }) {
                         if (laeuft) return <><Einrichten k={k} art={ek.art} kopiere={kopiere} />
                           {k.schritt === "bestaetigen" && <button type="button" className={`${btn} self-start`} onClick={() => aktion(pc.id, key, "bestaetigt")}><CircleCheck className="w-4 h-4" />Ich bin angemeldet</button>}
                           {alt && <div className="flex flex-wrap gap-1.5 items-center"><span className="text-amber-700 dark:text-amber-300">{k.schritt === "wartet" ? "Deine Werkstatt meldet sich nicht – läuft das Codeschmiede-Programm (ab 0.8.5)?" : "Das dauert ungewöhnlich lange."}</span>
-                            <button type="button" className={ghost} onClick={() => hinzufuegen(pc.id, key, a)}><RefreshCw className="w-3.5 h-3.5" />Nochmal</button><button type="button" className={ghost} onClick={() => abbrechen(pc.id, key)}><X className="w-3.5 h-3.5" />Abbrechen</button></div>}</>;
+                            <button type="button" className={ghost} onClick={() => hinzufuegen(pc.id, key, a)}><RefreshCw className="w-3.5 h-3.5" />Nochmal</button><button type="button" className={ghost} title="Setzt nur die Anzeige zurück – ein noch offenes Anmeldefenster schließt du selbst" onClick={() => abbrechen(pc.id, key)}><X className="w-3.5 h-3.5" />Zurücksetzen</button></div>}</>;
                         if (k?.gekoppelt && k?.eingerichtet) return null;
                         return <div className="flex flex-col gap-1.5">
                           <span className="inline-flex items-center gap-1 text-slate-500">{ek.art === "fenster" ? <SquareTerminal className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}{ek.art === "fenster" ? "Anmeldung im Fenster" : "Anmeldung im Browser"} · falls nötig: {ek.install}</span>
