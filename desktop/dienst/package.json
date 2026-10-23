@@ -6,7 +6,7 @@
   "type": "module",
   "main": "index.mjs",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.12.2"
   },
   "scripts": {
     "test": "node --test test/lib.test.mjs test/assistent.test.mjs test/ki.test.mjs test/repo.test.mjs test/live.test.mjs test/einrichten.test.mjs test/marke.test.mjs test/ersatz.test.mjs"

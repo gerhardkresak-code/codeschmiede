@@ -816,8 +816,13 @@ async function einrichtenStarten(anbieter, aktion) {
     .finally(() => { einrichtenLaeuft.delete(anbieter); delete einrichtenStand[anbieter]; kopplungZuletzt = 0; });
 }
 let kopplungZuletzt = 0;
+let abgleichLaeuft = false;   // kein zweiter Abgleich, solange einer läuft (Prüfung B5)
 async function kopplungAbgleich(zwingend = false) {
-  if (!pcId) return;
+  if (!pcId || abgleichLaeuft) return;
+  abgleichLaeuft = true;
+  try { await kopplungAbgleichEinmal(zwingend); } finally { abgleichLaeuft = false; }
+}
+async function kopplungAbgleichEinmal(zwingend) {
   let auftraege = [];
   try { const { data } = await db.from("ws_ki_kopplung").select("anbieter, aktion").eq("pc_id", pcId).not("aktion", "is", null); auftraege = data || []; } catch { return; }
   // „Hinzufügen“ (Datenbank 0025): installieren → anmelden → prüfen, im Hintergrund (kann bis 10 Minuten auf die Anmeldung warten)

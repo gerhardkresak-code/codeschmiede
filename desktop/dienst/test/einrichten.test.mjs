@@ -71,10 +71,27 @@ test("Windows-Startdateien: npm-Skript, Programm daneben, nichts außerhalb (Ope
     "C:\\Users\\g\\AppData\\Windows\\evil.exe": "",
   };
   const gibt = (p) => Object.hasOwn(dateien, p); const lies = (p) => { if (!gibt(p)) throw new Error("fehlt"); return dateien[p]; };
-  assert.equal(startdateiAufloesen(`${o}\\opencode.cmd`, { lies, gibt }).befehl, `${o}\\node_modules\\opencode-ai\\bin\\opencode.exe`);
-  assert.deepEqual(startdateiAufloesen(`${o}\\codex.cmd`, { lies, gibt }).vorne, [`${o}\\node_modules\\@openai\\codex\\bin\\codex.js`]);
-  assert.equal(startdateiAufloesen(`${o}\\boese.cmd`, { lies, gibt }), null);
+  assert.equal(startdateiAufloesen(`${o}\\opencode.cmd`, { lies, gibt, realpath: (x) => x }).befehl, `${o}\\node_modules\\opencode-ai\\bin\\opencode.exe`);
+  assert.deepEqual(startdateiAufloesen(`${o}\\codex.cmd`, { lies, gibt, realpath: (x) => x }).vorne, [`${o}\\node_modules\\@openai\\codex\\bin\\codex.js`]);
+  assert.equal(startdateiAufloesen(`${o}\\boese.cmd`, { lies, gibt, realpath: (x) => x }), null);
   const env = { PATH: "", APPDATA: "C:\\Users\\g\\AppData\\Roaming", LOCALAPPDATA: "C:\\Users\\g\\AppData\\Local" };
-  assert.equal(findeIn(["opencode"], { env, home: "C:\\Users\\g", plattform: "win32", gibt, lies, mitRegistry: false }).befehl, `${o}\\node_modules\\opencode-ai\\bin\\opencode.exe`);
+  assert.equal(findeIn(["opencode"], { env, home: "C:\\Users\\g", plattform: "win32", gibt, lies, realpath: (x) => x, mitRegistry: false }).befehl, `${o}\\node_modules\\opencode-ai\\bin\\opencode.exe`);
   assert.equal(findeIn(["grok"], { env, home: "C:\\Users\\g", plattform: "win32", gibt: (p) => p === "C:\\Users\\g\\.grok\\bin\\grok.exe", mitRegistry: false }).befehl, "C:\\Users\\g\\.grok\\bin\\grok.exe");
+});
+
+test("Prüfung 0.8.7: Hersteller-Ordner nur für den Hersteller, keine Datenströme, keine Shell als Ziel, Sperrliste im Dienst", async () => {
+  const { startdateiAufloesen, findeIn, findeFreiesProgramm, programmGesperrt } = await import("../lib/ki.mjs");
+  const env = { PATH: "", APPDATA: "C:\\Users\\g\\AppData\\Roaming", LOCALAPPDATA: "C:\\Users\\g\\AppData\\Local" };
+  const gibt = (p) => p === "C:\\Users\\g\\.grok\\bin\\agent.exe";
+  assert.equal(findeIn(["agent"], { env, home: "C:\\Users\\g", plattform: "win32", gibt, mitRegistry: false }), null);
+  const o = "C:\\a\\npm";
+  const da = new Set([`${o}\\x.txt:evil.exe`, `${o}\\cmd.exe`, `${o}\\ads.cmd`, `${o}\\shell.cmd`]);
+  const lies = (p) => ({ [`${o}\\ads.cmd`]: '"%dp0%\\x.txt:evil.exe" %*', [`${o}\\shell.cmd`]: '"%dp0%\\cmd.exe" %*' })[p];
+  assert.equal(startdateiAufloesen(`${o}\\ads.cmd`, { lies, gibt: (p) => da.has(p), realpath: (x) => x }), null);
+  assert.equal(startdateiAufloesen(`${o}\\shell.cmd`, { lies, gibt: (p) => da.has(p), realpath: (x) => x }), null);
+  // Verknüpfung, die aus dem Ordner herauszeigt
+  const lies2 = () => '"%dp0%\\tool.exe" %*';
+  assert.equal(startdateiAufloesen(`${o}\\t.cmd`, { lies: lies2, gibt: () => true, realpath: (x) => x.endsWith("tool.exe") ? "C:\\Windows\\tool.exe" : x }), null);
+  assert.ok(programmGesperrt("powershell.exe") && programmGesperrt("msiexec") && programmGesperrt("claude") && !programmGesperrt("cursor-agent"));
+  assert.equal(findeFreiesProgramm("pwsh"), null);
 });

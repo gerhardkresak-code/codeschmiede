@@ -76,8 +76,8 @@ export function einrichtUmgebung(env = process.env) {
 }
 
 /** Programm suchen: PATH (nur absolute Ordner) plus die üblichen Ordner der Installer (~/.local/bin, npm global). */
-export function findeKatalogProgramm(k, { env = process.env, home = os.homedir(), plattform = process.platform, gibt = existsSync, lies, mitRegistry } = {}) {
-  return findeIn(k.programme, { env, home, plattform, gibt, lies, mitRegistry: mitRegistry ?? plattform === process.platform });
+export function findeKatalogProgramm(k, { env = process.env, home = os.homedir(), plattform = process.platform, gibt = existsSync, lies, realpath, mitRegistry } = {}) {
+  return findeIn(k.programme, { env, home, plattform, gibt, lies, realpath, mitRegistry: mitRegistry ?? plattform === process.platform });
 }
 
 /** npm finden (ohne Shell): npm-cli.js neben Node bzw. im globalen Ordner. */
