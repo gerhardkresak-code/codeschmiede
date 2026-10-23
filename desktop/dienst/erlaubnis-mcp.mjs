@@ -34,7 +34,7 @@ async function entscheide(werkzeug, eingabe) {
   const roh = beschreibe(werkzeug, eingabe);
   const text = ohneGeheimnisse(roh);
   // Neue Anweisung Gerhard 2026-10-23 10:34/10:36: Harmloses automatisch erlauben, Gefährliches immer sperren, nur Unklares fragen
-  const st = einstufung(werkzeug, roh, { adminPc: ADMIN_PC });
+  const st = einstufung(werkzeug, roh, { adminPc: ADMIN_PC, cwd: process.env.CS_ORDNER || process.cwd() });
   if (st.stufe === "erlaubt") { await logge(`Automatisch erlaubt (${st.grund}): ${werkzeug} ${text}`); return { ok: true }; }
   if (st.stufe === "gesperrt") { await logge(`Gesperrt (${st.grund}): ${werkzeug} ${text}`); return { ok: false, grund: st.grund }; }
   const { data: regeln } = await db.from("ws_erlaubnisse").select("werkzeug, eingabe, ws_auftraege!inner(gruppe_id)")

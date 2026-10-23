@@ -143,3 +143,14 @@ test("Automatische Erlaubnis: nur Bekanntes erlaubt, Gefährliches gesperrt (Fas
   assert.equal(einstufung("Read", "/home/x/.ssh/id").stufe, "gesperrt");
   assert.equal(einstufung("mcp__fremd__x", "{}").stufe, "gesperrt");
 });
+
+test("Automatische Erlaubnis: Nachprüfung 2 (Windows-Pfade, grep, gh-Optionen)", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "einst2-")); writeFileSync(join(cwd, "a.md"), "x");
+  const st = (b) => einstufung("Bash", b, { adminPc: true, cwd }).stufe;
+  for (const b of ["git diff --no-index a.md C:/Users/x/AppData/Roaming/GitHub/hosts.yml", "git show HEAD:a.md /etc/passwd", 'git diff "C:/x y"', "git log -- ../x",
+    "grep -f /etc/passwd x a.md", "grep -R x .", "gh pr create --base main --repo=fremd/r", "gh pr create --base main -Rfremd/r", "gh pr create --base main --head=x",
+    "cat ~/.claude.json", "cat a.md GitHub CLI"]) assert.notEqual(st(b), "erlaubt", b);
+  assert.equal(st('gh pr create --base main --title "Titel" --body "Text"'), "erlaubt");
+  assert.equal(st("grep -rn x a.md"), "erlaubt");
+  assert.equal(st("git diff origin/main...HEAD -- a.md"), "erlaubt");
+});

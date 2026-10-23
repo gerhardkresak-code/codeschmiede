@@ -82,7 +82,7 @@ const VERBOTEN = [
   "Edit(../**)", "Write(../**)", "Edit(**/.git/**)", "Write(**/.git/**)", "Edit(**/.husky/**)", "Write(**/.husky/**)",
   // Einstellungen, Hooks und Abläufe darf die Werkstatt nicht selbst ändern (sonst Umgehung der Erlaubnis-Brücke)
   "Edit(.claude/**)", "Write(.claude/**)", "Edit(**/.claude/**)", "Write(**/.claude/**)", "Edit(.mcp.json)", "Write(.mcp.json)",
-  "Edit(.github/**)", "Write(.github/**)", "Edit(**/package.json)", "Write(**/package.json)",
+  "Edit(.github/**)", "Write(.github/**)", "Edit(**/.gitattributes)", "Write(**/.gitattributes)", "Edit(**/.gitmodules)", "Write(**/.gitmodules)", "Edit(**/package.json)", "Write(**/package.json)",
   // Anmeldedaten auf dem PC sind tabu
   "Read(~/.claude/**)", "Read(~/.ssh/**)", "Read(~/.codeschmiede/**)", "Read(~/.config/gh/**)", "Read(~/.aws/**)",
   "Read(**/zugriff.token)", "Read(**/.env*)", "Read(**/*.pem)", "Read(**/*.key)",
@@ -258,7 +258,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
 
     // Erlaubnis-Brücke (MCP) für Werkzeuge außerhalb der freigegebenen Liste
     const mcp = { mcpServers: { werkstatt: { command: process.execPath, args: [path.join(HIER, "erlaubnis-mcp.mjs")], env: {
-      CS_SUPABASE_URL: cfg.supabase_url, CS_ANON_KEY: cfg.anon_key, CS_TOKEN_DATEI: tokenDatei(), CS_AUFTRAG: String(auftrag.id), CS_GRUPPE: auftrag.gruppe_id, CS_ADMIN_PC: cfg.admin ? "1" : "0",
+      CS_SUPABASE_URL: cfg.supabase_url, CS_ANON_KEY: cfg.anon_key, CS_TOKEN_DATEI: tokenDatei(), CS_AUFTRAG: String(auftrag.id), CS_GRUPPE: auftrag.gruppe_id, CS_ADMIN_PC: cfg.admin ? "1" : "0", CS_ORDNER: ordner,
     } } } };
     const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", modell,
       "--permission-mode", "default", "--allowedTools", ERLAUBT.join(","), "--disallowedTools", VERBOTEN.join(","),
@@ -275,7 +275,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
     await new Promise((fertig, fehl) => {
       const claude = findeClaude();
       if (!claude) throw new Error("Claude Code wurde auf diesem PC nicht gefunden (erwartet: %USERPROFILE%\\.local\\bin\\claude.exe). Bitte installieren und einmal „claude“ im Terminal starten.");
-      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: ordner, env, shell: false, windowsHide: true });
+      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: ordner, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
       laeuft.kind = kind;
       abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
       const rl = createInterface({ input: kind.stdout });
@@ -330,8 +330,17 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
         await nachricht(auftrag.id, "text", `Bauen & Tests auf dem PC sind rot – ich arbeite das nach:\n${lokal.text}`);
       }
     } else {
-      await nachricht(auftrag.id, "frage", `${r.text}\n\n(Es gibt noch keinen Pull Request. Soll ich weitermachen oder etwas ändern?)`);
-      await db.from("ws_auftraege").update({ stand: "frage" }).eq("id", auftrag.id);
+      // Kein Pull Request: Gibt es Änderungen, fehlt der PR (Rückfrage). Sonst ist der Auftrag ohne Änderung erledigt –
+      // nicht als offene Rückfrage stehen lassen (Meldung Gerhard 2026-10-22, Auftrag #5).
+      let geaendert = true;
+      try { const st = await git(ordner, "status", "--porcelain"); const vor = await git(ordner, "rev-list", "--count", "origin/main..HEAD"); geaendert = !!st.trim() || Number(vor) > 0; } catch { /* sicher ist sicher */ }
+      if (geaendert) {
+        await nachricht(auftrag.id, "frage", `${r.text}\n\n(Es gibt Änderungen, aber noch keinen Pull Request. Soll ich weitermachen oder etwas ändern?)`);
+        await db.from("ws_auftraege").update({ stand: "frage" }).eq("id", auftrag.id);
+      } else {
+        await nachricht(auftrag.id, "ergebnis", `${r.text}\n\n(Ohne Änderung abgeschlossen. Schreib einfach weiter, wenn noch etwas fehlt.)`);
+        await db.from("ws_auftraege").update({ stand: "erledigt" }).eq("id", auftrag.id);
+      }
     }
   } catch (e) {
     const text = ohneGeheimnisse(e?.message || String(e));
@@ -360,6 +369,8 @@ function npm(ordner, args, minuten = 15) {
   });
 }
 async function lokalePruefung(ordner) {
+  // Regel (Prüfung 2026-10-22, R2): Der Admin-PC führt nie Projekt-Code aus – dort prüft der Cloudflare-Bau (gefunden 2026-10-23: lief trotzdem).
+  if (cfg.admin) return { ok: true, text: "Admin-PC: keine lokale Prüfung – gebaut und geprüft wird in der Cloud (Cloudflare-Bau)." };
   if (!(await existiert(path.join(ordner, "package.json")))) return { ok: true, text: "Kein package.json – nichts zu bauen." };
   const pkg = JSON.parse(await readFile(path.join(ordner, "package.json"), "utf8"));
   const schritte = [[(await existiert(path.join(ordner, "package-lock.json"))) ? ["ci", "--no-audit", "--no-fund"] : ["install", "--no-audit", "--no-fund"], "Abhängigkeiten"]];
@@ -388,7 +399,7 @@ async function claudePruefung(auftragId, ordner, prompt) {
     "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", "--setting-sources", "user"];
   let ende = null; let kosten = 0;
   await new Promise((fertig, fehl) => {
-    const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: ordner, env, shell: false, windowsHide: true });
+    const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: ordner, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     laeuft.kind = kind;
     laeuft.abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
     const rl = createInterface({ input: kind.stdout }); const offen = []; let fehlerText = "";

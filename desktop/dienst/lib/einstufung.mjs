@@ -11,7 +11,7 @@ const sperre = (grund) => ({ stufe: "gesperrt", grund });
 const frage = (grund) => ({ stufe: "fragen", grund });
 
 // ---------- Sperrliste (auf den rohen Text, absichtlich großzügig) ----------
-const GEHEIM = /\.ssh|\.aws|\.config[\\/]gh|\.codeschmiede|zugriff\.token|(^|[\s\\/'"=])\.env\b|\.pem\b|\.key\b|\.claude[\\/]|\.credentials|\.netrc|\.npmrc|git-credentials|id_rsa|id_ed25519/i;
+const GEHEIM = /\.ssh|\.aws|\.config[\\/]gh|github cli|hosts\.yml|\.codeschmiede|zugriff\.token|(^|[\s\\/'"=])\.env\b|\.pem\b|\.key\b|\.claude\b|\.credentials|\.netrc|\.npmrc|git-credentials|id_rsa|id_ed25519|appdata[\\/]roaming[\\/](microsoft[\\/](credentials|protect)|gnupg)|\.gnupg/i;
 const STARTER = /^(npm|npx|pnpm|yarn|bun|node|deno|python\d*(\.\d+)?|py|pip\d*|make|cargo|go|vite|vitest|jest|playwright|tsx|ts-node|sh|bash|zsh|pwsh|powershell|cmd|java|ruby|perl|php)(\.exe|\.cmd)?$/i;
 function fuehrtCodeAusIrgendwo(t) {
   const ohneZitate = t.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
@@ -107,7 +107,9 @@ function eineKette(kette, cwd) {
     return allePfade(p, cwd) ? ok("Lesen im Arbeitsordner") : frage("Liest außerhalb des Arbeitsordners");
   }
   if (c0 === "grep" || c0 === "rg") {
-    const args = w.slice(1).filter((x) => !opt(x));
+    // Nachprüfung 2: nur feste Optionen (kein -f/--file, kein -R/-L, die Dateien von außen lesen bzw. Symlinks folgen)
+    if (w.slice(1).some((x) => opt(x) && !/^-([nilcwvEFHhoqsxr]+|A|B|C)$|^--(color=never|no-heading|line-number|ignore-case)$/.test(x.w))) return frage("Suche mit besonderen Optionen");
+    const args = w.slice(1).filter((x) => !opt(x) && !/^\d+$/.test(x.w));
     const p = args.slice(1).map((x) => x.w);   // erstes Nicht-Options-Argument = Suchmuster
     return args.length && allePfade(p, cwd) ? ok("Suchen im Arbeitsordner") : frage("Suche außerhalb des Arbeitsordners");
   }
@@ -117,7 +119,11 @@ function eineKette(kette, cwd) {
     let i = 1; while (a[i] === "-c" && /^user\.(name|email)=/.test(a[i + 1] || "")) i += 2;
     const gw = w.slice(i); const g = gw.map((x) => x.w);
     if (!g.length || gw[0].zitat) return frage("Git-Befehl");
-    if (gw.some((x) => !x.zitat && /^--(output|exec|upload-pack|receive-pack|ext-diff|textconv|config-env|git-dir|work-tree|namespace|super-prefix)/.test(x.w))) return frage("Git-Option");
+    if (gw.some((x) => !x.zitat && /^--(output|exec|upload-pack|receive-pack|ext-diff|textconv|config-env|git-dir|work-tree|namespace|super-prefix|no-index|follow-symlinks)/.test(x.w))) return frage("Git-Option");
+    // Nachprüfung 2: kein Argument mit Pfad außerhalb (absolut, Laufwerk, ..); Zitate nur als Commit-Nachricht
+    const istCommit = g[0] === "commit";
+    if (gw.slice(1).some((x) => (x.zitat && !istCommit) || (!x.zitat && /^[\/~]|^[A-Za-z]:|(^|[\/])\.\.([\/]|$)/.test(x.w.replace(/^--[\w-]+=/, ""))))) return frage("Git mit Pfad außerhalb");
+    const nachTrenner = g.indexOf("--"); if (nachTrenner > 0 && !allePfade(g.slice(nachTrenner + 1), cwd)) return frage("Git mit Pfad außerhalb");
     if (/^(status|fetch|rev-parse|ls-files|ls-remote|merge-base|shortlog|describe|diff|log|show)$/.test(g[0])) return ok("Git lesen");
     if (g[0] === "branch" && (g.length === 1 || (g.length === 2 && /^(-a|-r|-vv|--show-current|--list)$/.test(g[1])))) return ok("Git lesen");
     if (g[0] === "remote" && g[1] === "-v" && g.length === 2) return ok("Git lesen");
@@ -146,15 +152,28 @@ function eineKette(kette, cwd) {
   }
   if (c0 === "gh") {
     const roh = w.filter((x) => !x.zitat).map((x) => x.w);
-    if (roh.some((x) => /^(-R|--repo|--web|-w|-F|--body-file|--head|-H|--hostname)$/.test(x))) return frage("GitHub mit besonderen Optionen");
-    if (a[1] === "pr" && a[2] === "create") { const b = a.indexOf("--base"); return b > 0 && a[b + 1] === "main" ? ok("Pull Request öffnen") : frage("Pull Request ohne Ziel main"); }
+    if (roh.some((x) => /^(-R|--repo|--web|-w|-F|--body-file|--head|-H|--hostname|-t|-b)/.test(x.split("=")[0]) && !/^-(?:-)?(?:base)$/.test(x))) {
+      if (!(a[1] === "pr" && a[2] === "create")) return frage("GitHub mit besonderen Optionen");
+    }
+    if (a[1] === "pr" && a[2] === "create") {
+      // nur: --base main, --title "…", --body "…", --draft, --fill
+      for (let k = 3; k < w.length; k++) {
+        const x = w[k];
+        if (x.zitat) return frage("Pull Request mit besonderen Optionen");
+        if (x.w === "--base" && w[k + 1]?.w === "main" && !w[k + 1].zitat) { k++; continue; }
+        if (/^(--title|--body)$/.test(x.w) && w[k + 1]) { k++; continue; }
+        if (/^(--draft|--fill)$/.test(x.w)) continue;
+        return frage("Pull Request mit besonderen Optionen");
+      }
+      return a.includes("--base") ? ok("Pull Request öffnen") : frage("Pull Request ohne Ziel main");
+    }
     if ((a[1] === "pr" && /^(view|checks|list|diff|status)$/.test(a[2])) || (a[1] === "run" && /^(view|list)$/.test(a[2])) || (a[1] === "issue" && /^(view|list)$/.test(a[2]))) return ok("GitHub lesen");
     return frage("GitHub-Befehl");
   }
   return frage("Unbekannter Befehl");
 }
 
-export function einstufung(werkzeug, eingabe, { adminPc = false, cwd = process.cwd() } = {}) {
+export function einstufung(werkzeug, eingabe, { adminPc = false, cwd = process.env.CS_ORDNER || process.cwd() } = {}) {
   const roh = String(eingabe ?? "");
   const sp = gesperrt(roh, adminPc); if (sp) return sperre(sp);
   if (werkzeug === "Bash") {
