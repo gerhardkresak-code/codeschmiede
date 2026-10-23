@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
   Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power, Hammer,
-  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu,
+  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { WS_ICON, STAND, ROLLEN, BEREICH_RECHTE } from "./config";
@@ -73,7 +73,8 @@ function useWerkstattDaten(me, projektId) {
       supabase.rpc("ws_verbrauch_gesamt_monat"),
       supabase.from("ws_abo_limits").select("*"),
     ]);
-    const pid = projektId || pj.data?.[0]?.id;
+    // Gewähltes Projekt nur, wenn es (noch) da und nicht archiviert ist – sonst das erste
+    const pid = (projektId && (pj.data || []).some((x) => x.id === projektId)) ? projektId : pj.data?.[0]?.id;
     let b = [], g = [], f = [], a = [];
     if (pid) {
       b = (await supabase.from("ws_bereiche").select("*").eq("projekt_id", pid).order("reihenfolge")).data || [];
@@ -142,7 +143,7 @@ export default function App() {
   const [ansicht, setAnsicht] = useState("zentrale");
   const [projekt, setProjekt] = useState(() => merke.lies("cs-projekt"));
   const [toast, setToast] = useState("");
-  const [neuesProjekt, setNeuesProjekt] = useState(false);
+  const [neuesProjekt, setNeuesProjekt] = useState(false); const [projekteVerwalten, setProjekteVerwalten] = useState(false);
   const [ortZentrale, setOrtZentrale] = useState(null);   // Gruppe/Feature, das in der Zentrale gerade offen ist (für den Chat)
 
   useEffect(() => {
@@ -185,6 +186,7 @@ export default function App() {
             </select>
           </div>
           {ich.rolle === "admin" && <button type="button" onClick={() => setNeuesProjekt(true)} className="mt-1 w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm text-emerald-200 hover:bg-white/5"><FolderPlus className="w-4 h-4" />Neues Projekt</button>}
+          {ich.rolle === "admin" && <button type="button" onClick={() => setProjekteVerwalten(true)} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm text-emerald-200 hover:bg-white/5"><FolderCog className="w-4 h-4" />Projekte verwalten</button>}
         </div>
         <nav className="flex md:flex-col gap-0.5" aria-label="Programm-Menü">
           {nav.map(([id, t, Icon], i) => id === "_" ? <div key={i} className="hidden md:block text-[11px] uppercase tracking-widest text-emerald-200/60 px-2.5 pt-3 pb-1">{t}</div> : (
@@ -232,6 +234,7 @@ export default function App() {
         const kontext = `Projekt: ${aktuell?.name || ""}\nSeite: ${nav.find((n) => n[0] === ansicht)?.[1] || ansicht}${imZentrum ? `\n${ortZentrale.text}` : ""}`;
         return <ClaudeSpalte d={daten} ich={ich} ort={ort} kontext={kontext} toast={setToast} />;
       })()}
+      {projekteVerwalten && <ProjekteVerwalten toast={setToast} aktiv={daten.projektId} onClose={() => setProjekteVerwalten(false)} onWeg={(id) => { if (id === daten.projektId) { const n = daten.projekte.find((p) => p.id !== id); if (n) waehle(n.id); } }} />}
       {neuesProjekt && <NeuesProjekt toast={setToast} onClose={() => setNeuesProjekt(false)} onFertig={(id) => waehle(id)} />}
       <Toast text={toast} onDone={() => setToast("")} />
     </div>
@@ -1139,6 +1142,59 @@ function UpdateHinweis({ toast }) {
       <Download className="w-4 h-4" />Version {u.neu} bereit · Jetzt neu starten
     </button>
   );
+}
+
+// ---------------- Projekte verwalten (Hinweis Gerhard 2026-10-23 15:34): archivieren / wiederherstellen / endgültig löschen ----------------
+// Nur Admin. Löschen entfernt die Daten des Projekts in der Codeschmiede (nicht das GitHub-Repository, nicht die App) – Bestätigung mit dem Namen.
+function ProjekteVerwalten({ toast, aktiv, onClose, onWeg }) {
+  const [liste, setListe] = useState(null); const [weg, setWeg] = useState(null); const [umfang, setUmfang] = useState(null);
+  const [name, setName] = useState(""); const [busy, setBusy] = useState(false); const [tick, setTick] = useState(0);
+  useEffect(() => { supabase.from("ws_projekte").select("id, name, repo, archiviert").order("name").then(({ data }) => setListe(data || [])); }, [tick]);
+  const archiv = async (p, aus) => {
+    const { error } = await supabase.rpc("ws_projekt_archivieren", { p_projekt: p.id, p_aus: aus });
+    if (error) { toast(fehler(error)); return; }
+    toast(aus ? `„${p.name}“ archiviert` : `„${p.name}“ wiederhergestellt`); if (aus) onWeg(p.id); setTick((t) => t + 1);
+  };
+  const vorbereiten = async (p) => {
+    setWeg(p); setName(""); setUmfang(null);
+    const { data, error } = await supabase.rpc("ws_projekt_umfang", { p_projekt: p.id });
+    if (error) toast(fehler(error)); else setUmfang(data);
+  };
+  const loeschen = async () => {
+    setBusy(true);
+    const { error } = await supabase.rpc("ws_projekt_loeschen", { p_projekt: weg.id, p_bestaetigung: name });
+    setBusy(false);
+    if (error) { toast(fehler(error)); return; }
+    toast(`Projekt „${weg.name}“ gelöscht`); onWeg(weg.id); setWeg(null); setTick((t) => t + 1);
+  };
+  if (weg) return (
+    <Dialog title={`Projekt „${weg.name}“ endgültig löschen`} onClose={() => setWeg(null)}>
+      <p className="text-sm">Gelöscht werden alle Daten dieses Projekts <b>in der Codeschmiede</b>: Bereiche, Gruppen, Features, Aufträge mit Verlauf, Chats, Designer-Entwürfe, Abgleich, KI-Zuständigkeiten, Verbrauch und Mitgliedschaften.
+        Das <b>GitHub-Repository</b>{weg.repo ? ` (${weg.repo})` : ""} und die App selbst bleiben unberührt. Das lässt sich nicht rückgängig machen – zum Ausblenden lieber „Archivieren“.</p>
+      {umfang ? <ul className="text-sm grid grid-cols-2 gap-1 rounded-lg bg-slate-50 dark:bg-slate-950 p-3">
+        <li>{umfang.gruppen} Gruppen</li><li>{umfang.features} Features</li><li>{umfang.auftraege} Aufträge</li><li>{umfang.mitglieder} Mitglieder</li>
+        {umfang.laufend > 0 && <li className="col-span-2 text-red-600 font-semibold">{umfang.laufend} Auftrag/Prüfung läuft – erst abschließen oder abbrechen.</li>}
+      </ul> : <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />}
+      <label className="flex flex-col gap-1 text-sm text-slate-500">Zur Bestätigung den Projektnamen eingeben: <b className="text-slate-800 dark:text-slate-100">{weg.name}</b>
+        <input id="ws-projekt-loeschen" className={input} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></label>
+      <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={() => setWeg(null)}>Abbrechen</button>
+        <button type="button" className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-xl bg-red-700 hover:bg-red-800 disabled:opacity-50 text-white font-display font-bold tracking-wide transition" disabled={busy || name !== weg.name || !umfang || umfang.laufend > 0} onClick={loeschen}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}Endgültig löschen</button></div>
+    </Dialog>);
+  return (
+    <Dialog title="Projekte verwalten" onClose={onClose}>
+      {!liste ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700" /> : (
+        <div className="flex flex-col divide-y divide-slate-100 dark:divide-slate-800">
+          {liste.map((p) => (
+            <div key={p.id} className="py-2.5 flex flex-wrap items-center gap-2">
+              <div className="min-w-0 flex-1"><div className="font-semibold flex items-center gap-2">{p.name}{p.id === aktiv && <span className="text-[11px] rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">geöffnet</span>}{p.archiviert && <span className="text-[11px] rounded-full px-2 py-0.5 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">archiviert</span>}</div>
+                <div className="text-xs text-slate-500 font-mono break-all">{p.id}{p.repo ? ` · ${p.repo}` : ""}</div></div>
+              {p.archiviert ? <button type="button" className={`${ghost} h-9 text-xs`} onClick={() => archiv(p, false)}><ArchiveRestore className="w-3.5 h-3.5" />Wiederherstellen</button>
+                : <button type="button" className={`${ghost} h-9 text-xs`} onClick={() => archiv(p, true)}><Archive className="w-3.5 h-3.5" />Archivieren</button>}
+              <button type="button" className={`${ghost} h-9 text-xs text-red-700 dark:text-red-400`} onClick={() => vorbereiten(p)}><Trash2 className="w-3.5 h-3.5" />Löschen …</button>
+            </div>))}
+        </div>)}
+      <div className="flex justify-end"><button type="button" className={ghost} onClick={onClose}>Schließen</button></div>
+    </Dialog>);
 }
 
 // ---------------- Neues Projekt ----------------
