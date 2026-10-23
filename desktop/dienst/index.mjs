@@ -554,11 +554,14 @@ async function claudeOhneWerkzeuge(prompt) {
   const leer = await mkdtemp(path.join(os.tmpdir(), "cs-design-"));
   const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", "sonnet", "--tools", "", "--disallowedTools", "*",
     "--max-turns", "2", "--no-session-persistence", "--permission-mode", "default",
-    "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", "--setting-sources", "user"];
+    "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", "--setting-sources", "user",
+    "--settings", JSON.stringify({ disableAllHooks: true })];   // Prüfung: eigene Hooks bekommen keinen fremden Text
   let ende = null;
+  laeuft = { id: "design", abort: new AbortController() };   // Prüfung O4: beenden()/Update stoppt auch den Chat
   try {
     await new Promise((fertig, fehl) => {
-      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: leer, env, shell: false, windowsHide: true });
+      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: leer, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+      laeuft.kind = kind; laeuft.abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
       const uhr = setTimeout(() => kind.kill("SIGINT"), 3 * 60 * 1000);
       const rl = createInterface({ input: kind.stdout }); const offen = []; let fehlerText = "";
       kind.stderr.on("data", (d) => { fehlerText = (fehlerText + d.toString()).slice(-1500); });
@@ -568,9 +571,9 @@ async function claudeOhneWerkzeuge(prompt) {
         const lim = findeAboLimits(m); if (lim) offen.push(aboMelden(lim).catch(() => {}));
       });
       kind.on("error", (e) => { clearTimeout(uhr); fehl(e); });
-      kind.on("close", (code) => { clearTimeout(uhr); Promise.all(offen).then(() => (ende ? fertig() : fehl(new Error(`Claude beendet (${code}): ${fehlerText.slice(-300)}`)))); });
+      kind.on("close", (code) => { clearTimeout(uhr); Promise.all(offen).then(() => (ende ? fertig() : fehl(new Error(`Claude beendet (${code}): ${ohneGeheimnisse(fehlerText).slice(-300)}`)))); });
     });
-  } finally { await rm(leer, { recursive: true, force: true }).catch(() => {}); }
+  } finally { laeuft = null; await rm(leer, { recursive: true, force: true }).catch(() => {}); }
   if (ende?.subtype !== "success") throw new Error("Claude hat keine Antwort geliefert");
   return ende.result || "";
 }
@@ -583,9 +586,12 @@ async function designChat() {
   melde("status", "Designer-Chat: Claude antwortet");
   try {
     const { data: pj } = await db.from("ws_projekte").select("name").eq("id", f.projekt_id).maybeSingle();
-    let q = db.from("ws_design_chat").select("id, von, text").eq("projekt_id", f.projekt_id).lt("id", f.id).order("id", { ascending: false }).limit(8);
+    // Verlauf nur aus dem EIGENEN Gespräch (eigene Fragen + Antworten darauf) – Prüfung O2
+    let q = db.from("ws_design_chat").select("id, von, text, frage_id").eq("projekt_id", f.projekt_id).lt("id", f.id).order("id", { ascending: false }).limit(40);
     q = f.entwurf_id ? q.eq("entwurf_id", f.entwurf_id) : q.is("entwurf_id", null);
-    const { data: verlauf } = await q;
+    const { data: alle } = await q;
+    const eigene = new Set((alle || []).filter((m) => !m.frage_id && m.von === cfg.user_id).map((m) => m.id));
+    const verlauf = (alle || []).filter((m) => eigene.has(m.id) || eigene.has(m.frage_id)).slice(0, 8);
     const roh = await claudeOhneWerkzeuge(designPrompt({ projektName: pj?.name || f.projekt_id, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
     const { text, vorschlag } = designAntwort(ohneGeheimnisse(roh));
     const { error: e2 } = await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });

@@ -39,12 +39,15 @@ create policy ws_design_chat_frage on public.ws_design_chat for insert to authen
   with check (public.ws_darf_design(projekt_id) and von = auth.uid() and frage_id is null and stand = 'offen'
               and (entwurf_id is null or exists (select 1 from public.ws_design_entwuerfe e where e.id = entwurf_id and e.projekt_id = ws_design_chat.projekt_id)));
 
--- Mengenbegrenzung: höchstens 5 offene Fragen je Person
+-- Mengenbegrenzung: höchstens 5 offene Fragen und 100 je Tag je Person
 create or replace function public.ws_design_chat_neu() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if new.frage_id is null and (select count(*) from public.ws_design_chat where von = new.von and frage_id is null and stand in ('offen','laeuft')) >= 5 then
     raise exception 'Es warten schon 5 Fragen auf Claude – bitte kurz warten'; end if;
+  -- Prüfung O3: höchstens 100 Fragen je Person und Tag
+  if new.frage_id is null and (select count(*) from public.ws_design_chat where von = new.von and frage_id is null and erstellt > now() - interval '1 day') >= 100 then
+    raise exception 'Tagesgrenze erreicht (100 Fragen an Claude) – morgen geht es weiter'; end if;
   return new;
 end $$;
 drop trigger if exists ws_design_chat_neu on public.ws_design_chat;
@@ -57,10 +60,10 @@ create or replace function public.ws_design_chat_nehmen(p_pc uuid) returns setof
 language plpgsql security definer set search_path = public as $$
 declare f public.ws_design_chat;
 begin
-  if not exists (select 1 from public.ws_werkstatt_pcs where id = p_pc and benutzer_id = auth.uid()) then
+  if not exists (select 1 from public.ws_werkstatt_pcs where id = p_pc and benutzer_id = auth.uid() and an) then
     raise exception 'Unbekannter Werkstatt-PC'; end if;
   select * into f from public.ws_design_chat
-    where von = auth.uid() and frage_id is null
+    where von = auth.uid() and frage_id is null and public.ws_darf_design(projekt_id)   -- Prüfung O1: Recht noch vorhanden
       and (stand = 'offen' or (stand = 'laeuft' and geaendert < now() - interval '10 minutes'))
     order by id limit 1 for update skip locked;
   if f.id is null then return; end if;
@@ -77,11 +80,12 @@ begin
   if f.id is null then raise exception 'Frage nicht gefunden'; end if;
   if f.von is distinct from auth.uid() then raise exception 'Nur die eigene Werkstatt beantwortet eigene Fragen'; end if;
   if f.stand <> 'laeuft' then raise exception 'Frage ist nicht in Bearbeitung'; end if;
+  if not public.ws_darf_design(f.projekt_id) then raise exception 'Kein Design-Recht mehr in diesem Projekt'; end if;   -- Prüfung O1
   if p_text is null or char_length(p_text) not between 1 and 8000 then raise exception 'Antwort fehlt oder ist zu lang'; end if;
   if p_vorschlag is not null and (p_fehler or pg_column_size(p_vorschlag) >= 65536 or not public.ws_design_werte_ok(p_vorschlag) or p_vorschlag = '{}'::jsonb) then
     p_vorschlag := null; end if;   -- ungültiger Vorschlag wird verworfen, die Erklärung bleibt
-  insert into public.ws_design_chat (projekt_id, entwurf_id, frage_id, von, text, werte, stand)
-    values (f.projekt_id, f.entwurf_id, f.id, null, p_text, p_vorschlag, 'beantwortet') returning id into a;
+  insert into public.ws_design_chat (projekt_id, entwurf_id, frage_id, von, text, werte, stand, werkstatt_pc)
+    values (f.projekt_id, f.entwurf_id, f.id, null, p_text, p_vorschlag, 'beantwortet', f.werkstatt_pc) returning id into a;
   update public.ws_design_chat set stand = case when p_fehler then 'fehler' else 'beantwortet' end, geaendert = now() where id = f.id;
   return a;
 end $$;

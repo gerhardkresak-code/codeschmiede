@@ -475,9 +475,9 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
   const [senden, setSenden] = useState(false);
   const ende = React.useRef(null);
   const holen = useCallback(async () => {
-    let q = supabase.from("ws_design_chat").select("*").eq("projekt_id", projekt.id).order("id").limit(200);
+    let q = supabase.from("ws_design_chat").select("*").eq("projekt_id", projekt.id).order("id", { ascending: false }).limit(200);
     q = entwurf ? q.eq("entwurf_id", entwurf.id) : q.is("entwurf_id", null);
-    const { data } = await q; setListe(data || []);
+    const { data } = await q; setListe((data || []).reverse());
   }, [projekt.id, entwurf]);
   useEffect(() => {
     holen();
@@ -509,7 +509,7 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
         {!liste.length && <div className="text-slate-500 space-y-2"><p>Frag Claude zum Design{entwurf ? ` von „${entwurf.name}“` : ""}. Claude erklärt und schlägt Werte vor – übernommen wird nur, was du anklickst.</p></div>}
         {liste.map((m) => m.frage_id ? (
           <div key={m.id} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-2.5 max-w-[95%]">
-            <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Bot className="w-3.5 h-3.5" />Claude</div>
+            <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Bot className="w-3.5 h-3.5" />Claude{fragen[m.frage_id] && fragen[m.frage_id].von !== ich.id ? ` · über die Werkstatt von ${d.benutzer.find((u) => u.id === fragen[m.frage_id].von)?.name || "Mitglied"}` : ""}</div>
             <p className="whitespace-pre-wrap">{m.text}</p>
             {m.werte && <Vorschlag m={m} werte={werte} kann={fragen[m.frage_id]?.von === ich.id && darf} onEntscheid={(e) => entscheide(m, e)} />}
           </div>
