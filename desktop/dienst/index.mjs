@@ -25,6 +25,7 @@ import { pruefErgebnis } from "./lib/pruefung.mjs";
 import { designPrompt, designAntwort } from "./lib/design.mjs";
 import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
 import { repoAnlegen, repoSichtbarkeit, repoIstPrivat } from "./lib/repo.mjs";
+import { liveAusfuehren, pruefPrompt, enthalten } from "./lib/live.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen } from "./lib/ki.mjs";
 import { rm } from "node:fs/promises";
 
@@ -428,16 +429,20 @@ async function lokalePruefung(ordner) {
 // ---------- Prüfung durch eine unabhängige Claude-Sitzung (nur lesen) ----------
 const PRUEF_ERLAUBT = ["Read", "Grep", "Glob", "Bash(git diff origin/main...HEAD)", "Bash(git diff --stat origin/main...HEAD)",
   "Bash(git diff origin/main)", "Bash(git diff --stat origin/main)", "Bash(git log --oneline -30)", "Bash(git status)"];
-async function claudePruefung(auftragId, ordner, prompt) {
+async function claudePruefung(auftragId, ordner, prompt, { nurLesen = false, grenzeMin = 0 } = {}) {
   const claude = findeClaude();
   if (!claude) throw new Error("Claude Code wurde auf diesem PC nicht gefunden.");
   const env = { ...process.env };
   for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE_CODE_USE_|CLAUDE_CODE_OAUTH)/i.test(k)) delete env[k];
-  const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", "opus", "--permission-mode", "default",
-    "--allowedTools", PRUEF_ERLAUBT.join(","), "--disallowedTools", ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", ...VERBOTEN].join(","),
-    "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", "--setting-sources", "user"];
+  // nurLesen (Prüfen per Knopf, Prüfung O2): wie der Chat – Datei-Werkzeuge nur im Prüf-Ordner (--restricted), keine Rückfragen, feste Lese-Sperren
+  const werkzeuge = nurLesen
+    ? ["--restricted", "--tools", "Read,Grep,Glob", "--disallowedTools", ["Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task", "mcp__*", ...VERBOTEN.filter((v) => v.startsWith("Read(")), ...LESE_SPERREN].join(","), "--permission-prompts", "none"]
+    : ["--allowedTools", PRUEF_ERLAUBT.join(","), "--disallowedTools", ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", ...VERBOTEN, ...LESE_SPERREN].join(",")];
+  const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", "opus", "--permission-mode", "default", ...werkzeuge,
+    "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", "--setting-sources", "user", "--settings", JSON.stringify({ disableAllHooks: true })];
+  const zeit = grenzeMin ? setTimeout(() => laeuft?.abort?.abort(), grenzeMin * 60 * 1000) : null;
   let ende = null; let kosten = 0;
-  await new Promise((fertig, fehl) => {
+  try { await new Promise((fertig, fehl) => {
     const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: ordner, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     laeuft.kind = kind;
     laeuft.abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
@@ -446,11 +451,11 @@ async function claudePruefung(auftragId, ordner, prompt) {
     rl.on("line", (zeile) => {
       let m; try { m = JSON.parse(zeile); } catch { return; }
       if (m.type === "result") { ende = m; kosten = Number(m.total_cost_usd || 0); }
-      offen.push((async () => { const lim = findeAboLimits(m); if (lim) await aboMelden(lim); await verarbeiteNachricht({ id: auftragId }, m, ordner); })().catch(() => {}));
+      offen.push((async () => { const lim = findeAboLimits(m); if (lim) await aboMelden(lim); if (auftragId != null) await verarbeiteNachricht({ id: auftragId }, m, ordner); })().catch(() => {}));
     });
     kind.on("error", (e) => fehl(e));
     kind.on("close", (code) => Promise.all(offen).then(() => (ende ? fertig() : fehl(new Error(`Prüfung beendet (${code}): ${fehlerText.slice(-300)}`)))));
-  });
+  }); } finally { if (zeit) clearTimeout(zeit); }
   return { text: ende?.result || "", kosten, ok: ende?.subtype === "success" };
 }
 
@@ -610,8 +615,12 @@ async function station(a) {
     const { data: jetzt } = await db.from("ws_auftraege").select("pruefung").eq("id", a.id).single();
     await db.from("ws_auftraege").update({ stand: "wissen", live_commit: liveCommit, geaendert: new Date().toISOString(),
       pruefung: { ...(jetzt?.pruefung || {}), feature: { ergebnis: "gruen", ki: pruefKi, befund: kuerzen(e.befund, 4000), commit: sha, zeit: new Date().toISOString(), pc: cfg.pc_name } } }).eq("id", a.id);
-    if (feature) await db.from("ws_features").update({ stand: "live", geaendert: new Date().toISOString() }).eq("id", feature.id);
-    await nachricht(a.id, "ergebnis", `Feature-Prüfung grün – live geschaltet (Pull Request #${a.pr_nummer}${liveCommit ? `, Stand ${liveCommit.slice(0, 7)}` : ""}). Steht in der Wissensdatenbank.\n${e.befund}`);
+    // Test & Live (Datenbank 0024): ist der Zweig „live“ eingerichtet, ist main nur die Testfassung – live schaltet der Admin per Knopf
+    const nurTest = !!projekt.live_zweig;
+    if (feature) await db.from("ws_features").update({ stand: nurTest ? "test" : "live", geaendert: new Date().toISOString() }).eq("id", feature.id);
+    await nachricht(a.id, "ergebnis", nurTest
+      ? `Feature-Prüfung grün – in die Testfassung übernommen (Pull Request #${a.pr_nummer}${liveCommit ? `, Stand ${liveCommit.slice(0, 7)}` : ""})${projekt.test_url ? `: ${projekt.test_url}` : ""}. Live schaltet der Admin unter „Zu erledigen“. Steht in der Wissensdatenbank.\n${e.befund}`
+      : `Feature-Prüfung grün – live geschaltet (Pull Request #${a.pr_nummer}${liveCommit ? `, Stand ${liveCommit.slice(0, 7)}` : ""}). Steht in der Wissensdatenbank.\n${e.befund}`);
     try { await git(repo, "worktree", "remove", "--force", ordner); } catch { /* wird beim nächsten Mal ersetzt */ }
   } catch (err) {
     const text = ohneGeheimnisse(err?.message || String(err));
@@ -932,10 +941,82 @@ async function repoArbeit() {
   return true;
 }
 
+// ---------- Test & Live und Prüfen per Knopf (Datenbank 0024) – nur die Werkstatt des Admins ----------
+const ghGrenze = (befehl, args, o = {}) => sh(befehl, args, { timeout: 120000, maxBuffer: 20 * 1024 * 1024, windowsHide: true,
+  env: { ...process.env, GH_PROMPT_DISABLED: "1", GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" }, ...o });
+async function liveArbeit() {
+  if (!cfg.admin) return false;
+  const { data, error } = await db.rpc("ws_live_nehmen", { p_pc: pcId });
+  if (error) { if (!/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", ohneGeheimnisse(error.message)); return false; }
+  const a = data?.[0]; if (!a) return false;
+  melde("status", a.art === "einrichten" ? "Test & Live wird eingerichtet" : a.art === "live" ? "Live schalten" : "Live zurücksetzen");
+  try {
+    const { data: projekt } = await db.from("ws_projekte").select("id, vorschau_domain").eq("id", a.projekt_id).single();
+    const r = await liveAusfuehren({ sh: ghGrenze, auftrag: a, mussLaufen: !!projekt?.vorschau_domain, melde: (t) => melde("status", t) });
+    // Feature-Stände: live ist ein Feature, wenn der Stand seines letzten live gegangenen Auftrags im neuen Live-Stand enthalten ist (Prüfung R1/Hinweis 2)
+    const liveF = []; const testF = [];
+    if (a.art !== "einrichten") {
+      const { data: gr } = await db.from("ws_gruppen").select("id, ws_bereiche!inner(projekt_id)").eq("ws_bereiche.projekt_id", a.projekt_id);
+      const gids = (gr || []).map((g) => g.id);
+      const { data: fs } = gids.length ? await db.from("ws_features").select("id, stand").in("gruppe_id", gids).in("stand", a.art === "live" ? ["test"] : ["test", "live"]) : { data: [] };
+      for (const f of fs || []) {
+        const { data: au } = await db.from("ws_auftraege").select("live_commit").eq("feature_id", f.id).not("live_commit", "is", null).order("id", { ascending: false }).limit(1);
+        const c = au?.[0]?.live_commit; if (!c) continue;
+        let drin = false; try { drin = await enthalten(ghGrenze, a.repo, c, r.commit); } catch { continue; }
+        if (drin && f.stand === "test") liveF.push(f.id);
+        if (!drin && f.stand === "live") testF.push(f.id);
+      }
+    }
+    const { error: e2 } = await db.rpc("ws_live_ergebnis", { p_pc: pcId, p_id: a.id, p_commit: r.commit, p_bezeichnung: r.bezeichnung, p_migrationen: r.migrationen,
+      p_live_features: liveF, p_test_features: testF, p_hinweis: r.hinweis || null });
+    if (e2) throw e2;
+  } catch (e) {
+    const t = kuerzen(ohneGeheimnisse(e?.stderr || e?.message || String(e)), 600);
+    await db.rpc("ws_live_ergebnis", { p_pc: pcId, p_id: a.id, p_commit: null, p_bezeichnung: null, p_migrationen: null, p_fehler: `Hat nicht geklappt: ${t}` }).catch(() => {});
+    melde("fehler", `Live (${a.projekt_id}): ${t}`);
+  }
+  melde("status", "Werkstatt bereit");
+  return true;
+}
+
+async function pruefArbeit() {
+  if (!cfg.admin) return false;
+  if ((await aboLage()) === "pause") return false;
+  const { data, error } = await db.rpc("ws_pruefung_nehmen", { p_pc: pcId });
+  if (error) { if (!/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", ohneGeheimnisse(error.message)); return false; }
+  const p = data?.[0]; if (!p) return false;
+  const abort = new AbortController();
+  laeuft = { id: `pruefung-${p.id}`, abort };
+  melde("status", `Unabhängige Prüfung #${p.id} (${p.umfang === "app" ? "ganze App" : p.umfang === "gruppe" ? "Gruppe" : "Feature"})`);
+  try {
+    const { data: projekt } = await db.from("ws_projekte").select("*").eq("id", p.projekt_id).single();
+    let feature = null; let gruppe = null; let features = [];
+    if (p.umfang === "feature") feature = (await db.from("ws_features").select("id, name, beschreibung, gruppe_id").eq("id", p.ziel).single()).data;
+    if (p.umfang === "gruppe") {
+      gruppe = (await db.from("ws_gruppen").select("id, name").eq("id", p.ziel).single()).data;
+      features = (await db.from("ws_features").select("id, name").eq("gruppe_id", p.ziel).eq("ausgebaut", false).limit(100)).data || [];
+    }
+    const ordner = await leseOrdner(projekt);   // nur lesen: main im eigenen Lese-Ordner, kein Code wird ausgeführt
+    const sha = await git(ordner, "rev-parse", "HEAD");
+    const lauf = await claudePruefung(null, ordner, pruefPrompt({ projekt, umfang: p.umfang, feature, gruppe, features }), { nurLesen: true, grenzeMin: 45 });
+    const e = pruefErgebnis(lauf.text);
+    const ergebnis = e.ergebnis === "gruen" ? "gruen" : e.ergebnis === "rot" ? "rot" : "fehler";
+    const { error: e2 } = await db.rpc("ws_pruefung_ergebnis", { p_pc: pcId, p_id: p.id, p_ergebnis: ergebnis, p_befund: kuerzen(ohneGeheimnisse(e.befund || lauf.text || ""), 8000), p_ki: "claude/opus", p_commit: sha, p_kosten: lauf.kosten || 0 });
+    if (e2) throw e2;
+  } catch (err) {
+    const t = kuerzen(ohneGeheimnisse(err?.message || String(err)), 600);
+    await db.rpc("ws_pruefung_ergebnis", { p_pc: pcId, p_id: p.id, p_ergebnis: "fehler", p_befund: `Prüfung nicht möglich: ${t}`, p_ki: null, p_commit: null }).catch(() => {});
+    melde("fehler", `Prüfung #${p.id}: ${t}`);
+  } finally { laeuft = null; }
+  melde("status", "Werkstatt bereit");
+  return true;
+}
+
 // ---------- Schleife ----------
 async function naechsterAuftrag() {
   if (laeuft || stopp) return;
   if (await repoArbeit()) return;
+  if (await liveArbeit()) return;
   // 0. Designer-Chat: kurz, eigene Fragen zuerst (nicht während der Abo-Pause)
   if ((await aboLage()) !== "pause" && ((await designChat()) || (await claudeChat()))) return;
   // 1. Fortsetzen: eigene Rückfragen, auf die geantwortet wurde
@@ -969,6 +1050,7 @@ async function naechsterAuftrag() {
       if ((await aboLage()) === "pause") return;
       return station(a);
     }
+    if (await pruefArbeit()) return;
   }
   // 2. Neue Aufträge (nur Gruppen ohne laufenden Auftrag, nur mit Werkstatt-Recht)
   const { data: offen } = await db.from("ws_auftraege").select("*").eq("stand", "wartet").order("id").limit(20);
