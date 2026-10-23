@@ -7,3 +7,4 @@ Nur erfundene Test-Konten.
 
 Ab Datenbank v11: `t12_abgleich.sql` (Projekt-Abgleich: nur eigener PC, nur Admin/Entwickler, nur erlaubte Pfade, nur lesen für Mitglieder).
 Ab Datenbank v12: `t13_ki.sql` (KI-Anbieter: nur Admin stellt ein, Bauen nur Claude, Kopplung nur eigener PC, Konzept im Vorschlag).
+Ab Datenbank v13: `t14_projekt_loeschen.sql` (Projekte archivieren/löschen: nur Admin, Name als Bestätigung, gesperrt bei laufendem Auftrag, anderes Projekt unberührt).

@@ -81,3 +81,5 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
   und werden als `docs/konzepte/<datum>-<feature>.md` mit dem Bau-PR abgelegt. Andere Anbieter laufen in einem leeren Ordner mit
   minimaler Umgebung und bekommen Doku und Dateiliste als Text; **Restrisiko:** ihre eingebauten Werkzeuge könnten technisch Dateien des
   PCs lesen – Antworten mit verdächtigem Inhalt werden verworfen. Code: `desktop/dienst/lib/ki.mjs`, Datenbank 0012, Seite „KI-Anbieter“.
+- **2026-10-23 15:34 – Projekte löschen:** Angelegte Projekte kann der Admin archivieren (umkehrbar) oder endgültig löschen (nur Daten in der
+  Codeschmiede, Bestätigung mit dem Projektnamen; GitHub-Repository und App bleiben).
