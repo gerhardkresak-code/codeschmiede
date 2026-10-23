@@ -39,7 +39,7 @@ const AUFGABEN = [
   ["doku", "Dokumentation & Handbuch", "wird genutzt, sobald Doku-Aufträge getrennt laufen (Etappe 4)"],
   ["texte", "Texte & Übersetzungen", "wird genutzt, sobald Text-Aufträge getrennt laufen (Etappe 4)"],
   ["bilder", "Bilder & Grafiken", "wird mit Etappe 5 (Marke, Logo) genutzt; nur Anbieter, die Bilder erzeugen können"],
-  ["bauen", "Bauen & Programmieren", "fest Claude – nie ein anderer Anbieter"],
+  ["bauen", "Bauen & Programmieren", "immer Claude – auf Wunsch ChatGPT als Ersatz, nur wenn Claudes Limit voll ist"],
 ];
 // Ohne Admin-Einstellung gilt nur Claude (Prüfung M5). VORSCHLAG = Entwurf 1.2 zum Übernehmen.
 const STANDARD = Object.fromEntries(["chat", "konzept", "design", "pruefung", "doku", "texte", "bilder", "bauen"].map((a) => [a, [{ anbieter: "claude", ...({ konzept: { modell: "opus" }, pruefung: { modell: "opus" }, texte: { modell: "haiku" } }[a] || {}) }]]));
@@ -90,6 +90,22 @@ function Zeile({ id, titel, hinweis, eintrag, admin, onSpeichern, anbieter = ANB
   // Prüfungen nur eingebaute Anbieter (eigene Programme laufen ohne Sandbox)
   const frei = Object.keys(anbieter).filter((a) => !reihe.some((e) => e.anbieter === a) && !(id === "pruefung" && !ANBIETER[a]));
   const speichern = async () => { setBusy(true); await onSpeichern(id, reihe, ab); setBusy(false); };
+  // Programmieren (Gerhard 2026-10-23 „Nur als Ersatz“): Claude fest, als zweiter Eintrag nur ChatGPT (Codex)
+  if (fest) {
+    const ersatz = reihe[1]?.anbieter === "chatgpt";
+    return (
+      <div className="border-t border-slate-100 dark:border-slate-800 p-3 grid gap-2 lg:grid-cols-[240px_minmax(0,1fr)_auto] items-start">
+        <div><div className="font-semibold text-sm flex items-center gap-1.5"><Lock className="w-3.5 h-3.5 text-slate-400" />{titel}</div>{hinweis && <div className="text-xs text-slate-500">{hinweis}</div>}</div>
+        <div className="flex flex-col gap-1.5 text-xs">
+          <span className="flex flex-wrap items-center gap-1.5"><span className="inline-flex rounded-full px-2.5 py-0.5 font-semibold border border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">1. Claude</span>
+            <label className="inline-flex items-center gap-1">Ersatz bei vollem Limit:
+              {admin ? <select className={sel} value={ersatz ? "chatgpt" : ""} onChange={(e) => setReihe(e.target.value ? [{ anbieter: "claude" }, { anbieter: "chatgpt" }] : [{ anbieter: "claude" }])}>
+                <option value="">keiner – warten</option><option value="chatgpt">ChatGPT (Codex)</option></select> : <b>{ersatz ? "ChatGPT (Codex)" : "keiner"}</b>}</label></span>
+          {ersatz && <span className="text-[11px] text-amber-700 dark:text-amber-300">ChatGPT programmiert nur, wenn Claudes Abo-Limit voll ist – auf Mac und Linux in der Betriebssystem-Sandbox (nur der Auftragsordner), unter Windows nicht. Commit und Pull Request macht die Werkstatt, die Prüfungen immer Claude.</span>}
+        </div>
+        <div className="flex items-center gap-2 text-xs">{admin && <button type="button" className={ghost} disabled={busy || !geaendert} onClick={speichern}>{busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}Speichern</button>}</div>
+      </div>);
+  }
   return (
     <div className="border-t border-slate-100 dark:border-slate-800 p-3 grid gap-2 lg:grid-cols-[240px_minmax(0,1fr)_auto] items-start">
       <div><div className="font-semibold text-sm flex items-center gap-1.5">{fest && <Lock className="w-3.5 h-3.5 text-slate-400" />}{titel}</div>{hinweis && <div className="text-xs text-slate-500">{hinweis}</div>}</div>

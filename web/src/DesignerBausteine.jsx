@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Search, Table2, Shapes, ListTree, ExternalLink, Plus, Loader2, Send, Calendar, Users, Trophy, Bell, ShieldCheck, Settings, Download, Check, CircleAlert, CircleCheck, Stamp } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Search, Table2, Shapes, ListTree, ExternalLink, Plus, Loader2, Send, Calendar, Users, Trophy, Bell, ShieldCheck, Settings, Download, Check, CircleAlert, CircleCheck, Stamp, Upload, RefreshCw, ArrowRight } from "lucide-react";
 import { supabase } from "./supabase";
 import { Logo, LogoZeichen, ZEICHEN, marke as markeAus } from "./Logo";
 
@@ -175,6 +175,77 @@ function Eingabe({ wert, muster, onWert, max, ...rest }) {
     onChange={(e) => { setT(e.target.value); if (muster.test(e.target.value)) onWert(e.target.value); }} />;
 }
 
+// Bestehendes Logo einlesen (Datenbank 0026, Entwurf „Logo, KI-Wahl und Einrichtung“ 1.0): Bild hochladen → die eigene Werkstatt lässt die KI
+// das Logo als bearbeitbares Vektor-Logo nachbauen → mit Klick in den Entwurf → wie jedes Design als Auftrag senden (dann überall in der App).
+const BILD_ARTEN = { "image/png": 1, "image/jpeg": 1, "image/webp": 1, "image/svg+xml": 1 };
+function LogoEinlesen({ projekt, bearbeitbar, toast, onUebernehmen }) {
+  const [liste, setListe] = useState([]); const [busy, setBusy] = useState(false); const [wunsch, setWunsch] = useState({}); const [bilder, setBilder] = useState({}); const geladen = useRef({});
+  // Liste ohne Bild (klein); Originalbilder nur einmal je Logo nachladen (Prüfung 0.8.6 O3)
+  const holen = async () => {
+    const { data } = await supabase.from("ws_marke_vorlagen").select("id, dateiname, stand, ergebnis, hinweis, ki, erstellt").eq("projekt_id", projekt.id).order("id", { ascending: false }).limit(3);
+    setListe(data || []);
+    const fehlt = (data || []).map((v) => v.id).filter((id) => !(id in geladen.current));
+    fehlt.forEach((id) => { geladen.current[id] = true; });
+    if (fehlt.length) { const { data: b } = await supabase.from("ws_marke_bilder").select("vorlage_id, bild").in("vorlage_id", fehlt); setBilder((alt) => ({ ...alt, ...Object.fromEntries((b || []).map((x) => [x.vorlage_id, x.bild])) })); }
+  };
+  useEffect(() => {
+    holen().catch(() => {});
+    const ch = supabase.channel(`marke-${projekt.id}-${Math.random()}`).on("postgres_changes", { event: "*", schema: "public", table: "ws_marke_vorlagen", filter: `projekt_id=eq.${projekt.id}` }, () => holen().catch(() => {})).subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [projekt.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const datei = (f) => {
+    if (!f) return;
+    if (!BILD_ARTEN[f.type]) { toast("Bitte PNG, JPG, WebP oder SVG wählen"); return; }
+    if (f.size > 2 * 1024 * 1024) { toast("Das Bild ist größer als 2 MB"); return; }
+    const r = new FileReader();
+    r.onload = async () => {
+      setBusy(true);
+      const { error } = await supabase.rpc("ws_marke_einlesen", { p_projekt: projekt.id, p_bild: String(r.result), p_dateiname: f.name.slice(0, 120) });
+      setBusy(false); toast(error ? fehler(error) : "Eingelesen – deine Werkstatt baut das Logo jetzt nach (ca. 1–2 Minuten)");
+    };
+    r.readAsDataURL(f);
+  };
+  const nochmal = async (v) => { const { error } = await supabase.rpc("ws_marke_nochmal", { p_id: v.id, p_wunsch: wunsch[v.id] || null }); toast(error ? fehler(error) : "Wird nochmal nachgebaut"); };
+  return (
+    <Abschnitt titel="Bestehendes Logo einlesen">
+      <label className={`flex flex-col items-center gap-1 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-3 text-center text-xs ${bearbeitbar ? "cursor-pointer hover:border-emerald-600" : "opacity-60"}`}
+        onDragOver={(e) => { if (bearbeitbar) e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); if (bearbeitbar) datei(e.dataTransfer.files?.[0]); }}>
+        {busy ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700" /> : <Upload className="w-5 h-5 text-emerald-700" />}
+        <b className="text-sm">Logo hierher ziehen oder auswählen</b><span className="text-slate-500">PNG, JPG, WebP oder SVG · bis 2 MB · das Original bleibt gespeichert</span>
+        <input id="marke-einlesen" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="sr-only" disabled={!bearbeitbar} onChange={(e) => { datei(e.target.files?.[0]); e.target.value = ""; }} />
+      </label>
+      {liste.map((v) => (
+        <div key={v.id} className="rounded-lg border border-slate-200 dark:border-slate-800 p-2 flex flex-col gap-2 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <img src={bilder[v.id] || undefined} alt={`Original ${v.dateiname || ""}`} className="w-12 h-12 object-contain rounded bg-white ring-1 ring-black/5" />
+            <ArrowRight className="w-4 h-4 text-slate-400" />
+            {v.ergebnis ? <LogoZeichen werte={{ zeichen: "eigen", vektor: v.ergebnis }} groesse={48} titel="Nachgebaut" />
+              : <span className="w-12 h-12 grid place-items-center rounded bg-slate-50 dark:bg-slate-950">{v.stand === "fehler" ? <CircleAlert className="w-5 h-5 text-amber-600" /> : <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />}</span>}
+            <span className="min-w-0 flex-1 text-slate-500 break-words">{v.dateiname || "Logo"} · {v.stand === "wartet" ? "wartet auf deine Werkstatt" : v.stand === "laeuft" ? "wird nachgebaut …" : v.stand === "fertig" ? `nachgebaut${v.ki ? ` von ${String(v.ki).split("/")[0]}` : ""}` : "nicht geklappt"}</span>
+          </div>
+          {v.hinweis && <p className="text-slate-600 dark:text-slate-300">{v.hinweis}</p>}
+          {["fertig", "fehler"].includes(v.stand) && bearbeitbar && <div className="flex flex-wrap gap-1.5 items-center">
+            {v.ergebnis && <button type="button" className={`${btn} h-8`} onClick={() => onUebernehmen(v.ergebnis)}><Check className="w-3.5 h-3.5" />In den Entwurf</button>}
+            <input aria-label="Wunsch zum Nachbauen" className={`${input} h-8 flex-1 min-w-[120px]`} placeholder="Wunsch, z. B. Schrift moderner" maxLength={500} value={wunsch[v.id] || ""} onChange={(e) => setWunsch({ ...wunsch, [v.id]: e.target.value })} />
+            <button type="button" className={`${ghost} h-8`} onClick={() => nochmal(v)}><RefreshCw className="w-3.5 h-3.5" />Nochmal</button></div>}
+        </div>))}
+    </Abschnitt>);
+}
+
+// Farben und Texte eines eingelesenen Logos ändern (alle Stellen einer Farbe auf einmal)
+function VektorBearbeiten({ vektor, dis, onAendern }) {
+  const farben = [...new Set(vektor.elemente.flatMap((e) => [e.fill, e.stroke]).filter((f) => f && f !== "none"))].slice(0, 8);
+  const ersetze = (alt, neu) => onAendern({ elemente: vektor.elemente.map((e) => ({ ...e, ...(e.fill === alt ? { fill: neu } : {}), ...(e.stroke === alt ? { stroke: neu } : {}) })) });
+  const texte = vektor.elemente.map((e, i) => [e, i]).filter(([e]) => e.t === "text");
+  return (
+    <Abschnitt titel="Eingelesenes Logo anpassen">
+      {farben.map((f) => <Feld key={f} label="Farbe"><input type="color" aria-label={`Farbe ${f}`} value={f} disabled={dis} onChange={(e) => ersetze(f, e.target.value.toLowerCase())} className="w-8 h-7 rounded border border-slate-300 dark:border-slate-700 bg-transparent" /></Feld>)}
+      {texte.map(([e, i]) => <Feld key={i} label="Text"><Eingabe className={`${input} w-32`} wert={e.text} disabled={dis} max={16} muster={/^[A-Za-z0-9ÄÖÜäöüß .&-]{1,16}$/}
+        onWert={(v) => onAendern({ elemente: vektor.elemente.map((x, j) => (j === i ? { ...x, text: v } : x)) })} /></Feld>)}
+      <p className="text-xs text-slate-500">Größere Änderungen per Chat rechts oder mit „Nochmal“ und einem Wunsch.</p>
+    </Abschnitt>);
+}
+
 export function MarkeModus({ w, aendere, bearbeitbar, projekt, ich, toast }) {
   const m = markeAus(w.marke); const dis = !bearbeitbar; const [busy, setBusy] = useState(false);
   const setze = (k, v) => aendere(["marke", k], v);
@@ -198,12 +269,14 @@ export function MarkeModus({ w, aendere, bearbeitbar, projekt, ich, toast }) {
     <>
       <section className={`${card} p-3 self-start`} aria-label="Einstellungen Marke">
         <Abschnitt titel="Zeichen">
-          <div className="grid grid-cols-3 gap-1.5">{ZEICHEN.map(([z, t]) => <button key={z} type="button" disabled={dis} aria-pressed={m.zeichen === z} onClick={() => setze("zeichen", z)} className={`rounded-lg border p-1.5 flex flex-col items-center gap-1 text-[11px] ${m.zeichen === z ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950" : "border-slate-200 dark:border-slate-800"}`}>
-            {z === "bild" ? <Stamp className="w-7 h-7 text-slate-400" /> : <LogoZeichen werte={{ ...m, zeichen: z }} groesse={30} />}{t}</button>)}</div>
+          <div className="grid grid-cols-3 gap-1.5">{ZEICHEN.map(([z, t]) => <button key={z} type="button" disabled={dis || (z === "eigen" && !m.vektor)} title={z === "eigen" && !m.vektor ? "Zuerst unten ein Logo einlesen" : undefined} aria-pressed={m.zeichen === z} onClick={() => setze("zeichen", z)} className={`rounded-lg border p-1.5 flex flex-col items-center gap-1 text-[11px] ${m.zeichen === z ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950" : "border-slate-200 dark:border-slate-800"}`}>
+            {z === "bild" ? <Stamp className="w-7 h-7 text-slate-400" /> : z === "eigen" && !m.vektor ? <Upload className="w-7 h-7 text-slate-400" /> : <LogoZeichen werte={{ ...m, zeichen: z }} groesse={30} />}{t}</button>)}</div>
           {[["farbe", "Hauptfarbe"], ["farbe2", "Zweitfarbe"]].map(([k, t]) => <Feld key={k} label={t}><span className="flex items-center gap-1.5"><input type="color" aria-label={t} value={m[k]} disabled={dis} onChange={(e) => setze(k, e.target.value)} className="w-8 h-7 rounded border border-slate-300 dark:border-slate-700 bg-transparent" /><input aria-label={`${t} Farbwert`} value={m[k]} disabled={dis} onChange={(e) => /^#[0-9a-fA-F]{6}$/.test(e.target.value) && setze(k, e.target.value.toLowerCase())} className={`${input} w-[84px] font-mono text-xs`} /></span></Feld>)}
           <Feld label="Kürzel (1–3)"><Eingabe className={`${input} w-24`} wert={m.kuerzel} disabled={dis} max={3} muster={/^[A-Za-z0-9ÄÖÜäöü]{1,3}$/} onWert={(v) => setze("kuerzel", v)} /></Feld>
           <Feld label="Ecken">{<select className={`${input} w-28`} value={m.form} disabled={dis} onChange={(e) => setze("form", e.target.value)}><option value="rund">Rund</option><option value="eckig">Eckig</option></select>}</Feld>
         </Abschnitt>
+        {m.zeichen === "eigen" && m.vektor && <VektorBearbeiten vektor={m.vektor} dis={dis} onAendern={(v) => setze("vektor", v)} />}
+        <LogoEinlesen projekt={projekt} bearbeitbar={bearbeitbar} toast={toast} onUebernehmen={(v) => { aendere(["marke"], { ...m, zeichen: "eigen", vektor: v }); toast("Eingelesenes Logo im Entwurf – speichern und als Auftrag senden, dann ändert es sich überall"); }} />
         <Abschnitt titel="Schriftzug">
           <Feld label="Name"><Eingabe className={`${input} w-40`} wert={m.name} disabled={dis} max={40} muster={/^[A-Za-z0-9ÄÖÜäöüß .&-]{1,40}$/} onWert={(v) => setze("name", v)} /></Feld>
           <Feld label="Stärke"><select className={`${input} w-28`} value={m.gewicht} disabled={dis} onChange={(e) => setze("gewicht", Number(e.target.value))}><option value={600}>Halbfett</option><option value={700}>Fett</option><option value={800}>Extra fett</option></select></Feld>

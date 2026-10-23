@@ -35,6 +35,24 @@ function Zeile({ ok, titel, text, children }) {
     </div>);
 }
 
+// Ein-Klick-Einrichtung (Entwurf „Logo, KI-Wahl und Einrichtung“ 1.0, 2026-10-23): die eigene Werkstatt installiert, öffnet die offizielle
+// Anmeldung und prüft (fester Katalog in desktop/dienst/lib/einrichten.mjs). Konten legt die Person selbst an – „Konto anlegen“ öffnet nur die Seite.
+const LAEUFT = ["wartet", "installieren", "anmelden", "pruefen", "bestaetigen"];
+function EinKlick({ k, titel, onLos, onBestaetigt, konto }) {
+  const laeuft = LAEUFT.includes(k?.schritt);
+  return (
+    <div className="flex flex-col gap-1.5">
+      {laeuft && <div role="status" className="text-xs flex items-center gap-1.5 text-blue-700 dark:text-blue-300"><Loader2 className="w-3.5 h-3.5 animate-spin" />{k.hinweis || "Wird eingerichtet …"}</div>}
+      {k?.einricht_code && laeuft && <div className="rounded-lg border border-amber-500 bg-amber-50 dark:bg-amber-950/40 p-2 text-xs">Code auf der Anmeldeseite eingeben: <b className="font-mono text-base tracking-widest select-all">{k.einricht_code}</b></div>}
+      {k?.schritt === "fehler" && <div className="text-xs text-red-700 dark:text-red-300">{k.hinweis}</div>}
+      <div className="flex flex-wrap gap-2">
+        {konto && <a className={ghost} href={konto} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-4 h-4" />Konto anlegen</a>}
+        {k?.schritt === "bestaetigen" ? <button type="button" className={btn} onClick={onBestaetigt}><Check className="w-4 h-4" />Ich bin angemeldet</button>
+          : <button type="button" className={btn} disabled={laeuft && k?.schritt !== "wartet"} onClick={onLos}>{laeuft ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{titel}</button>}
+      </div>
+    </div>);
+}
+
 /** Stand aller Prüfungen auf diesem PC (auch für die Statusleiste). */
 export function useEinrichtung(ich, d) {
   const [st, setSt] = useState(null);
@@ -50,7 +68,8 @@ export function useEinrichtung(ich, d) {
   }, [ich?.id]);
   useEffect(() => { pruefen(); const t = setInterval(pruefen, 5 * 60 * 1000); return () => clearInterval(t); }, [pruefen]);
   const entwickler = ich?.rolle === "admin" || (d?.mitglieder || []).some((m) => m.benutzer_id === ich?.id && m.rolle === "entwickler");
-  const pflicht = st?.desk && entwickler ? [st.werk.node, st.werk.git, st.werk.claude, st.werk.gh, st.werk.gh_angemeldet, st.laeuft] : [];
+  const claudeAbo = (st?.kopp || []).some((k) => k.anbieter === "claude" && k.gekoppelt && (st?.pcs || []).some((p) => p.id === k.pc_id));
+  const pflicht = st?.desk && entwickler ? [st.werk.node, st.werk.git, st.werk.claude, claudeAbo, st.werk.gh, st.werk.gh_angemeldet, st.laeuft] : [];
   const offen = pflicht.filter((x) => !x).length;
   return { st, pruefen, offen, fertig: !!st?.desk && offen === 0 };
 }
@@ -70,6 +89,16 @@ export default function Einrichtung({ ich, d, toast, onClose }) {
     if (error) toast(error.message); else { toast(a === "anmelden" ? "Anmeldung wird geöffnet …" : "Wird geprüft …"); setTimeout(neu, 6000); }
   };
   const w = st?.werk || {};
+  // Fortschritt live (Kopplungszeile des eigenen PCs)
+  useEffect(() => {
+    const ch = supabase.channel(`einr-${Math.random()}`).on("postgres_changes", { event: "*", schema: "public", table: "ws_ki_kopplung" }, () => pruefen()).subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [pruefen]);
+  const einrichten = async (anbieter) => {
+    if (!pc) { toast("Erst die Werkstatt einschalten (Schritt Werkstatt)"); return; }
+    const { error } = await supabase.from("ws_ki_kopplung").upsert({ pc_id: pc, benutzer_id: ich.id, anbieter, aktion: "einrichten", schritt: "wartet", schritt_zeit: new Date().toISOString(), einricht_code: null, hinweis: "Wartet auf deine Werkstatt …" }, { onConflict: "pc_id,anbieter" });
+    if (error) toast(error.message); else setTimeout(neu, 1500);
+  };
   const SCHRITTE = [
     { titel: "Willkommen", icon: Wrench, inhalt: (
       <div className="flex flex-col gap-3 text-sm">
@@ -92,15 +121,21 @@ export default function Einrichtung({ ich, d, toast, onClose }) {
       </div>) },
     { titel: "GitHub anmelden", icon: GitBranch, inhalt: (
       <div>
-        <Zeile ok={!!w.gh_angemeldet} titel="Mit GitHub angemeldet" text="Einmal im Terminal ausführen, „GitHub.com“ und „Login with a web browser“ wählen und im Browser bestätigen.">
-          <Befehl text={BEFEHL.ghLogin} toast={toast} /></Zeile>
+        <Zeile ok={!!w.gh_angemeldet} titel="Mit GitHub angemeldet" text="„Anmelden“ öffnet ein Fenster mit der GitHub-Anmeldung (Code im Browser bestätigen). Noch kein Konto? „Konto anlegen“ öffnet die Registrierung bei GitHub.">
+          <EinKlick k={ki("github")} titel="Anmelden" konto="https://github.com/signup" onLos={() => einrichten("github")} onBestaetigt={() => aktion("github", "bestaetigt")} />
+          <details className="text-xs text-slate-500"><summary>Von Hand im Terminal</summary><Befehl text={BEFEHL.ghLogin} toast={toast} /></details></Zeile>
+        {ich.rolle === "admin" && <Zeile ok={!!ki("cloudflare")?.gekoppelt} titel="Cloudflare (nur Admin)" text={ki("cloudflare")?.schritt === "fertig" ? ki("cloudflare")?.hinweis : "Für Testfassung, Live und eigene Adressen. „Anmelden“ installiert das Cloudflare-Werkzeug (falls nötig) und öffnet die Anmeldung im Browser."}>
+          <EinKlick k={ki("cloudflare")} titel="Anmelden" konto="https://dash.cloudflare.com/sign-up" onLos={() => einrichten("cloudflare")} onBestaetigt={() => aktion("cloudflare", "bestaetigt")} /></Zeile>}
       </div>) },
     { titel: "Claude", icon: Bot, inhalt: (
       <div>
         <Zeile ok={!!w.claude} titel="Claude Code installiert" text="Das offizielle Programm von Anthropic. Die Werkstatt baut damit – mit deinem Claude-Abo, ohne Kosten pro Aufruf.">
           <Befehl text={BEFEHL.claude} toast={toast} /><a className="text-xs text-emerald-700 dark:text-emerald-400 underline" href="https://docs.claude.com/en/docs/claude-code/setup" target="_blank" rel="noopener noreferrer">Anleitung von Anthropic</a></Zeile>
-        <Zeile ok={w.claude ? undefined : false} titel="Mit dem Claude-Abo anmelden" text="Einmal im Terminal „claude“ starten und „Claude account with subscription“ wählen. Danach das Terminal schließen.">
-          <Befehl text={BEFEHL.claudeLogin} toast={toast} /></Zeile>
+        {/* Bisher nie geprüft (Hinweis Gerhard 21:45) – jetzt echt über „claude auth status“ der eigenen Werkstatt */}
+        <Zeile ok={ki("claude") ? !!ki("claude").gekoppelt : w.claude ? undefined : false} titel="Mit dem Claude-Abo angemeldet"
+          text={ki("claude")?.hinweis && !LAEUFT.includes(ki("claude")?.schritt) ? ki("claude").hinweis : "„Mit Claude anmelden“ öffnet die offizielle Anmeldung im Browser – dort mit dem Konto deines Abos (z. B. Max) anmelden."}>
+          <EinKlick k={ki("claude")} titel="Mit Claude anmelden" onLos={() => einrichten("claude")} onBestaetigt={() => aktion("claude", "bestaetigt")} />
+          <button type="button" className={`${ghost} self-start h-8 text-xs`} onClick={() => aktion("claude", "pruefen")}><RefreshCw className="w-3.5 h-3.5" />Prüfen</button></Zeile>
       </div>) },
     { titel: "Werkstatt", icon: Power, inhalt: (
       <div className="text-sm">
@@ -125,7 +160,7 @@ export default function Einrichtung({ ich, d, toast, onClose }) {
     { titel: "Fertig", icon: Check, inhalt: (
       <div className="text-sm flex flex-col gap-2">
         <p>Den Assistenten findest du jederzeit unter <b>Verwaltung › Einrichtung</b> und oben in der Statusleiste.</p>
-        {st?.desk && <ul className="text-xs grid grid-cols-2 gap-1">{[["Node.js", w.node], ["Git", w.git], ["GitHub", w.gh && w.gh_angemeldet], ["Claude Code", w.claude], ["Werkstatt", st.laeuft], ["ChatGPT", ki("chatgpt")?.gekoppelt], ["Gemini", ki("gemini")?.gekoppelt]].map(([t, ok]) => <li key={t} className="flex items-center gap-1.5">{ok ? <CircleCheck className="w-3.5 h-3.5 text-green-600" /> : <CircleAlert className="w-3.5 h-3.5 text-amber-600" />}{t}</li>)}</ul>}
+        {st?.desk && <ul className="text-xs grid grid-cols-2 gap-1">{[["Node.js", w.node], ["Git", w.git], ["GitHub", w.gh && w.gh_angemeldet], ["Claude Code", w.claude], ["Claude-Abo", ki("claude")?.gekoppelt], ["Werkstatt", st.laeuft], ["ChatGPT", ki("chatgpt")?.gekoppelt], ["Gemini", ki("gemini")?.gekoppelt]].map(([t, ok]) => <li key={t} className="flex items-center gap-1.5">{ok ? <CircleCheck className="w-3.5 h-3.5 text-green-600" /> : <CircleAlert className="w-3.5 h-3.5 text-amber-600" />}{t}</li>)}</ul>}
       </div>) },
   ];
   const S = SCHRITTE[schritt]; const I = S.icon;

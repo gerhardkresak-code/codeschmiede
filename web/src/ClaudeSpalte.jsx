@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Send, Loader2, ClipboardList, Check, X, ChevronDown, ChevronUp, BookOpen } from "lucide-react";
 import { supabase } from "./supabase";
+import { useKiName } from "./kiName";
 import { Markdown } from "./Markdown";
 import { MitErwaehnung } from "./Bezuege";
 
@@ -16,6 +17,7 @@ export const KAPITEL = { ziel: "Ziel & Zielgruppe", funktionen: "Kernfunktionen"
 const ORT_NAME = (o) => o.startsWith("feature:") ? `Feature ${o.slice(8)}` : o.startsWith("gruppe:") ? `Gruppe ${o.slice(7)}` : { zentrale: "Auftrags-Zentrale", global: "Globale Einstellungen", designer: "App-Designer", vorschau: "Live-Vorschau", benutzer: "Benutzer & Rechte", verbrauch: "Verbrauch & Limits" }[o] || o;
 
 export default function ClaudeChat({ d, ich, ort = "konzept", kontext, toast, leer }) {
+  const ki = useKiName(d.projektId, ort === "konzept" ? "konzept" : "chat");
   const [liste, setListe] = useState([]);
   const [text, setText] = useState("");
   const [senden, setSenden] = useState(false);
@@ -46,12 +48,12 @@ export default function ClaudeChat({ d, ich, ort = "konzept", kontext, toast, le
   const IDEEN = liste.length ? ["Was fehlt noch im Konzept?", "Fasse das Konzept zusammen", "Welche Daten speichern wir?", "Datenschutz prüfen"]
     : ["Lass uns das Grundkonzept besprechen", "Stell mir die wichtigsten Fragen", "Was brauchen wir für die erste Version?"];
   return (
-    <div className="flex flex-col min-w-0 min-h-[520px] max-h-[calc(100vh-180px)]" aria-label="Chat mit Claude">
+    <div className="flex flex-col min-w-0 min-h-[520px] max-h-[calc(100vh-180px)]" aria-label={`Chat mit ${ki.name}`}>
       <div className="flex-1 overflow-y-auto p-3 space-y-2.5 text-sm" aria-live="polite">
         {!liste.length && (leer || <p className="text-slate-500">Hier besprecht ihr das Grundkonzept, bevor gebaut wird. Claude liest im Projekt nach, ändert aber nichts. Geklärte Entscheidungen bietet Claude zum Übernehmen ins Wissen an.</p>)}
         {liste.map((m) => m.frage_id ? (
           <div key={m.id} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-2.5 max-w-[92%]">
-            <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Bot className="w-3.5 h-3.5" />Claude · {zeit(m.erstellt)}</div>
+            <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Bot className="w-3.5 h-3.5" />{ki.von(m.ki)} · {zeit(m.erstellt)}</div>
             <Markdown text={m.text} klein />
             {m.vorschlag && <Vorschlag m={m} d={d} ich={ich} kann={fragen[m.frage_id]?.von === ich.id} toast={toast} />}
           </div>
@@ -61,7 +63,7 @@ export default function ClaudeChat({ d, ich, ort = "konzept", kontext, toast, le
             <Markdown text={m.text} klein />
             {m.stand === "fehler" && <p className="text-xs text-red-600 mt-1">Nicht beantwortet</p>}
           </div>))}
-        {wartet && <div className="flex items-center gap-2 text-slate-500">{werkstattAn ? <><Loader2 className="w-4 h-4 animate-spin" />Claude liest nach und antwortet … (über deine Werkstatt)</> : <span className="text-amber-700 dark:text-amber-400">Deine Werkstatt ist aus – sie startet mit dem Programm; dann antwortet Claude.</span>}</div>}
+        {wartet && <div className="flex items-center gap-2 text-slate-500">{werkstattAn ? <><Loader2 className="w-4 h-4 animate-spin" />{ki.name} liest nach und antwortet … (über deine Werkstatt)</> : <span className="text-amber-700 dark:text-amber-400">Deine Werkstatt ist aus – sie startet mit dem Programm; dann antwortet Claude.</span>}</div>}
         <div ref={ende} />
       </div>
       <form className="border-t border-slate-200 dark:border-slate-800 p-2.5 flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); schicke(); }}>

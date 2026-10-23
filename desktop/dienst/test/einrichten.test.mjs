@@ -11,7 +11,7 @@ test("Katalog: nur bekannte Programme, Befehle fest im Programm", () => {
   assert.equal(installText(katalogFuer("copilot")), "npm install -g @github/copilot");
   assert.match(installText(katalogFuer("cursor-agent"), "win32"), /^irm 'https:\/\/cursor\.com\/install\?win32=true' \| iex$/);
   assert.match(installText(katalogFuer("agy")), /^Installer-Seite öffnen: https:\/\//);
-  for (const k of Object.values(KATALOG)) { assert.ok(k.login.every((a) => /^[A-Za-z0-9-]+$/.test(a))); if (k.install.seite) assert.match(k.install.seite, /^https:\/\//); }
+  for (const k of Object.values(KATALOG)) { assert.ok(k.login.every((a) => /^[A-Za-z0-9.-]+$/.test(a))); if (k.install.seite) assert.match(k.install.seite, /^https:\/\//); }
 });
 
 test("Programm wird nur in absoluten Ordnern gesucht", () => {
@@ -40,4 +40,13 @@ test("Fenster und Browser nur mit sicheren Angaben", () => {
   assert.equal(imFenster({ befehl: "/x/agy" }, ["; rm"]), false);
   assert.equal(oeffneSeite("javascript:alert(1)"), false);
   assert.equal(oeffneSeite("https://x.ai/cli \" & calc"), false);
+});
+
+test("Claude-Anmeldung lesen: Abo, API-Schlüssel, nicht angemeldet", async () => {
+  const { claudeStatus } = await import("../lib/ki.mjs");
+  assert.deepEqual(claudeStatus('{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"max","email":"x@y"}'), { abo: true, plan: "Max", text: "Mit deinem Claude-Abo angemeldet (Max)" });
+  assert.equal(claudeStatus('{"loggedIn":true,"authMethod":"api_key"}').abo, false);
+  assert.match(claudeStatus('{"loggedIn":false,"authMethod":"none"}').text, /Nicht angemeldet/);
+  assert.match(claudeStatus("Unknown command auth").text, /nicht prüfbar/);
+  assert.ok(!JSON.stringify(claudeStatus('{"authMethod":"claude.ai","email":"geheim@x.at"}')).includes("geheim"));
 });

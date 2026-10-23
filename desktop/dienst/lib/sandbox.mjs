@@ -48,7 +48,7 @@ export function zuWeit(p, home = os.homedir()) {
 /** Alle Elternordner eines Pfads (für file-read-metadata: node löst Pfade stufenweise auf, Nachprüfung 0.8.0 M6). */
 function eltern(p) { const r = []; let d = path.dirname(p); while (d && d !== path.dirname(d)) { r.push(d); d = path.dirname(d); } return r; }
 
-export function macProfil({ home, frei = [], schreibbar = [], temp = os.tmpdir(), starten = frei }) {
+export function macProfil({ home, frei = [], schreibbar = [], temp = os.tmpdir(), starten = frei, startenDateien = [] }) {
   const h = sb(echt(home));
   // Temp: auch der Elternordner (/var/folders/xx/yyy mit C = Caches anderer Programme) ist gesperrt
   const t = sb(path.dirname(echt(temp)));
@@ -67,6 +67,10 @@ export function macProfil({ home, frei = [], schreibbar = [], temp = os.tmpdir()
     `(deny mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.securityd") (global-name "com.apple.security.agent"))`,
     "(deny process-exec)",
     ...starten.map((p) => `(allow process-exec (subpath "${sb(echt(p))}"))`),
+    ...startenDateien.filter((p) => existsSync(p)).map((p) => `(allow process-exec (literal "${sb(p)}"))`),
+    // Keine anderen Programme über das System starten lassen (open/osascript laufen sonst außerhalb der Sandbox, Prüfung 0.8.6 R2)
+    `(deny appleevent-send)`,
+    `(deny mach-lookup (global-name "com.apple.coreservices.launchservicesd") (global-name "com.apple.coreservices.appleevents") (global-name "com.apple.lsd.mapdb"))`,
     ...frei.map((p) => `(allow file-read* (subpath "${sb(echt(p))}"))`),
     ...schreibbar.map((p) => `(allow file-read* file-write* (subpath "${sb(echt(p))}"))`),
   ].join("\n");
@@ -159,7 +163,11 @@ function ordnerVon(pfad) {
  * - Codex: eigener CODEX_HOME im Arbeitsordner mit Kopie von auth.json (danach geprüft zurückkopiert, falls erneuert)
  * - Gemini: eigenes HOME im Arbeitsordner mit Kopie der Anmeldung, danach geprüft zurück
  */
-export async function sandboxLauf({ anbieter, prog, arbeit, env }) {
+// bauen = true: Ersatz beim Programmieren (Gerhard 2026-10-23 „Nur als Ersatz“). Codex arbeitet in einer KOPIE des Projekts innerhalb von „arbeit“
+// (ohne .git); zusätzlich dürfen nur einzelne harmlose Leseprogramme starten, keine Apple Events/LaunchServices (Prüfung 0.8.6 R1/R2).
+const BAU_PROGRAMME = ["/bin/ls", "/bin/cat", "/bin/pwd", "/bin/echo", "/bin/test", "/usr/bin/grep", "/usr/bin/find", "/usr/bin/head", "/usr/bin/tail", "/usr/bin/wc",
+  "/usr/bin/sort", "/usr/bin/uniq", "/usr/bin/diff", "/usr/bin/sed", "/usr/bin/awk", "/usr/bin/tr", "/usr/bin/cut", "/usr/bin/basename", "/usr/bin/dirname", "/usr/bin/xargs", "/usr/bin/file"];
+export async function sandboxLauf({ anbieter, prog, arbeit, env, bauen = false }) {
   const art = sandboxArt();
   if (!art) return null;
   const home = os.homedir();
@@ -174,7 +182,8 @@ export async function sandboxLauf({ anbieter, prog, arbeit, env }) {
   // Zertifikate (Firmen-Proxy) nur als einzelne Datei freigeben
   const zert = [process.env.NODE_EXTRA_CA_CERTS, process.env.SSL_CERT_FILE].filter((p) => p && existsSync(p)).map(echt);
   const frei = [...new Set([progOrdner, nodeOrdner, ordnerVon(start.befehl)].filter(Boolean))];
-  if ([...frei, arbeit].some((p) => zuWeit(p, home) || p === "/") || frei.some((p) => zuWeit(p, os.tmpdir()))) return null;   // Prüfung A2: lieber keine Sandbox als eine offene
+  if ([...frei, arbeit].some((p) => zuWeit(p, home) || p === "/") || frei.some((p) => zuWeit(p, os.tmpdir()))) return null;
+  const schreib = [arbeit];   // Prüfung A2: lieber keine Sandbox als eine offene
   const kiHome = path.join(arbeit, "home"); await mkdir(kiHome, { recursive: true });
   const kiTemp = path.join(arbeit, "tmp"); await mkdir(kiTemp, { recursive: true });
   const nachher = [];
@@ -214,9 +223,11 @@ export async function sandboxLauf({ anbieter, prog, arbeit, env }) {
     } catch { /* ohne Einstellungen */ }
   }
   if (art === "macos") {
-    const profil = macProfil({ home, frei: [...frei, ...zert], schreibbar: [arbeit], temp: os.tmpdir(), starten: frei });
+    // Beim Bauen nicht ganze Ordner wie /usr/local starten lassen: nur den Codex-Ordner und einzelne Programme (Prüfung 0.8.6 Hinweis)
+    const profil = macProfil({ home, frei: [...frei, ...zert], schreibbar: schreib, temp: os.tmpdir(), starten: bauen ? (progOrdner.split(path.sep).includes("node_modules") ? [progOrdner] : []) : frei,
+      startenDateien: bauen ? [...BAU_PROGRAMME, echt(process.execPath), start.befehl] : [] });
     return { befehl: "/usr/bin/sandbox-exec", vorne: ["-p", profil, start.befehl, ...start.vorne], env: neueEnv, nachher, art };
   }
-  const args = bwrapArgs({ frei: [...frei, ...zert], schreibbar: [arbeit], arbeit, home: kiHome });
+  const args = bwrapArgs({ frei: [...frei, ...zert], schreibbar: schreib, arbeit, home: kiHome });
   return { befehl: imPfad("bwrap"), vorne: [...args, "--", start.befehl, ...start.vorne], env: neueEnv, nachher, art };
 }
