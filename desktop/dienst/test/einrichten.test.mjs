@@ -5,7 +5,7 @@ import { KATALOG, katalogFuer, installText, findeKatalogProgramm, anmeldeDaten, 
 
 test("Katalog: nur bekannte Programme, Befehle fest im Programm", () => {
   assert.equal(katalogFuer("cursor-agent").id, "cursor-agent");
-  assert.equal(katalogFuer("agent").id, "cursor-agent");
+  assert.equal(katalogFuer("agent"), null);
   assert.equal(katalogFuer("codex").name, "ChatGPT (Codex)");
   assert.equal(katalogFuer("rm"), null); assert.equal(katalogFuer("__proto__"), null); assert.equal(katalogFuer(undefined), null);
   assert.equal(installText(katalogFuer("copilot")), "npm install -g @github/copilot");
@@ -23,6 +23,16 @@ test("Programm wird nur in absoluten Ordnern gesucht", () => {
 test("Anmelde-Code und Seite aus der Ausgabe", () => {
   assert.deepEqual(anmeldeDaten("! First copy your one-time code: AB12-CD34\nThen visit https://github.com/login/device"), { code: "AB12-CD34", url: "https://github.com/login/device" });
   assert.deepEqual(anmeldeDaten("Visit https://evil.example/login now"), { code: null, url: null });
+  assert.equal(anmeldeDaten("AB12-CD34 https://evilcursor.com/x https://phish-openai.com/d").url, null);
+  assert.equal(anmeldeDaten("https://github.com/evil https://user@cursor.com/x").url, null);
+  assert.equal(anmeldeDaten("open https://www.cursor.com/loginDeepControl?x=1").url, "https://www.cursor.com/loginDeepControl?x=1");
+});
+
+test("Umgebung ohne Tokens", async () => {
+  const { einrichtUmgebung } = await import("../lib/einrichten.mjs");
+  const e = einrichtUmgebung({ PATH: "/usr/bin", GH_TOKEN: "x", SUPABASE_KEY: "y", npm_config_prefix: "/p", npm_config__authToken: "z", GEMINI_API_KEY: "k" });
+  assert.equal(e.npm_config_prefix, "/p");
+  for (const k of ["GH_TOKEN", "SUPABASE_KEY", "npm_config__authToken", "GEMINI_API_KEY"]) assert.ok(!(k in e), k);
 });
 
 test("Fenster und Browser nur mit sicheren Angaben", () => {

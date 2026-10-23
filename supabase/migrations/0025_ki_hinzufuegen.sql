@@ -11,5 +11,21 @@ alter table public.ws_ki_kopplung add column if not exists schritt text
   check (schritt in ('wartet','installieren','anmelden','bestaetigen','pruefen','fertig','fehler'));
 alter table public.ws_ki_kopplung add column if not exists einricht_code text check (einricht_code is null or einricht_code ~ '^[A-Z0-9]{4}-[A-Z0-9]{4}$');
 alter table public.ws_ki_kopplung add column if not exists eingerichtet timestamptz;
+alter table public.ws_ki_kopplung add column if not exists schritt_zeit timestamptz;   -- wann der letzte Schritt gemeldet wurde (Anzeige „hängt“)
+
+-- Ändert der Admin einen eigenen Anbieter, verfallen offene „Hinzufügen“-Aufträge dafür (Prüfung R1; die Zulassung verfällt schon über 0018)
+create or replace function public.ws_ki_anbieter_geaendert() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.fp is distinct from old.fp or new.programm is distinct from old.programm then
+    update public.ws_ki_kopplung set aktion = null, schritt = case when schritt is null or schritt = 'fertig' then schritt else 'fehler' end,
+           einricht_code = null, hinweis = case when schritt is null or schritt = 'fertig' then hinweis else 'Der Anbieter wurde geändert – bitte nochmal „Hinzufügen“.' end
+     where anbieter = new.id and (aktion is not null or schritt in ('wartet','installieren','anmelden','bestaetigen','pruefen'));
+  end if;
+  return new;
+end $$;
+drop trigger if exists ws_ki_anbieter_geaendert on public.ws_ki_anbieter;
+create trigger ws_ki_anbieter_geaendert after update on public.ws_ki_anbieter for each row execute function public.ws_ki_anbieter_geaendert();
+revoke execute on function public.ws_ki_anbieter_geaendert() from public, anon, authenticated;
 
 commit;

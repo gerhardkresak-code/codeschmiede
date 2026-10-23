@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Cpu, Loader2, Save, ArrowUp, ArrowDown, Plus, X, RefreshCw, Lock, CircleCheck, CircleAlert, Copy, History, PlugZap, Globe, SquareTerminal } from "lucide-react";
+import { Cpu, Loader2, Save, ArrowUp, ArrowDown, Plus, X, RefreshCw, Lock, CircleCheck, CircleAlert, Copy, History, PlugZap, Globe, SquareTerminal, Check } from "lucide-react";
 import { supabase } from "./supabase";
 
 // KI-Anbieter (Entwurf 1.2, freigegeben von Gerhard 2026-10-23 15:00): Wer übernimmt was – Anbieter und Modell je Aufgabe.
@@ -192,22 +192,22 @@ export function KiProtokoll() {
 const EIN_KLICK = {
   codex: { art: "browser", install: "npm install -g @openai/codex" }, gemini: { art: "fenster", install: "npm install -g @google/gemini-cli" },
   copilot: { art: "browser", install: "npm install -g @github/copilot" }, opencode: { art: "fenster", install: "npm install -g opencode-ai" },
-  "cursor-agent": { art: "browser", install: "offizielle Installation von cursor.com" }, agent: { art: "browser", install: "offizielle Installation von cursor.com" },
+  "cursor-agent": { art: "browser", install: "offizielle Installation von cursor.com" },
   grok: { art: "browser", install: "Installer-Seite von x.ai öffnet sich" }, agy: { art: "fenster", install: "Installer-Seite von Google öffnet sich" },
   vibe: { art: "fenster", install: "Installer-Seite von Mistral öffnet sich" },
 };
 const SCHRITTE = [["installieren", "Programm installieren"], ["anmelden", "Beim Anbieter anmelden"], ["pruefen", "Kopplung prüfen"]];
-function Einrichten({ k, art }) {
+function Einrichten({ k, art, kopiere }) {
   const idx = { wartet: -1, installieren: 0, anmelden: 1, bestaetigen: 1, pruefen: 2 }[k.schritt] ?? -1;
   return (
     <div className="flex flex-col gap-1.5" role="status">
       <ol className="flex flex-col gap-1">
         {SCHRITTE.map(([id, t], i) => <li key={id} className="flex items-center gap-1.5">
-          <span className={`w-4 h-4 rounded-full grid place-items-center text-[10px] font-bold ${i < idx ? "bg-emerald-700 text-white" : i === idx ? "border border-blue-600 text-blue-600" : "border border-slate-300 dark:border-slate-700 text-slate-400"}`}>{i < idx ? "✓" : i + 1}</span>
+          <span className={`w-4 h-4 rounded-full grid place-items-center text-[10px] font-bold ${i < idx ? "bg-emerald-700 text-white" : i === idx ? "border border-blue-600 text-blue-600" : "border border-slate-300 dark:border-slate-700 text-slate-400"}`}>{i < idx ? <Check className="w-3 h-3" /> : i + 1}</span>
           <span className={i === idx ? "font-semibold" : "text-slate-500"}>{i === 1 && art === "fenster" ? "Im Fenster anmelden" : i === 1 ? "Im Browser anmelden" : t}</span>
           {i === idx && <Loader2 className="w-3 h-3 animate-spin text-blue-600" />}</li>)}
       </ol>
-      {k.einricht_code && <div className="rounded-lg border border-amber-500 bg-amber-50 dark:bg-amber-950/40 p-2">Code auf der Anmeldeseite eingeben:<div className="font-mono text-lg font-bold tracking-widest select-all">{k.einricht_code}</div></div>}
+      {k.einricht_code && <div className="rounded-lg border border-amber-500 bg-amber-50 dark:bg-amber-950/40 p-2">Code auf der Anmeldeseite eingeben:<div className="flex items-center gap-2"><span className="font-mono text-lg font-bold tracking-widest select-all">{k.einricht_code}</span><button type="button" className={ghost} onClick={() => kopiere(k.einricht_code)}><Copy className="w-3.5 h-3.5" />Kopieren</button></div></div>}
     </div>);
 }
 
@@ -254,9 +254,13 @@ export default function KiAnbieter({ d, ich, toast }) {
   };
   // Hinzufügen: eigene Werkstatt installiert, öffnet die Anmeldung und prüft; bei eigenen Anbietern gilt der Klick als Zulassung auf diesem PC
   const hinzufuegen = async (pc, anbieter, a) => {
-    const { error } = await supabase.from("ws_ki_kopplung").upsert({ pc_id: pc, benutzer_id: ich.id, anbieter, aktion: "einrichten", schritt: "wartet", einricht_code: null,
+    const { error } = await supabase.from("ws_ki_kopplung").upsert({ pc_id: pc, benutzer_id: ich.id, anbieter, aktion: "einrichten", schritt: "wartet", schritt_zeit: new Date().toISOString(), einricht_code: null,
       hinweis: "Wartet auf deine Werkstatt (das Codeschmiede-Programm muss laufen) …", ...(a.eigen ? { zugelassen: true, zugelassen_fp: a.eigen.fp } : {}) }, { onConflict: "pc_id,anbieter" });
     if (error) toast(fehler(error)); else { toast(`${a.name} wird eingerichtet`); setTick((t) => t + 1); }
+  };
+  const abbrechen = async (pc, anbieter) => {
+    const { error } = await supabase.from("ws_ki_kopplung").upsert({ pc_id: pc, benutzer_id: ich.id, anbieter, aktion: null, schritt: "fehler", einricht_code: null, hinweis: "Abgebrochen – bei Bedarf nochmal „Hinzufügen“." }, { onConflict: "pc_id,anbieter" });
+    if (error) toast(fehler(error)); else setTick((t) => t + 1);
   };
   const kopiere = (t) => { try { navigator.clipboard.writeText(t); toast("Kopiert"); } catch { /* Auswahl bleibt möglich */ } };
   const eigene = kopplung.filter((k) => k.benutzer_id === ich.id);
@@ -309,12 +313,17 @@ export default function KiAnbieter({ d, ich, toast }) {
                       {k?.hinweis && <p className="text-slate-600 dark:text-slate-300 break-words">{k.hinweis}</p>}
                       {(() => { const prog = a.eigen ? a.programm : key === "chatgpt" ? "codex" : key; const ek = EIN_KLICK[prog]; const laeuft = ["wartet", "installieren", "anmelden", "pruefen", "bestaetigen"].includes(k?.schritt);
                         if (!ek || key === "claude") return null;
-                        if (laeuft) return <><Einrichten k={k} art={ek.art} />{k.schritt === "bestaetigen" && <button type="button" className={`${btn} self-start`} onClick={() => aktion(pc.id, key, "bestaetigt")}><CircleCheck className="w-4 h-4" />Ich bin angemeldet</button>}</>;
+                        // hängt? (Werkstatt aus, alt oder abgestürzt): nach 2 bzw. 12 Minuten „Nochmal“/„Abbrechen“ anbieten (Prüfung O3)
+                        const alt = laeuft && Date.now() - Date.parse(k.schritt_zeit || k.geprueft || 0) > (k.schritt === "wartet" ? 2 : 12) * 60 * 1000;
+                        if (laeuft) return <><Einrichten k={k} art={ek.art} kopiere={kopiere} />
+                          {k.schritt === "bestaetigen" && <button type="button" className={`${btn} self-start`} onClick={() => aktion(pc.id, key, "bestaetigt")}><CircleCheck className="w-4 h-4" />Ich bin angemeldet</button>}
+                          {alt && <div className="flex flex-wrap gap-1.5 items-center"><span className="text-amber-700 dark:text-amber-300">{k.schritt === "wartet" ? "Deine Werkstatt meldet sich nicht – läuft das Codeschmiede-Programm (ab 0.8.5)?" : "Das dauert ungewöhnlich lange."}</span>
+                            <button type="button" className={ghost} onClick={() => hinzufuegen(pc.id, key, a)}><RefreshCw className="w-3.5 h-3.5" />Nochmal</button><button type="button" className={ghost} onClick={() => abbrechen(pc.id, key)}><X className="w-3.5 h-3.5" />Abbrechen</button></div>}</>;
                         if (k?.gekoppelt && k?.eingerichtet) return null;
                         return <div className="flex flex-col gap-1.5">
                           <span className="inline-flex items-center gap-1 text-slate-500">{ek.art === "fenster" ? <SquareTerminal className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}{ek.art === "fenster" ? "Anmeldung im Fenster" : "Anmeldung im Browser"} · falls nötig: {ek.install}</span>
                           <button type="button" className={`${btn} self-start`} onClick={() => hinzufuegen(pc.id, key, a)}><PlugZap className="w-4 h-4" />{k?.gekoppelt ? "Neu anmelden" : "Hinzufügen"}</button>
-                          {a.eigen && <span className="text-slate-500">Mit dem Klick lässt du {a.name} auf diesem PC zu.</span>}
+                          {a.eigen && <span className="text-slate-500">Mit dem Klick lässt du {a.name} auf diesem PC zu – die Werkstatt startet es dann mit <span className="font-mono break-all">{a.programm} {(a.eigen.argumente || []).join(" ")}</span> im leeren Ordner.</span>}
                         </div>; })()}
                       {!k?.gekoppelt && key !== "claude" && !EIN_KLICK[a.eigen ? a.programm : key === "chatgpt" ? "codex" : key] && <div className="flex flex-col gap-1">
                         {a.install && <><span className="text-slate-500">1. Installieren (einmal, im Terminal):</span>
