@@ -173,3 +173,11 @@ test("Designer nach App-Art: Art und Beispiel-Schema im Prompt", () => {
   const p = designPrompt({ projektName: "Torjäger", projektId: "torjaeger", appArt: "spiel", frage: "[Beispiele] Passe die Beispiele an", werte: {} });
   assert.match(p, /Art der App: Spiel/); assert.match(p, /Beispiele der Vorschau/); assert.match(p, /spiel \(nur App-Art Spiel\)/);
 });
+
+test("Design-Chat: Umdesign-Fragen bekommen eigene Anleitung", async () => {
+  const { designPrompt } = await import("../lib/design.mjs");
+  const p = designPrompt({ projektName: "TTG", frage: "[Umdesign Symbol Calendar] Stand: {} Wunsch: mit Häkchen", werte: {} });
+  assert.match(p, /UMDESIGN: \{"neu":"CalendarCheck"\}/); assert.match(p, /Symbol „Calendar“/); assert.ok(!/VORSCHLAG: \{"farben"/.test(p));
+  const b = designPrompt({ projektName: "TTG", frage: "[Umdesign Baustein ui-alert] Wunsch: auffälliger", werte: {} });
+  assert.match(b, /einstellungen/); assert.match(b, /Grundbaustein „ui-alert“/);
+});
