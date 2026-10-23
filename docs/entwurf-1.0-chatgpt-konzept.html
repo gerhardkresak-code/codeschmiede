@@ -1,0 +1,196 @@
+<title>Codeschmiede Konzeptphase</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: links Ablauf & Richtlinie, rechts klickbares Programm-Modell (Chat → Konzept-Karte → Auftrag) */
+:root{
+  --bg:#f6f8f7; --flaeche:#ffffff; --text:#0f1a16; --leise:#5b6b65; --rand:#dfe6e3;
+  --gruen:#047857; --gruen-hell:#ecfdf5; --gruen-rand:#a7f3d0; --menue:#0c1512; --menue-text:#cbd5d1;
+  --orange:#ea580c; --orange-hell:#fff7ed; --amber:#b45309; --amber-hell:#fffbeb; --rot:#dc2626;
+  --f-titel:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif; --f-text:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0a0f0d; --flaeche:#111a17; --text:#e8efec; --leise:#94a59e; --rand:#22302b;
+  --gruen:#34d399; --gruen-hell:#06261b; --gruen-rand:#14532d; --menue:#050807; --menue-text:#b6c3be;
+  --orange:#fb923c; --orange-hell:#2a1407; --amber:#fbbf24; --amber-hell:#271b05; --rot:#f87171; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a0f0d; --flaeche:#111a17; --text:#e8efec; --leise:#94a59e; --rand:#22302b;
+  --gruen:#34d399; --gruen-hell:#06261b; --gruen-rand:#14532d; --menue:#050807; --menue-text:#b6c3be;
+  --orange:#fb923c; --orange-hell:#2a1407; --amber:#fbbf24; --amber-hell:#271b05; --rot:#f87171; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--f-text);font-size:15px;line-height:1.5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--f-titel);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:30px} h2{font-size:21px} h3{font-size:16px}
+p{margin:0} .leise{color:var(--leise)} .klein{font-size:13px}
+.etikett{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gruen);font-weight:700}
+.karte{background:var(--flaeche);border:1px solid var(--rand);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.raster{display:grid;gap:20px;grid-template-columns:minmax(0,1fr)}
+@media(min-width:960px){.raster{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-top:1px solid var(--rand);vertical-align:top}
+th{font-size:12px;color:var(--leise);font-weight:600;border-top:0}
+.tab-wrap{overflow-x:auto}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.p-gpt{background:var(--amber-hell);color:var(--amber)} .p-cl{background:var(--gruen-hell);color:var(--gruen)}
+.punkt{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+button{font:inherit;cursor:pointer}
+.btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-radius:12px;border:0;background:var(--gruen);color:#fff;font-family:var(--f-titel);font-weight:700;letter-spacing:.02em}
+:root[data-theme="dark"] .btn{color:#03140d} @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn{color:#03140d}}
+.ghost{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 12px;border-radius:12px;border:1px solid var(--rand);background:transparent;color:var(--text);font-weight:600;font-size:14px}
+button:focus-visible{outline:3px solid var(--orange);outline-offset:2px}
+/* Programm-Modell */
+.app{border:1px solid var(--rand);border-radius:16px;overflow:hidden;background:var(--flaeche);display:grid;grid-template-columns:minmax(0,1fr)}
+@media(min-width:620px){.app{grid-template-columns:170px minmax(0,1fr)}}
+.nav{background:var(--menue);color:var(--menue-text);padding:14px 10px;display:none;flex-direction:column;gap:4px;font-size:13px}
+@media(min-width:620px){.nav{display:flex}}
+.nav b{color:#fff;font-family:var(--f-titel);font-size:16px;margin:0 6px 10px}
+.nav span{padding:6px 8px;border-radius:8px} .nav .an{background:rgba(52,211,153,.15);color:#fff;font-weight:600}
+.haupt{display:flex;flex-direction:column;min-width:0}
+.leiste{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--rand);font-size:12px}
+.leiste .titel{font-family:var(--f-titel);font-weight:700;font-size:15px;margin-right:auto}
+.limit{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rand);border-radius:999px;padding:3px 10px}
+.balken{width:46px;height:6px;border-radius:9px;background:var(--rand);overflow:hidden} .balken i{display:block;height:100%;background:var(--gruen)}
+.chat{padding:14px;display:flex;flex-direction:column;gap:12px;min-height:420px}
+.bubble{max-width:86%;border-radius:14px;padding:10px 12px;font-size:14px}
+.ich{align-self:flex-end;background:var(--gruen);color:#fff}
+:root[data-theme="dark"] .ich{color:#03140d} @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .ich{color:#03140d}}
+.ki{align-self:flex-start;background:var(--bg);border:1px solid var(--rand)}
+.ki .wer{font-size:11px;color:var(--leise);font-weight:600;margin-bottom:2px}
+.konzept{border:2px solid var(--gruen-rand);background:var(--gruen-hell);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.konzept dl{margin:0;display:grid;grid-template-columns:120px minmax(0,1fr);gap:6px 12px;font-size:13px}
+.konzept dt{color:var(--leise);font-weight:600} .konzept dd{margin:0}
+.reihe{display:flex;flex-wrap:wrap;gap:8px}
+.eingabe{display:flex;gap:8px;padding:12px;border-top:1px solid var(--rand)}
+.eingabe input{flex:1;min-width:0;border:1px solid var(--rand);background:var(--bg);color:var(--text);border-radius:10px;padding:8px 10px;font:inherit}
+.auftrag{border:1px solid var(--rand);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.schritte{display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
+@media(min-width:720px){.schritte{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.schritt{border:1px solid var(--rand);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.schritt.markiert{border:2px solid var(--orange);background:var(--orange-hell)}
+.mono{font-family:var(--f-mono);font-size:12px}
+.frage{border-left:4px solid var(--orange);padding:8px 12px;background:var(--orange-hell);border-radius:0 10px 10px 0;font-size:14px}
+.demo{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}
+@media (prefers-reduced-motion: no-preference){.neu{animation:auf .25s ease-out}@keyframes auf{from{transform:translateY(4px)}to{transform:none}}}
+</style>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:6px">
+    <span class="etikett">Entwurf 1.0 · Codeschmiede · 23.10.2026</span>
+    <h1>ChatGPT für die Konzeptphase, Claude fürs Bauen</h1>
+    <p class="leise" style="max-width:70ch">Klären, Ausloten und Konzepte laufen über dein ChatGPT-Abo. Steht das Konzept, gibst du es mit einem Klick frei und Claude baut. Im Chat sieht man nicht, wer antwortet. Im Protokoll steht es.</p>
+  </header>
+
+  <div class="raster">
+    <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+      <section class="karte" aria-labelledby="r-t">
+        <h2 id="r-t">Richtlinie: wer macht was</h2>
+        <div class="tab-wrap"><table>
+          <thead><tr><th>Arbeit</th><th>Wer</th><th>Wenn dessen Limit voll ist</th></tr></thead>
+          <tbody>
+            <tr><td>Fragen, Erklären, Ideen ausloten (Chat-Spalte überall)</td><td><span class="pill p-gpt"><i class="punkt"></i>ChatGPT</span></td><td>Claude</td></tr>
+            <tr><td>Konzept erarbeiten, Rückfragen vor dem Bauen, Konzept-Karte</td><td><span class="pill p-gpt"><i class="punkt"></i>ChatGPT</span></td><td>Claude</td></tr>
+            <tr><td>Design-Chat im App-Designer (Werte vorschlagen)</td><td><span class="pill p-gpt"><i class="punkt"></i>ChatGPT</span></td><td>Claude</td></tr>
+            <tr><td>Bauen, Programmieren, Datenbank, Nacharbeit</td><td><span class="pill p-cl"><i class="punkt"></i>Claude</span></td><td>warten <span class="leise klein">(siehe Frage 2)</span></td></tr>
+            <tr><td>Rückfragen der Werkstatt während des Bauens</td><td><span class="pill p-cl"><i class="punkt"></i>Claude</span></td><td>warten</td></tr>
+            <tr><td>Unabhängige Sicherheits- und Feature-Prüfung</td><td><span class="pill p-gpt"><i class="punkt"></i>ChatGPT</span> <span class="leise klein">Vorschlag</span></td><td>Claude</td></tr>
+          </tbody></table></div>
+        <p class="klein leise">ChatGPT liest das Projekt nur (Stand von main, keine Änderungen, keine Befehle) und hält sich an dieselbe <span class="mono">AGENTS.md</span>. Codex liest diese Datei von sich aus.</p>
+      </section>
+
+      <section class="karte" aria-labelledby="w-t">
+        <h2 id="w-t">So kommt das Konzept zu Claude</h2>
+        <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px">
+          <li>Du besprichst die Idee im Chat. ChatGPT fragt nach, bis alles geklärt ist (deine Regel: erst fragen, dann bauen).</li>
+          <li>ChatGPT legt eine <b>Konzept-Karte</b> vor: Ziel, Umfang, Entscheidungen, offene Punkte, Abnahme-Kriterien, betroffene Gruppe und Feature.</li>
+          <li>Du klickst <b>„Konzept freigeben &amp; bauen“</b>. Daraus wird ein Auftrag mit dem Konzept als erster Nachricht.</li>
+          <li>Claude baut auf dem eigenen Zweig und legt das Konzept als <span class="mono">docs/konzepte/…md</span> mit ab. Danach läuft der gewohnte Weg: Freigabe, Prüfungen, live, Wissen.</li>
+        </ol>
+        <p class="klein leise">Offene Punkte auf der Karte sperren den Knopf. So geht nichts Halbfertiges in den Bau.</p>
+      </section>
+
+      <section class="karte" aria-labelledby="e-t">
+        <h2 id="e-t">Einrichtungs-Assistent: ChatGPT koppeln</h2>
+        <div class="schritte">
+          <div class="schritt"><span class="etikett">Schritt 1</span><b>Codex installieren</b><span class="klein leise">Das offizielle OpenAI-Programm. Der Assistent installiert es mit einem Klick und prüft die Version.</span></div>
+          <div class="schritt markiert"><span class="etikett" style="color:var(--orange)">Schritt 2</span><b>Mit ChatGPT anmelden</b><span class="klein leise">Der Browser öffnet sich, du meldest dich mit deinem ChatGPT-Konto an. Jedes Abo mit Codex funktioniert. Das Passwort sieht die Codeschmiede nie.</span></div>
+          <div class="schritt"><span class="etikett">Schritt 3</span><b>Probefrage</b><span class="klein leise">Eine kurze Testfrage. Grün = gekoppelt. Danach zeigt die Statusleiste beide Abos mit Limits.</span></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="karte" aria-labelledby="m-t" style="gap:10px">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:baseline"><h2 id="m-t" style="margin-right:auto">So sieht es im Programm aus</h2><span class="klein leise">klickbar</span></div>
+      <div class="demo"><span class="leise">Probieren:</span>
+        <button type="button" class="ghost" id="b-limit" aria-pressed="false">ChatGPT-Limit voll</button>
+        <button type="button" class="ghost" id="b-reset">Von vorn</button></div>
+      <div class="app">
+        <nav class="nav" aria-label="Menü (Modell)"><b>Codeschmiede</b><span>Auftrags-Zentrale</span><span>Live-Vorschau</span><span>App-Designer</span><span class="an">Turniere</span><span>Prüfstand</span><span>Wissensdatenbank</span></nav>
+        <div class="haupt">
+          <div class="leiste">
+            <span class="titel">Chat · Turniere</span>
+            <span class="limit" title="Claude-Abo, 5-Stunden-Fenster"><span>Claude</span><span class="balken"><i style="width:38%"></i></span>38 %</span>
+            <span class="limit" title="ChatGPT-Abo"><span>ChatGPT</span><span class="balken"><i id="gpt-balken" style="width:22%"></i></span><span id="gpt-wert">22 %</span></span>
+          </div>
+          <div class="chat" id="chat" aria-live="polite"></div>
+          <form class="eingabe" id="form"><label for="eingabe" class="klein leise" style="position:absolute;left:-9999px">Nachricht</label><input id="eingabe" placeholder="Nachricht an Claude" value="Ich möchte, dass Eltern bei Turnieren Fahrgemeinschaften bilden können."><button class="btn" type="submit">Senden</button></form>
+        </div>
+      </div>
+      <details class="klein"><summary style="cursor:pointer;font-weight:600">Protokoll (nur hier sichtbar, wer geantwortet hat)</summary>
+        <div class="tab-wrap" style="margin-top:8px"><table id="protokoll"><thead><tr><th>Zeit</th><th>Was</th><th>Wer</th></tr></thead><tbody></tbody></table></div>
+      </details>
+    </section>
+  </div>
+
+  <section class="karte" aria-labelledby="f-t">
+    <h2 id="f-t">Bitte entscheiden</h2>
+    <div class="frage"><b>1. Prüfungen durch ChatGPT?</b> Die unabhängige Sicherheits- und Feature-Prüfung macht dann ein anderes Modell als das, das gebaut hat. Das ist wirklich unabhängig und schont dein Claude-Limit. Vorschlag: ja.</div>
+    <div class="frage"><b>2. Claude-Limit voll: soll ChatGPT (Codex) auch bauen?</b> Codex kann programmieren. Vorschlag: nein, Bauen wartet auf Claude. Konzepte laufen in der Zeit weiter.</div>
+    <div class="frage"><b>3. Wohin mit freigegebenen Konzepten?</b> Vorschlag: als <span class="mono">docs/konzepte/&lt;datum&gt;-&lt;feature&gt;.md</span> im Projekt, mit dem Bau-PR. So stehen sie in Dokumentation und Wissen.</div>
+    <div class="frage"><b>4. Dürfen Mitglieder ohne ChatGPT-Abo den Chat nutzen?</b> Vorschlag: ja, dann antwortet bei ihnen automatisch Claude.</div>
+  </section>
+  <p class="klein leise">Datenschutz: Projekttexte gehen auch an OpenAI. Daten von Vereinsmitgliedern oder Kindern liegen nicht in der Codeschmiede. Der ChatGPT-Zugang bleibt im Anmeldespeicher deines PCs und kommt nie in die Datenbank.</p>
+</div>
+
+<script>
+(function(){
+  const chat=document.getElementById('chat'), form=document.getElementById('form'), ein=document.getElementById('eingabe');
+  const prot=document.querySelector('#protokoll tbody'), bL=document.getElementById('b-limit');
+  let limitVoll=false, schritt=0, uhr=new Date(2026,9,23,14,30);
+  const zeit=()=>{uhr=new Date(uhr.getTime()+60000);return uhr.toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})};
+  const wer=()=>limitVoll?'Claude (ChatGPT-Limit voll)':'ChatGPT';
+  const log=(was,w)=>{const tr=document.createElement('tr');tr.innerHTML='<td class="mono"></td><td></td><td></td>';tr.children[0].textContent=zeit();tr.children[1].textContent=was;tr.children[2].textContent=w;prot.prepend(tr)};
+  const blase=(cls,txt)=>{const d=document.createElement('div');d.className='bubble neu '+cls;if(cls==='ki'){const w=document.createElement('div');w.className='wer';w.textContent='Claude';d.appendChild(w)}const t=document.createElement('div');t.textContent=txt;d.appendChild(t);chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d};
+  const antworten=[
+    'Gute Idee. Drei Fragen, bevor ich ein Konzept vorschlage: Soll das nur bei Turnieren gehen oder auch bei Auswärtsspielen? Sehen alle Eltern der Mannschaft die Plätze oder nur Eltern mit Zustimmung? Und braucht es eine Rückfahrt getrennt von der Hinfahrt?',
+    'Danke, damit ist alles geklärt. Hier ist das Konzept. Prüf es kurz, dann kann es gebaut werden.'
+  ];
+  const vorschlaege=['Turniere und Auswärtsspiele. Nur Eltern, die zugestimmt haben. Hin- und Rückfahrt getrennt.'];
+  function karte(){
+    const k=document.createElement('div');k.className='konzept neu';
+    k.innerHTML='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="etikett">Konzept-Karte</span><span class="pill p-cl" style="margin-left:auto">keine offenen Punkte</span></div>'+
+    '<h3>Fahrgemeinschaften bei Turnieren und Auswärtsspielen</h3><dl>'+
+    '<dt>Ziel</dt><dd>Eltern bieten Plätze an oder suchen eine Mitfahrt, getrennt nach Hin- und Rückfahrt.</dd>'+
+    '<dt>Umfang</dt><dd>Termin-Detail: Block „Fahrgemeinschaft“, Handy-Ansicht, Push bei neuem Platz.</dd>'+
+    '<dt>Datenschutz</dt><dd>Sichtbar nur für Eltern mit Zustimmung in derselben Mannschaft. Keine Adressen, nur Treffpunkt.</dd>'+
+    '<dt>Abnahme</dt><dd>Platz anbieten, buchen, absagen; Trainer sieht die Übersicht; Handbuch-Seite ergänzt.</dd>'+
+    '<dt>Ort</dt><dd>Gruppe Turniere › Feature Termin-Detail</dd></dl>'+
+    '<div class="reihe"><button type="button" class="btn" id="b-frei">Konzept freigeben &amp; bauen</button><button type="button" class="ghost" id="b-aendern">Noch ändern</button></div>';
+    chat.appendChild(k);chat.scrollTop=chat.scrollHeight;
+    k.querySelector('#b-frei').onclick=()=>{k.querySelector('.reihe').remove();
+      const a=document.createElement('div');a.className='auftrag neu';
+      a.innerHTML='<b>Auftrag #12 angelegt · Turniere › Termin-Detail</b><span class="leise">Konzept als erste Nachricht · Zweig feature/cs-12-fahrgemeinschaften</span><span class="pill p-cl" style="align-self:flex-start"><i class="punkt"></i>Claude baut</span>';
+      chat.appendChild(a);chat.scrollTop=chat.scrollHeight;log('Konzept freigegeben → Auftrag #12','Gerhard');log('Auftrag #12 übernommen (Bauen)','Claude');};
+    k.querySelector('#b-aendern').onclick=()=>{ein.value='Bitte auch Fahrten zu Trainingslagern.';ein.focus()};
+  }
+  form.addEventListener('submit',e=>{e.preventDefault();const t=ein.value.trim();if(!t)return;blase('ich',t);ein.value='';
+    const w=wer();setTimeout(()=>{
+      if(schritt<antworten.length){blase('ki',antworten[schritt]);log(schritt===0?'Rückfragen zum Vorhaben':'Konzept-Karte vorgelegt',w);if(schritt===1)karte();schritt++;if(vorschlaege[schritt-1])ein.value=vorschlaege[schritt-1];}
+      else{blase('ki','Verstanden, ich nehme das ins Konzept auf.');log('Konzept ergänzt',w)}
+    },450)});
+  bL.onclick=()=>{limitVoll=!limitVoll;bL.setAttribute('aria-pressed',String(limitVoll));bL.textContent=limitVoll?'ChatGPT-Limit wieder frei':'ChatGPT-Limit voll';
+    document.getElementById('gpt-balken').style.width=limitVoll?'100%':'22%';document.getElementById('gpt-wert').textContent=limitVoll?'100 %':'22 %';
+    log(limitVoll?'ChatGPT-Limit voll: Chat antwortet über Claude':'ChatGPT wieder verfügbar','System')};
+  document.getElementById('b-reset').onclick=()=>{chat.innerHTML='';prot.innerHTML='';schritt=0;ein.value='Ich möchte, dass Eltern bei Turnieren Fahrgemeinschaften bilden können.';limitVoll&&bL.click()};
+})();
+</script>

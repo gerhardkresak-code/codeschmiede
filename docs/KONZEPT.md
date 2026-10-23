@@ -79,5 +79,5 @@ Klick auf ein Feature = Kurzinfo; Doppelklick = Chat links, Live-Vorschau rechts
 | 1 | Datenbank v1, Zentrale, Benutzer & Rechte (in Trainer to go gebaut und getestet) | erledigt 2026-10-22 |
 | 1b | Umzug ins Repository `codeschmiede`, Datenbank v2 (Projekte, Verbrauch) und v3 (Abo-Limits), Oberfläche mit Projektwechsel und Verbrauchsanzeige | in Arbeit |
 | 2 | Programm (Tauri) + Werkstatt-Dienst | in Arbeit |
-| 3 | Live-Vorschau mit „Zeigen & kommentieren“ | offen |
-| 4 | Zusammenführen / Sicherheitsprüfung / Wissen auf dem Admin-PC; Woche Parallelbetrieb | offen |
+| 3 | Live-Vorschau mit „Zeigen & kommentieren“ | erledigt 2026-10-23 (Feature-Arbeitsplatz und eigener Menüpunkt) |
+| 4 | Zusammenführen / Sicherheitsprüfung / Wissen auf dem Admin-PC; Zweige & Versionen, Prüfstand, Wissensdatenbank, Änderungsprotokoll, Dokumentation | erledigt 2026-10-23 (0.6.0, Projekt-Abgleich) |
