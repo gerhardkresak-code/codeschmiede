@@ -38,7 +38,7 @@ const vorschauUrl = (projekt, a) => (a?.zweig && projekt?.vorschau_domain && !AB
   : (projekt?.live_zweig && /^https:\/\/[^/\s]+$/i.test(String(projekt?.test_url || "").replace(/\/$/, "")) ? String(projekt.test_url).replace(/\/$/, "") : projekt?.live_url) || null);
 // Seite in der Vorschau: gemerkte Seite des Features (Datenbank 0028), sonst die des Projekts; „cs=1“ hängt am Ende
 const SEITE = /^\/[A-Za-z0-9/_.~-]{0,150}(\?[A-Za-z0-9_=&.~%-]{0,150})?$/;
-const seiteOk = (p) => typeof p === "string" && SEITE.test(p) && !/(^|\/)\.\.(\/|$|\?)/.test(p) && !p.startsWith("//");
+const seiteOk = (p) => typeof p === "string" && SEITE.test(p) && !/(^|\/)\.\.(\/|$|\?)/.test(p) && !p.startsWith("//") && !/\/[A-Za-z0-9_-]{20,}/.test(p) && !/\/[0-9]/.test(p);
 const mitCs = (p) => `${p}${p.includes("?") ? "&" : "?"}cs=1`;
 const oeffneExtern = (url) => { if (isDesktop()) tauri("plugin:opener|open_url", { url }).catch(() => {}); else window.open(url, "_blank", "noopener"); };
 const fmt = (d) => new Date(d).toLocaleString("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });

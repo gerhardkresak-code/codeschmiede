@@ -6,7 +6,7 @@ begin;
 alter table public.ws_features add column if not exists vorschau_pfad text;
 alter table public.ws_features drop constraint if exists ws_features_vorschau_pfad_check;
 alter table public.ws_features add constraint ws_features_vorschau_pfad_check
-  check (vorschau_pfad is null or (vorschau_pfad ~ '^/[A-Za-z0-9/_.~-]{0,150}(\?[A-Za-z0-9_=&.~%-]{0,150})?$' and vorschau_pfad !~ '(^|/)\.\.(/|$|\?)' and vorschau_pfad !~ '^//'));
+  check (vorschau_pfad is null or (vorschau_pfad ~ '^/[A-Za-z0-9/_.~-]{0,150}(\?[A-Za-z0-9_=&.~%-]{0,150})?$' and vorschau_pfad !~ '(^|/)\.\.(/|$|\?)' and vorschau_pfad !~ '^//' and vorschau_pfad !~ '/[A-Za-z0-9_-]{20,}' and vorschau_pfad !~ '/[0-9]'));   -- keine IDs/Tokens im Pfad (Prüfung 0.8.7)
 
 -- Setzen: Admin oder wer im Bereich des Features Aufträge anlegen darf; leer = Startseite des Projekts
 create or replace function public.ws_feature_vorschau_setzen(p_feature text, p_pfad text) returns void

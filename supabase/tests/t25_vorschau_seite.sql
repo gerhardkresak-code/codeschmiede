@@ -26,6 +26,8 @@ select ws_feature_vorschau_setzen('V-1','/a/../b');
 select ws_feature_vorschau_setzen('V-1','/a b');
 select ws_feature_vorschau_setzen('V-1','javascript:alert(1)');
 select ws_feature_vorschau_setzen('V-1','https://boese.example');
+select ws_feature_vorschau_setzen('V-1','/angebot/abcdefghijklmnopqrstuvwxyz');
+select ws_feature_vorschau_setzen('V-1','/matchplan/123');
 select ws_feature_vorschau_setzen('V-1','') \g /dev/null
 select vorschau_pfad is null as leer from ws_features where id='V-1';
 rollback;
