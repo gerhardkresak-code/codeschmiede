@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
-  Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power, Hammer,
+  Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power,
   ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale,
 } from "lucide-react";
 import { supabase } from "./supabase";
@@ -9,13 +9,14 @@ import { Markdown } from "./Markdown";
 import { WS_ICON, STAND, ROLLEN, BEREICH_RECHTE } from "./config";
 import { isDesktop, tauri } from "./desktop";
 import Designer from "./Designer";
-import ClaudeSpalte from "./ClaudeSpalte";
+import KonzeptArbeitsplatz, { KonzeptAuto } from "./Konzept";
 import { ZweigeVersionen, Pruefstand, Wissensdatenbank, Aenderungsprotokoll, Dokumentation } from "./Ablauf";
 import KiAnbieter from "./KiAnbieter";
 import Einrichtung, { EinrichtungChip, useEinrichtung } from "./Einrichtung";
 import { MitErwaehnung, erwaehnte, FeatureBezuege } from "./Bezuege";
 import Regelwerk from "./Regelwerk";
 import { LogoZeichen } from "./Logo";
+import CodeschmiedeZeichen from "./Zeichen";
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
 // Konzept: docs/KONZEPT.md · Datenbank: supabase/migrations/
@@ -149,7 +150,6 @@ export default function App() {
   const [projekt, setProjekt] = useState(() => merke.lies("cs-projekt"));
   const [toast, setToast] = useState("");
   const [neuesProjekt, setNeuesProjekt] = useState(false); const [projekteVerwalten, setProjekteVerwalten] = useState(false); const [einrichtung, setEinrichtung] = useState(false);
-  const [ortZentrale, setOrtZentrale] = useState(null);   // Gruppe/Feature, das in der Zentrale gerade offen ist (für den Chat)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSitzung(data.session || null));
@@ -176,10 +176,10 @@ export default function App() {
   const PIcon = WS_ICON[aktuell?.symbol] || Layers;
 
   return (
-    <div className={`min-h-screen grid grid-cols-[minmax(0,1fr)] md:grid-cols-[248px_minmax(0,1fr)] ${ansicht !== "designer" ? "xl:grid-cols-[248px_minmax(0,1fr)_auto]" : ""} bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-body`}>
+    <div className={`min-h-screen grid grid-cols-[minmax(0,1fr)] md:grid-cols-[248px_minmax(0,1fr)] bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-body`}>
       <aside className="bg-[#0f2a22] text-emerald-50 flex md:flex-col gap-1 p-3 md:sticky md:top-0 md:h-screen overflow-x-auto">
         <div className="flex items-center gap-2.5 px-2 pb-0 md:pb-3">
-          <span className="w-9 h-9 rounded-lg bg-emerald-500 text-emerald-950 grid place-items-center"><Hammer className="w-5 h-5" /></span>
+          <CodeschmiedeZeichen groesse={36} className="ring-1 ring-emerald-400/30 rounded-[9px]" />
           <div className="hidden md:block leading-tight"><b className="font-display text-[19px] tracking-wide">Codeschmiede</b><div className="text-xs text-emerald-200/70">Deine Apps. Ein Ort.</div></div>
         </div>
         <div className="hidden md:block mb-2">
@@ -219,8 +219,8 @@ export default function App() {
         </div>
         {daten.laden ? <div className="grid place-items-center py-20"><Loader2 className="w-6 h-6 animate-spin text-emerald-700" /></div>
           : !daten.projektId ? <div className={`${card} p-8 text-slate-500`}>Du bist noch keinem Projekt zugeordnet. Der Admin nimmt dich in ein Projekt auf.</div>
-          : ansicht === "zentrale" ? <Zentrale key={daten.projektId} d={daten} ich={ich} toast={setToast} onOrt={setOrtZentrale} />
-          : ansicht === "global" ? <Zentrale key={daten.projektId + "-global"} d={daten} ich={ich} toast={setToast} nurGlobal onOrt={setOrtZentrale} />
+          : ansicht === "zentrale" ? <Zentrale key={daten.projektId} d={daten} ich={ich} toast={setToast} onDesigner={() => setAnsicht("designer")} />
+          : ansicht === "global" ? <Zentrale key={daten.projektId + "-global"} d={daten} ich={ich} toast={setToast} nurGlobal />
           : ansicht === "regelwerk" ? <Regelwerk key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "ki" ? <KiAnbieter key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "zweige" ? <ZweigeVersionen key={daten.projektId} d={daten} />
@@ -234,15 +234,10 @@ export default function App() {
           : ansicht === "verbrauch" ? <Verbrauch d={daten} ich={ich} toast={setToast} />
           : <Spaeter ansicht={ansicht} />}
       </main>
-      {ansicht !== "designer" && !daten.laden && daten.projektId && (() => {
-        // Chat mit Claude überall: fest eingeblendet (im App-Designer gibt es einen eigenen Design-Chat)
-        const imZentrum = ["zentrale", "global"].includes(ansicht) && ortZentrale;
-        const ort = imZentrum ? ortZentrale.ort : ansicht;
-        const kontext = `Projekt: ${aktuell?.name || ""}\nSeite: ${nav.find((n) => n[0] === ansicht)?.[1] || ansicht}${imZentrum ? `\n${ortZentrale.text}` : ""}`;
-        return <ClaudeSpalte d={daten} ich={ich} ort={ort} kontext={kontext} toast={setToast} />;
-      })()}
+      {/* Die Chat-Spalte rechts entfällt (Gerhard 2026-10-23 17:52): Gespräche mit Claude laufen in der Gruppe „Konzept“ */}
       {einrichtung && !daten.laden && <Einrichtung ich={ich} d={daten} toast={setToast} onClose={() => setEinrichtung(false)} />}
       {!daten.laden && daten.projektId && <EinrichtungAuto ich={ich} d={daten} onOeffnen={() => setEinrichtung(true)} />}
+      {!daten.laden && daten.projektId && <KonzeptAuto d={daten} ich={ich} />}
       {projekteVerwalten && <ProjekteVerwalten toast={setToast} aktiv={daten.projektId} onClose={() => setProjekteVerwalten(false)} onWeg={(id) => { if (id === daten.projektId) { const n = daten.projekte.find((p) => p.id !== id); if (n) waehle(n.id); } }} />}
       {neuesProjekt && <NeuesProjekt toast={setToast} onClose={() => setNeuesProjekt(false)} onFertig={(id) => waehle(id)} />}
       <Toast text={toast} onDone={() => setToast("")} />
@@ -266,7 +261,7 @@ function EinladungAnnehmen({ sitzung, onFertig }) {
   };
   return (
     <Zentriert>
-      <Hammer className="w-8 h-8 text-emerald-700" />
+      <CodeschmiedeZeichen groesse={48} />
       <h1 className="font-display font-bold text-2xl">Codeschmiede</h1>
       <p className="text-sm">Hast du eine Einladung bekommen? Gib deinen Namen ein (Vorname Nachname) und tritt bei.</p><button type="button" className="text-xs text-slate-500 underline" onClick={() => supabase.auth.signOut()}>Mit anderem Konto anmelden</button>
       <input id="ws-name" className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Vorname Nachname" />
@@ -284,7 +279,7 @@ function Spaeter({ ansicht }) {
 // ---------------- Zentrale ----------------
 // nurGlobal: Ansicht „Globale Einstellungen“ (Anweisung Gerhard 2026-10-23 10:20) – Bereich, der in der App nie als eigener Bereich erscheint;
 // seine Features gelten für die ganze App. In der Auftrags-Zentrale wird er ausgeblendet.
-function Zentrale({ d: alle, ich, toast, nurGlobal = false, onOrt }) {
+function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner }) {
   const d = useMemo(() => {
     const bereiche = alle.bereiche.filter((b) => !!b.global === nurGlobal);
     const bids = new Set(bereiche.map((b) => b.id));
@@ -292,7 +287,8 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onOrt }) {
     const fids = new Set(alle.features.filter((f) => gids.has(f.gruppe_id)).map((f) => f.id));
     return { ...alle, bereiche, gruppen, auftraege: nurGlobal ? alle.auftraege.filter((a) => gids.has(a.gruppe_id) || fids.has(a.feature_id)) : alle.auftraege };
   }, [alle, nurGlobal]);
-  const [sel, setSel] = useState({ g: d.gruppen[0]?.id, f: null });
+  // Start immer im Konzept (erste Gruppe im Bereich App, Konzept zuerst 2026-10-23); ohne Konzept-Gruppe die erste Gruppe
+  const [sel, setSel] = useState(() => { const k = !nurGlobal && alle.projekte.find((p) => p.id === alle.projektId)?.konzept_gruppe_id; return { g: (k && d.gruppen.some((x) => x.id === k) ? k : d.gruppen[0]?.id), f: null }; });
   const [dlg, setDlg] = useState(null);
   const rolle = ich.rolle === "admin" ? "admin" : d.mitglieder.find((m) => m.projekt_id === d.projektId && m.benutzer_id === ich.id)?.rolle;
   const darf = useCallback((bereich, recht) => rolle === "admin" || d.rechte.some((r) => r.benutzer_id === ich.id && r.bereich_id === bereich && r[recht] && (recht === "auftraege" ? ["entwickler", "texter"].includes(rolle) : rolle === "entwickler")), [d.rechte, ich, rolle]);
@@ -320,14 +316,9 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onOrt }) {
   const fragen = d.auftraege.filter((a) => a.offeneFrage).length;
   if (!g) return <div className={`${card} p-8 text-slate-500`}>{nurGlobal ? "Für dieses Projekt gibt es noch keine globalen Einstellungen (Datenbank 0009 einspielen)." : "Noch keine Gruppen angelegt."}</div>;
   const platzF = platz ? d.features.find((x) => x.id === platz) : null;
-  useEffect(() => {
-    // Ort für den Chat mit Claude: offenes Feature (Arbeitsplatz/Kurzinfo) oder Gruppe
-    const ff = platzF || f; const gg = ff ? d.gruppen.find((x) => x.id === ff.gruppe_id) : g;
-    if (!onOrt) return;
-    if (ff) onOrt({ ort: `feature:${ff.id}`.toLowerCase(), text: `Gruppe: ${gg?.name || ""} (${gg?.id || ""})\nFeature: ${ff.name} (${ff.id}), Stand ${ff.stand}${ff.beschreibung ? `\nBeschreibung: ${ff.beschreibung}` : ""}` });
-    else if (gg) onOrt({ ort: `gruppe:${gg.id}`.toLowerCase(), text: `Gruppe: ${gg.name} (${gg.id})\nFeatures: ${d.features.filter((x) => x.gruppe_id === gg.id && !x.ausgebaut).map((x) => `${x.id} ${x.name}`).join("; ").slice(0, 3000)}` });
-  }, [platzF?.id, f?.id, g?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const platzG = platzF ? d.gruppen.find((x) => x.id === platzF.gruppe_id) : null;
+  // Gruppe „Konzept“ (Datenbank 0020): eigener Arbeitsplatz mit Chat und Konzept-Stand statt Feature-Karten
+  const istKonzept = !nurGlobal && !!g && g.id === alle.projekte.find((p) => p.id === alle.projektId)?.konzept_gruppe_id;
   return (
     <>
       <div className="flex flex-wrap gap-1.5 mb-4" role="toolbar" aria-label="Weg eines Auftrags">
@@ -368,6 +359,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onOrt }) {
           {ich.rolle === "admin" && !nurGlobal && <button type="button" onClick={() => setDlg({ art: "gruppe" })} className="w-full flex items-center gap-2 px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 text-emerald-700 font-semibold text-sm"><Plus className="w-4 h-4" />Neue Gruppe</button>}
         </nav>
 
+        {istKonzept ? <div className="min-w-0 xl:col-span-2"><KonzeptArbeitsplatz g={g} d={d} ich={ich} toast={toast} onDesigner={onDesigner} /></div> : <>
         <section className={card}>
           <div className="flex flex-wrap gap-3 items-start justify-between p-4 border-b border-slate-200 dark:border-slate-800">
             <div className="min-w-0">
@@ -404,6 +396,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onOrt }) {
 
         {f ? <FeatureKurzinfo f={f} g={g} d={d} ich={ich} toast={toast} darfAuftrag={darf(g.bereich_id, "auftraege")} onOeffnen={() => setPlatz(f.id)} onGruppe={() => setSel({ g: g.id, f: null })} onVerschieben={kannVerschieben ? () => setDlg({ art: "verschieben", f }) : null} />
           : <AuftragsChat g={g} f={null} d={d} ich={ich} darf={darf} toast={toast} kanal="gruppe" />}
+        </>}
       </div>}
       {dlg?.art === "feature" && <NeuesFeature g={g} ich={ich} texter={rolle === "texter"} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: g.id, f: id })} />}
       {dlg?.art === "gruppe" && <NeueGruppe d={d} ich={ich} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: id, f: null })} />}
@@ -986,7 +979,7 @@ function Anmelden() {
   };
   return (
     <Zentriert>
-      <span className="w-14 h-14 rounded-2xl bg-emerald-700 text-white grid place-items-center"><Hammer className="w-7 h-7" /></span>
+      <CodeschmiedeZeichen groesse={64} />
       <h1 className="font-display font-bold text-3xl">Codeschmiede</h1>
       <p className="text-sm text-slate-500">Deine Apps. Ein Ort.</p>
       <form onSubmit={los} className="w-full flex flex-col gap-2.5 text-left">

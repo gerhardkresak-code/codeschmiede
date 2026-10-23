@@ -163,3 +163,9 @@ test("Automatische Erlaubnis: Nachprüfung 3 (Filter und Lese-Optionen)", () => 
   for (const b of ["git log --oneline | head -20", "git log | head -n 5", "git status | grep -n x", "git log | sort -r | uniq -c", "git log | cut -d , -f 1,2", "git diff --stat | tail -3", "ls -la", "cat -n a.md"])
     assert.equal(st(b), "erlaubt", b);
 });
+test("Design-Chat von Anfang an: führt durch die Planung, nutzt die Projektbeschreibung", () => {
+  const p = designPrompt({ projektName: "Kassenbuch", projektId: "kassenbuch", beschreibung: "Kassenbuch für kleine Vereine", anfang: true, frage: "Lass uns planen", werte: {} });
+  assert.match(p, /ANFANG:/); assert.match(p, /Kassenbuch für kleine Vereine/); assert.doesNotMatch(p, /Dorfvereine und Profivereine/);
+  const t = designPrompt({ projektName: "TTG", projektId: "trainer-to-go", frage: "x", werte: {} });
+  assert.match(t, /Dorfvereine und Profivereine/); assert.doesNotMatch(t, /ANFANG:/);
+});

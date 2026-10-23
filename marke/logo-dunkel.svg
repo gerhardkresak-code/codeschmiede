@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80" viewBox="0 0 300 80" role="img" aria-label="Codeschmiede">
+  <!-- Wortmarke dunkel (Entwurf C). Schrift: Barlow Condensed 700 (Google Fonts, frei) -->
+  <defs><linearGradient id="cs-glut-dunkel" x1="0" x2="1"><stop offset="0" stop-color="#34d399"/><stop offset=".7" stop-color="#34d399"/><stop offset="1" stop-color="#fbbf24"/></linearGradient></defs>
+  <g transform="translate(4,8)"><path d="M54 18A26 26 0 1 0 54 46" stroke="url(#cs-glut-dunkel)" stroke-width="12" fill="none" stroke-linecap="round"/><rect x="40" y="24" width="5" height="16" rx="2.5" fill="#ffffff"/></g>
+  <text x="80" y="50" font-family="Barlow Condensed,Arial Narrow,sans-serif" font-weight="700" font-size="38" fill="#ffffff" letter-spacing="1">CODESCHMIEDE</text>
+</svg>

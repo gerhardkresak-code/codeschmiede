@@ -194,7 +194,8 @@ export default function Designer({ d, ich, toast }) {
   };
 
   if (!projekt) return null;
-  if (!projekt.design_gruppe_id) return <div className={`${card} p-6 text-slate-600 dark:text-slate-300`}>Für dieses Projekt ist noch keine Design-Gruppe festgelegt. Der Admin legt sie fest (Datenbank: <code>ws_projekte.design_gruppe_id</code>).</div>;
+  // Design ist eines der ersten Dinge, die man plant (Gerhard 2026-10-23 17:49): ohne Design-Gruppe richtet sich der Designer selbst ein
+  if (!projekt.design_gruppe_id) return <DesignerEinrichten projekt={projekt} d={d} ich={ich} toast={toast} />;
   const befunde = pruefungen(werte);
   const rot = befunde.filter((b) => !b.ok && b.stufe === "rot").length;
   const hinweise = befunde.filter((b) => !b.ok && b.stufe !== "rot").length;
@@ -262,7 +263,7 @@ export default function Designer({ d, ich, toast }) {
                   <I className="w-4 h-4" />{t}{id === "pruef" && (rot ? <span className="text-[11px] font-bold bg-red-600 text-white rounded-full px-1.5">{rot}</span> : hinweise ? <span className="text-[11px] font-bold bg-amber-500 text-amber-950 rounded-full px-1.5">{hinweise}</span> : null)}</button>))}
             </div>
             {rechts === "pruef" ? <Pruefliste befunde={befunde} rot={rot} hinweise={hinweise} onFragen={() => setRechts("chat")} />
-              : <DesignChat d={d} ich={ich} projekt={projekt} entwurf={aktiv} werte={werte} befunde={befunde} darf={darf} toast={toast} modus={modus} text={chatText} setText={setChatText}
+              : <DesignChat d={d} ich={ich} projekt={projekt} entwurf={aktiv} werte={werte} befunde={befunde} darf={darf} toast={toast} modus={modus} text={chatText} setText={setChatText} start={!laden && !live && !entwuerfe.length}
                   onUebernehmen={(v) => { if (!bearbeitbar) { toast(fest ? "Dieser Entwurf ist fest – lege eine Kopie an" : "Kein Recht zum Gestalten"); return false; }
                     setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, v)); setGeaendert(true); if (modus === "grund") setMitte("geruest"); return true; }} />}
           </aside>
@@ -406,7 +407,7 @@ function Testseite({ projekt, breite, werte, modus }) {
     const h = (e) => { if (e.origin === ziel && e.source === rahmen.current?.contentWindow && e.data?.cs === "design-ok") setBereit(true); };
     window.addEventListener("message", h); return () => window.removeEventListener("message", h);
   }, [ziel]);
-  if (!url) return <p className="text-sm text-slate-500 p-4">Für dieses Projekt ist keine Adresse der App hinterlegt.</p>;
+  if (!url) return <p className="text-sm text-slate-500 p-4">Die App gibt es noch nicht als Testseite – gestalte im „Gerüst“: dort siehst du das Design schon jetzt an einer Muster-App. Sobald die App eine Adresse hat, erscheint sie hier.</p>;
   return (
     <div className="mx-auto" style={{ width: breite, maxWidth: "100%" }}>
       <p className={`text-xs mb-1.5 rounded-lg px-2.5 py-1.5 border ${bereit ? "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-900 text-green-800 dark:text-green-300" : "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-slate-600 dark:text-slate-300"}`}>
@@ -487,8 +488,10 @@ function Pruefliste({ befunde, rot, hinweise, onFragen }) {
 }
 
 // Chat mit Claude: läuft über die eigene Werkstatt (Abo), Claude bekommt nur die Werte, keine Werkzeuge.
+// Noch kein Design (neues Projekt): Gespräch von Grund auf – Claude fragt zuerst und schlägt dann ein ganzes Grunddesign vor
+const IDEEN_START = ["Lass uns das Design von Grund auf planen", "Schlag mir 3 Grundrichtungen vor", "Frag mich zu Zielgruppe und Stimmung", "Passende Farben zu meinem Logo"];
 const IDEEN = ["Mach die Knöpfe besser lesbar", "Wärmer und freundlicher, aber seriös", "Moderner Dunkelmodus", "Löse die offenen Prüfungen", "Passt das für Dorf- und Profivereine?"];
-function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onUebernehmen, modus = "grund", text, setText }) {
+function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onUebernehmen, modus = "grund", text, setText, start = false }) {
   const [liste, setListe] = useState([]);
   const [senden, setSenden] = useState(false);
   const ende = React.useRef(null);
@@ -526,7 +529,12 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex-1 overflow-auto p-3 space-y-2.5 text-sm">
-        {!liste.length && <div className="text-slate-500 space-y-2"><p>Frag Claude zum Design{entwurf ? ` von „${entwurf.name}“` : ""}. Claude erklärt und schlägt Werte vor – übernommen wird nur, was du anklickst.</p></div>}
+        {!liste.length && (start
+          ? <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/60 dark:bg-emerald-950/30 p-3 space-y-1.5 text-slate-700 dark:text-slate-200">
+              <p className="font-display font-bold text-[15px] flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-emerald-700" />Design von Anfang an planen</p>
+              <p>Für {projekt.name} gibt es noch kein Design – genau richtig, um damit anzufangen. Erzähl, für wen die App ist und wie sie wirken soll. Claude stellt ein paar Fragen und schlägt dann ein komplettes Grunddesign vor (Farben, Schrift, Formen, Menü), das du mit einem Klick übernimmst.</p>
+              <p className="text-xs text-slate-500">Nichts geht live, bevor du einen Entwurf als Auftrag sendest.</p></div>
+          : <div className="text-slate-500 space-y-2"><p>Frag Claude zum Design{entwurf ? ` von „${entwurf.name}“` : ""}. Claude erklärt und schlägt Werte vor – übernommen wird nur, was du anklickst.</p></div>)}
         {liste.map((m) => m.frage_id ? (
           <div key={m.id} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-2.5 max-w-[95%]">
             <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Bot className="w-3.5 h-3.5" />Claude{fragen[m.frage_id] && fragen[m.frage_id].von !== ich.id ? ` · über die Werkstatt von ${d.benutzer.find((u) => u.id === fragen[m.frage_id].von)?.name || "Mitglied"}` : ""}</div>
@@ -544,7 +552,7 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
       </div>
       {darf ? (
         <form className="border-t border-slate-200 dark:border-slate-800 p-2.5 space-y-2" onSubmit={(e) => { e.preventDefault(); schicke(); }}>
-          <div className="flex flex-wrap gap-1">{IDEEN.map((i) => <button key={i} type="button" disabled={senden} onClick={() => schicke(i)} className="text-xs rounded-full border border-slate-300 dark:border-slate-700 px-2 py-0.5 hover:bg-slate-50 dark:hover:bg-slate-800">{i}</button>)}</div>
+          <div className="flex flex-wrap gap-1">{(start && !liste.length ? IDEEN_START : IDEEN).map((i) => <button key={i} type="button" disabled={senden} onClick={() => schicke(i)} className="text-xs rounded-full border border-slate-300 dark:border-slate-700 px-2 py-0.5 hover:bg-slate-50 dark:hover:bg-slate-800">{i}</button>)}</div>
           <div className="flex gap-1.5">
             <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={4000} placeholder="Was soll sich am Design ändern?" className={`${input} resize-none`}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); schicke(); } }} />
@@ -564,5 +572,27 @@ function Vorschlag({ m, werte, kann, onEntscheid }) {
         : <p className="text-xs text-slate-500">Schon so eingestellt.</p>}
       {m.entscheidung ? <p className="text-xs mt-1.5 font-semibold text-slate-500">{m.entscheidung === "uebernommen" ? "Übernommen" : "Abgelehnt"}</p>
         : kann && liste.length > 0 && <div className="flex gap-1.5 mt-2"><button type="button" className={btn} onClick={() => onEntscheid("uebernommen")}><Check className="w-4 h-4" />Übernehmen</button><button type="button" className={ghost} onClick={() => onEntscheid("abgelehnt")}><X className="w-4 h-4" />Ablehnen</button></div>}
+    </div>);
+}
+
+/** Projekt ohne Design-Gruppe: Designer automatisch einrichten (Admin/Entwickler), sonst Hinweis. */
+function DesignerEinrichten({ projekt, d, ich, toast }) {
+  const rolle = d.mitglieder.find((m) => m.projekt_id === projekt.id && m.benutzer_id === ich.id)?.rolle;
+  const kann = ich.rolle === "admin" || rolle === "entwickler";
+  const [fehlerText, setFehlerText] = useState(null);
+  useEffect(() => {
+    if (!kann) return;
+    let aus = false;
+    supabase.rpc("ws_design_einrichten", { p_projekt: projekt.id }).then(({ error }) => {
+      if (aus) return;
+      if (error) { setFehlerText(fehler(error)); toast(fehler(error)); } else d.holen?.();   // nicht nur auf die Live-Aktualisierung verlassen
+    });
+    return () => { aus = true; };
+  }, [kann, projekt.id, toast]);
+  return (
+    <div className={`${card} p-6 text-slate-600 dark:text-slate-300 flex items-center gap-3`}>
+      {kann && !fehlerText ? <><Loader2 className="w-5 h-5 animate-spin text-emerald-700" />App-Designer für „{projekt.name}“ wird eingerichtet …</>
+        : kann ? <span>Einrichten hat nicht geklappt: {fehlerText}</span>
+        : <span>Der App-Designer für „{projekt.name}“ ist noch nicht eingerichtet. Das macht der Admin oder ein Entwickler des Projekts mit einem Klick auf „App-Designer“.</span>}
     </div>);
 }

@@ -1,7 +1,7 @@
 // Einstellungen der Programmierumgebung (Symbole aus dem einheitlichen Lucide-Set, siehe docs/DESIGN.md)
 import {
   Users, Cone, Trophy, ClipboardList, BookOpen, Calendar, MessageSquare, Home, CupSoda, Shirt, Gavel, PenLine, Euro,
-  Handshake, UsersRound, Sprout, Target, ChartColumn, Palette, Globe, FileText, Settings, Archive, Wrench, Layers,
+  Handshake, UsersRound, Sprout, Target, ChartColumn, Palette, Globe, FileText, Settings, Archive, Wrench, Layers, Lightbulb,
 } from "lucide-react";
 
 // Symbolname in ws_gruppen.symbol -> Lucide-Symbol
@@ -9,7 +9,7 @@ export const WS_ICON = {
   users: Users, cone: Cone, trophy: Trophy, board: ClipboardList, book: BookOpen, calendar: Calendar,
   "message-square": MessageSquare, home: Home, "cup-soda": CupSoda, shirt: Shirt, gavel: Gavel, pen: PenLine, euro: Euro,
   handshake: Handshake, "users-round": UsersRound, sprout: Sprout, target: Target, "chart-column": ChartColumn,
-  palette: Palette, globe: Globe, "file-text": FileText, settings: Settings, archive: Archive, wrench: Wrench, layers: Layers,
+  palette: Palette, globe: Globe, "file-text": FileText, settings: Settings, archive: Archive, wrench: Wrench, layers: Layers, lightbulb: Lightbulb,
 };
 
 export const STAND = {

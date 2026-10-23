@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Codeschmiede">
+  <!-- Codeschmiede-Zeichen „Glühendes C“ (Entwurf C, Gerhard 2026-10-23 17:30): geschmiedetes C mit glühender Kante und Cursor -->
+  <defs><linearGradient id="cs-glut" x1="0" x2="1"><stop offset="0" stop-color="#34d399"/><stop offset=".7" stop-color="#34d399"/><stop offset="1" stop-color="#fbbf24"/></linearGradient></defs>
+  <rect width="64" height="64" rx="16" fill="#0f2a22"/>
+  <path d="M48 20A18 18 0 1 0 48 44" stroke="url(#cs-glut)" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <rect x="36" y="25" width="4" height="14" rx="2" fill="#ffffff"/>
+</svg>

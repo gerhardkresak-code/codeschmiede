@@ -5,6 +5,7 @@ import {
 import { supabase } from "./supabase";
 import { KiProtokoll } from "./KiAnbieter";
 import { Markdown } from "./Markdown";
+import { KonzeptWissen } from "./Konzept";
 
 // Ablauf & Dokumentation (Anweisung Gerhard 2026-10-23 14:11 „Mache einfach alles fertig“):
 // Zweige & Versionen, Prüfstand, Wissensdatenbank, Änderungsprotokoll, Dokumentation.
@@ -179,10 +180,12 @@ function DokAnsicht({ d, pfad, icon, titel, text, leer, extra }) {
 export function Wissensdatenbank({ d }) {
   const gruppe = (id) => d.gruppen.find((g) => g.id === id)?.name || "–";
   const imWissen = d.auftraege.filter((a) => a.stand === "wissen").sort((a, b) => Date.parse(b.geaendert) - Date.parse(a.geaendert)).slice(0, 12);
-  const extra = imWissen.length ? (
+  const konzept = <KonzeptWissen projektId={d.projektId} />;
+  const zuletzt = imWissen.length ? (
     <div className={`${card} overflow-hidden`}><h3 className="px-3 py-2 font-display font-bold bg-slate-50 dark:bg-slate-950">Zuletzt live & im Wissen</h3>
       {imWissen.map((a) => <div key={a.id} className="border-t border-slate-100 dark:border-slate-800 px-3 py-2 text-sm flex flex-wrap gap-x-3"><span className="text-slate-500">#{a.id}</span><b className="font-semibold">{a.titel}</b><span className="text-slate-500">{gruppe(a.gruppe_id)} · {fmt(a.geaendert)}</span></div>)}
     </div>) : null;
+  const extra = <>{konzept}{zuletzt}</>;
   return <DokAnsicht d={d} pfad="docs/WISSEN.md" icon={BookOpen} titel="Wissensdatenbank" extra={extra}
     text="Was abgeschlossen und live ist, mit Entscheidungen – damit jeder Chat und jede Werkstatt darauf aufbaut."
     leer="Für dieses Projekt gibt es noch keine docs/WISSEN.md." />;
