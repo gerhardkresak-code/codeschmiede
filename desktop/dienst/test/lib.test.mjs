@@ -169,3 +169,7 @@ test("Design-Chat von Anfang an: führt durch die Planung, nutzt die Projektbesc
   const t = designPrompt({ projektName: "TTG", projektId: "trainer-to-go", frage: "x", werte: {} });
   assert.match(t, /Dorfvereine und Profivereine/); assert.doesNotMatch(t, /ANFANG:/);
 });
+test("Designer nach App-Art: Art und Beispiel-Schema im Prompt", () => {
+  const p = designPrompt({ projektName: "Torjäger", projektId: "torjaeger", appArt: "spiel", frage: "[Beispiele] Passe die Beispiele an", werte: {} });
+  assert.match(p, /Art der App: Spiel/); assert.match(p, /Beispiele der Vorschau/); assert.match(p, /spiel \(nur App-Art Spiel\)/);
+});

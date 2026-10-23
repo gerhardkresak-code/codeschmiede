@@ -10,6 +10,7 @@ import { WS_ICON, STAND, ROLLEN, BEREICH_RECHTE } from "./config";
 import { isDesktop, tauri } from "./desktop";
 import Designer from "./Designer";
 import KonzeptArbeitsplatz, { KonzeptAuto } from "./Konzept";
+import { APP_ARTEN } from "./DesignerArten";
 import { ZweigeVersionen, Pruefstand, Wissensdatenbank, Aenderungsprotokoll, Dokumentation } from "./Ablauf";
 import KiAnbieter from "./KiAnbieter";
 import Einrichtung, { EinrichtungChip, useEinrichtung } from "./Einrichtung";
@@ -1250,6 +1251,7 @@ function NeuesProjekt({ toast, onClose, onFertig }) {
   const [name, setName] = useState(""); const [kennung, setKennung] = useState(""); const [besch, setBesch] = useState(""); const [repo, setRepo] = useState(""); const [symbol, setSymbol] = useState("layers"); const [busy, setBusy] = useState(false);
   // GitHub-Repository gleich anlegen (Gerhard 2026-10-23 18:38): Konto gerhardkresak-code, öffentlich, per Klick privat
   const [anlegen, setAnlegen] = useState(true); const [privat, setPrivat] = useState(false);
+  const [art, setArt] = useState("verwaltung");   // App-Art für den Designer (Datenbank 0022)
   const autoKennung = name.trim().toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
   const id = kennung || autoKennung;
   const gueltig = /^[a-z0-9][a-z0-9-]{1,39}$/.test(id) && name.trim() && (!repo || /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(repo.trim()));
@@ -1258,6 +1260,7 @@ function NeuesProjekt({ toast, onClose, onFertig }) {
     const { error } = await supabase.rpc("ws_projekt_anlegen", { p_id: id, p_name: name.trim(), p_beschreibung: besch.trim(), p_repo: repo.trim(), p_symbol: symbol });
     setBusy(false);
     if (error) { toast(fehler(error)); return; }
+    if (art !== "verwaltung") { const ra = await supabase.rpc("ws_projekt_app_art", { p_projekt: id, p_art: art }); if (ra.error) toast(fehler(ra.error)); }
     let gh = "";
     if (!repo.trim() && anlegen) {
       const r = await supabase.rpc("ws_repo_anfordern", { p_projekt: id, p_privat: privat });
@@ -1269,6 +1272,8 @@ function NeuesProjekt({ toast, onClose, onFertig }) {
     <Dialog title="Neues Projekt" onClose={onClose}>
       <label className="flex flex-col gap-1 text-sm text-slate-500">Name der App<input id="cs-pname" className={input} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></label>
       <label className="flex flex-col gap-1 text-sm text-slate-500">Kennung (klein, ohne Leerzeichen)<input id="cs-pid" className={input} value={id} onChange={(e) => setKennung(e.target.value)} /></label>
+      <label className="flex flex-col gap-1 text-sm text-slate-500">Art der App (bestimmt die Beispiele und Bausteine im App-Designer)
+        <select id="cs-part" className={input} value={art} onChange={(e) => setArt(e.target.value)}>{APP_ARTEN.map(([k, t, b]) => <option key={k} value={k}>{t} – {b}</option>)}</select></label>
       <label className="flex flex-col gap-1 text-sm text-slate-500">Worum geht es?<textarea id="cs-pdesc" className={`${input} min-h-[70px]`} value={besch} onChange={(e) => setBesch(e.target.value)} /></label>
       <fieldset className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex flex-col gap-2 text-sm">
         <legend className="px-1 text-slate-500">GitHub</legend>
