@@ -23,7 +23,7 @@ create table if not exists public.ws_ki_anbieter (
 create or replace function public.ws_ki_programm_ok(p text) returns boolean
 language sql immutable set search_path = public as $$
   select p ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$'
-    and lower(regexp_replace(p, '\.(exe|cmd|bat|com|ps1)$', '', 'i')) !~ '^(sh|bash|zsh|fish|dash|ksh|csh|tcsh|cmd|command|powershell|pwsh|wsl|python[0-9.]*|py|node|nodejs|deno|bun|npx|npm|pnpm|yarn|perl|ruby|php|lua|tclsh|osascript|open|xdg-open|start|explorer|rundll32|regsvr32|mshta|wscript|cscript|env|sudo|doas|su|nohup|setsid|xargs|find|awk|gawk|sed|curl|wget|ssh|scp|git|gh|claude|codex|gemini)$'
+    and lower(regexp_replace(p, '\.(exe|cmd|bat|com|ps1)$', '', 'i')) !~ '^(sh|bash|zsh|fish|dash|ksh|csh|tcsh|busybox|cmd|command|conhost|powershell|pwsh|wsl|wmic|forfiles|python[w0-9.]*|py[w]?|node[js0-9.]*|deno|bun|bunx|npx|npm|pnpm|pnpx|yarn|tsx|ts-node|uv|uvx|pipx|perl[0-9.]*|ruby[0-9.]*|php[0-9.]*|lua[0-9.]*|tclsh[0-9.]*|wish|java|jshell|osascript|open|xdg-open|start|explorer|rundll32|regsvr32|mshta|wscript|cscript|env|sudo|doas|su|nohup|setsid|timeout|time|nice|xargs|find|awk|gawk|mawk|sed|vi|vim|nvim|emacs|nano|less|more|make|curl|wget|ssh|scp|git|gh|claude|codex|gemini)$'
 $$;
 alter table public.ws_ki_anbieter drop constraint if exists ws_ki_anbieter_programm_check;
 alter table public.ws_ki_anbieter add constraint ws_ki_anbieter_programm_check check (public.ws_ki_programm_ok(programm));

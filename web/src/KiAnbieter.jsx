@@ -121,7 +121,7 @@ function AnbieterDialog({ wert, toast, onClose, onFertig }) {
         {feld("installieren", "Installieren (Hinweis zum Kopieren)", "npm install -g …", true)}
         {feld("anmelden", "Anmelden (Hinweis)", "copilot (dann /login)", true)}
         {feld("hinweis", "Beschreibung", "")}
-        <p className="text-xs text-slate-500">Sicherheit: Das Programm läuft mit den Rechten der Person – darum nur echte KI-Programme eintragen (Shells und Skript-Sprachen sind gesperrt). Es startet erst, wenn die Person genau diese Fassung auf ihrem PC zulässt; nach jeder Änderung muss sie neu zulassen. Für Prüfungen und Bauen werden eigene Anbieter nie verwendet.</p>
+        <p className="text-xs text-slate-500">Sicherheit: Das Programm läuft mit den Rechten der Person – darum nur echte KI-Programme eintragen (gängige Shells und Skript-Sprachen sind gesperrt, das ersetzt aber kein Vertrauen in das Programm). Es startet erst, wenn die Person genau diese Fassung auf ihrem PC zulässt; nach jeder Änderung muss sie neu zulassen. Für Prüfungen und Bauen werden eigene Anbieter nie verwendet.</p>
         <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={onClose}>Abbrechen</button>
           <button type="button" className="inline-flex items-center gap-2 h-9 px-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-display font-bold text-sm" disabled={busy || !w.id || !w.name || !w.programm} onClick={speichern}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}Speichern</button></div>
       </div>

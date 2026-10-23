@@ -135,11 +135,15 @@ const AUFBAU = {
   },
 };
 /** Prüft eine zurückgeschriebene Anmeldedatei; liefert den bereinigten Inhalt oder null. */
-export function anmeldungBereinigen(name, buf) {
+export function anmeldungBereinigen(name, buf, original = null) {
   const s = buf.toString("utf8");
   if (name === "installation_id") return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$/i.test(s) ? Buffer.from(s) : null;   // UUID
   const f = AUFBAU[name]; if (!f) return null;
-  try { const j = JSON.parse(s); if (!j || typeof j !== "object" || Array.isArray(j)) return null; const o = f(j); return o ? Buffer.from(JSON.stringify(o, null, 2)) : null; } catch { return null; }
+  try { const j = JSON.parse(s); if (!j || typeof j !== "object" || Array.isArray(j)) return null; const o = f(j); if (!o) return null;
+    // Einen API-Schlüssel nur behalten, wenn schon vorher einer drinstand (sonst könnte ein Programm die Anmeldung umstellen, Nachprüfung N4)
+    if ("OPENAI_API_KEY" in o) { let vorher = null; try { vorher = original ? JSON.parse(original.toString("utf8")) : null; } catch { /* ohne */ } if (!vorher || !("OPENAI_API_KEY" in vorher)) delete o.OPENAI_API_KEY; }
+    if (name === "auth.json" && !o.tokens && typeof o.OPENAI_API_KEY !== "string") return null;
+    return Buffer.from(JSON.stringify(o, null, 2)); } catch { return null; }
 }
 
 /** Freigabe-Ordner für ein Programm: bei npm-Paketen der globale node_modules-Ordner, sonst der Ordner der Datei. */
@@ -184,7 +188,7 @@ export async function sandboxLauf({ anbieter, prog, arbeit, env }) {
       const roh = await sicherLesen(von, arbeit); if (!roh) return;
       let alt = null; try { alt = await readFile(nach); } catch { /* neu */ }
       if (alt && alt.equals(roh)) return;                   // unverändert
-      const b = anmeldungBereinigen(path.basename(nach), roh); if (!b) return;
+      const b = anmeldungBereinigen(path.basename(nach), roh, alt); if (!b) return;
       const tmp = `${nach}.cs-${process.pid}`;
       await writeFile(tmp, b, { mode: 0o600, flag: "wx" }); await rename(tmp, nach);
     } catch { /* bleibt wie es war */ }

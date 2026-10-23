@@ -216,6 +216,8 @@ export function freieArgumente(def, prompt, modell) {
   const args = []; let mitPrompt = false;
   for (const a of Array.isArray(def.argumente) ? def.argumente : []) {
     if (typeof a !== "string") continue;
+    // {modell} nur als ganzes Argument oder nach „=“ (sonst ergäbe z. B. „-{modell}“ mit Modell „c“ die Option -c, Nachprüfung N2)
+    if (a.includes("{modell}") && a !== "{modell}" && !/^[A-Za-z0-9-]+=\{modell\}$/.test(a)) continue;
     if (a.includes("{modell}") && !m) { if (args.length && /^-/.test(args[args.length - 1]) && a === "{modell}") args.pop(); continue; }
     if (a.includes("{prompt}")) { args.push(a.split("{modell}").join(m).split("{prompt}").join(prompt)); mitPrompt = true; continue; }
     args.push(a.split("{modell}").join(m));
