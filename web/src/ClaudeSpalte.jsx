@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Send, Loader2, ClipboardList, Check, X, ChevronDown, ChevronUp, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { supabase } from "./supabase";
+import { Markdown } from "./Markdown";
 
 // Chat mit Claude überall (Neue Anweisung Gerhard 2026-10-23 10:45, Entscheidungen 10:50): fest eingeblendete Spalte auf jeder Seite.
 // Persönliches Gespräch; Claude antwortet über die eigene Werkstatt (Abo) und liest das Projekt nur (nichts ändern, nichts ausführen).
@@ -59,13 +60,13 @@ export default function ClaudeSpalte({ d, ich, ort, kontext, toast }) {
         {liste.map((m) => m.frage_id ? (
           <div key={m.id} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-2.5 max-w-[96%]">
             <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Bot className="w-3.5 h-3.5" />Claude · {zeit(m.erstellt)}</div>
-            <p className="whitespace-pre-wrap">{m.text}</p>
+            <Markdown text={m.text} klein />
             {m.vorschlag && <Vorschlag m={m} d={d} ich={ich} kann={fragen[m.frage_id]?.von === ich.id} toast={toast} />}
           </div>
         ) : (
           <div key={m.id} className="ml-auto rounded-xl bg-emerald-50 dark:bg-emerald-950/50 p-2.5 max-w-[90%]">
             <div className="text-[11px] font-bold text-slate-500">Du · {ORT_NAME(m.ort)} · {zeit(m.erstellt)}</div>
-            <p className="whitespace-pre-wrap">{m.text}</p>
+            <Markdown text={m.text} klein />
             {m.stand === "fehler" && <p className="text-xs text-red-600 mt-1">Nicht beantwortet</p>}
           </div>))}
         {wartet && <div className="flex items-center gap-2 text-slate-500">{werkstattAn ? <><Loader2 className="w-4 h-4 animate-spin" />Claude liest nach und antwortet … (über deine Werkstatt)</> : <span className="text-amber-700 dark:text-amber-400">Deine Werkstatt ist aus – sie startet mit dem Programm; dann antwortet Claude.</span>}</div>}
