@@ -40,6 +40,8 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-23 17:49 – Design zuerst:** Der App-Designer ist ab dem ersten Tag eines Projekts nutzbar – auch ohne Code, Features oder App-Adresse –
+  und hat immer den Chat. Bei Projekten ohne Design führt Claude durch die Planung (erst Fragen, dann komplettes Grunddesign zur Übernahme).
 - **2026-10-23 17:30 – Logo der Codeschmiede:** Ab jetzt immer das Zeichen „Glühendes C“ (Quellen `marke/zeichen.svg`, `marke/zeichen-klein.svg`,
   `marke/logo-hell.svg`, `marke/logo-dunkel.svg`; in der Oberfläche `web/src/Zeichen.jsx`). Der frühere Hammer wird nicht mehr als Logo verwendet.
   Programm-Symbol, Favicon, App-Symbole und Update-Seite kommen aus diesen Dateien; bei Änderungen alle zusammen erneuern.

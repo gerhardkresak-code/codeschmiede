@@ -772,14 +772,16 @@ async function designChat() {
   if (!f) return false;
   melde("status", "Designer-Chat: KI antwortet");
   try {
-    const { data: pj } = await db.from("ws_projekte").select("name").eq("id", f.projekt_id).maybeSingle();
+    const { data: pj } = await db.from("ws_projekte").select("name, beschreibung").eq("id", f.projekt_id).maybeSingle();
+    // Noch gar kein Design (weder live noch Entwurf)? Dann plant Claude von Grund auf (Gerhard 2026-10-23 17:49)
+    const { count: designs } = await db.from("ws_design_entwuerfe").select("id", { count: "exact", head: true }).eq("projekt_id", f.projekt_id).in("stand", ["live", "gesendet"]);
     // Verlauf nur aus dem EIGENEN Gespräch (eigene Fragen + Antworten darauf) – Prüfung O2
     let q = db.from("ws_design_chat").select("id, von, text, frage_id").eq("projekt_id", f.projekt_id).lt("id", f.id).order("id", { ascending: false }).limit(40);
     q = f.entwurf_id ? q.eq("entwurf_id", f.entwurf_id) : q.is("entwurf_id", null);
     const { data: alle } = await q;
     const eigene = new Set((alle || []).filter((m) => !m.frage_id && m.von === cfg.user_id).map((m) => m.id));
     const verlauf = (alle || []).filter((m) => eigene.has(m.id) || eigene.has(m.frage_id)).slice(0, 8);
-    const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, /^\[Marke\]/.test(f.text) ? "bilder" : "design", designPrompt({ projektName: pj?.name || f.projekt_id, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
+    const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, /^\[Marke\]/.test(f.text) ? "bilder" : "design", designPrompt({ projektName: pj?.name || f.projekt_id, projektId: f.projekt_id, beschreibung: pj?.beschreibung || "", anfang: !designs, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
     const { text, vorschlag } = designAntwort(ohneGeheimnisse(roh));
     const { error: e2 } = await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
     if (e2) throw e2;
