@@ -478,7 +478,8 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
           {auftraege.length === 0 && <div className="text-sm text-slate-500 text-center py-8">{f ? `Noch kein Auftrag zu „${f.name}“.` : `Noch kein Auftrag für ${g.name}.`} Beschreibe unten, was sich ändern soll.<br /><span className="text-xs">Bitte keine Daten von Vereinsmitgliedern hineinschreiben.</span></div>}
           {auftraege.map((a) => (
             <React.Fragment key={a.id}>
-              <div className="self-center text-xs text-slate-500 text-center flex items-center gap-2">Auftrag #{a.id}: {a.titel}{ABGESCHLOSSEN.includes(a.stand) && <span className="inline-flex items-center gap-1 font-semibold text-green-700 dark:text-green-400"><CircleCheck className="w-3.5 h-3.5" />abgeschlossen</span>}</div>
+              <div className="self-center text-xs text-slate-500 text-center flex items-center gap-2 flex-wrap justify-center">Auftrag #{a.id}: {a.titel}{ABGESCHLOSSEN.includes(a.stand) && <span className="inline-flex items-center gap-1 font-semibold text-green-700 dark:text-green-400"><CircleCheck className="w-3.5 h-3.5" />abgeschlossen</span>}
+                {ABBRECHBAR.includes(a.stand) && (ich.rolle === "admin" || a.erstellt_von === ich.id) && <AbbrechenKnopf a={a} toast={toast} />}</div>
               <Schritte a={a} />
               {nachrichten.filter((m) => m.auftrag_id === a.id && (alleFragen || !beantwortet(m))).map((m) => {
                 const zu = beantwortet(m);
@@ -511,6 +512,21 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
       ) : <div className="border-t border-slate-200 dark:border-slate-800 p-4 text-xs text-slate-500">Für diesen Bereich hast du kein Recht, Aufträge zu geben.</div>}
     </aside>
   );
+}
+
+// Auftrag abbrechen (Datenbank 0023, Gerhard 2026-10-23 19:08): zweimal klicken, damit nichts aus Versehen abgebrochen wird
+const ABBRECHBAR = ["wartet", "frage", "nacharbeit", "freigabe"];
+function AbbrechenKnopf({ a, toast }) {
+  const [sicher, setSicher] = useState(false); const [busy, setBusy] = useState(false);
+  useEffect(() => { if (!sicher) return undefined; const t = setTimeout(() => setSicher(false), 6000); return () => clearTimeout(t); }, [sicher]);
+  const los = async () => {
+    if (!sicher) { setSicher(true); return; }
+    setBusy(true); const { error } = await supabase.rpc("ws_auftrag_abbrechen", { p_auftrag: a.id, p_grund: null }); setBusy(false); setSicher(false);
+    toast(error ? fehler(error) : `Auftrag #${a.id} abgebrochen${a.pr_nummer ? ` – der Pull Request #${a.pr_nummer} bleibt bei GitHub offen` : ""}`);
+  };
+  return <button type="button" disabled={busy} onClick={los} title="Auftrag abbrechen – die Werkstatt arbeitet nicht weiter daran"
+    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold ${sicher ? "border-red-600 bg-red-600 text-white" : "border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-red-500 hover:text-red-700"}`}>
+    {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}{sicher ? "Wirklich abbrechen?" : "Abbrechen"}</button>;
 }
 
 function ErlaubnisKarte({ e, g, kann, onEntscheid }) {
