@@ -118,5 +118,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: a20e5ea4c61fb0156e241c29f99fac93
         run: |
           [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "::error::Geheimnis CLOUDFLARE_API_TOKEN fehlt"; exit 1; }
+          # Das Geheimnis wurde mit Zeilenumbruch/Zusatz gespeichert (Fehler 2026-10-22 „invalid header value“):
+          # nur die erste Zeile verwenden, die wie ein Schlüssel aussieht (mind. 38 Zeichen – kürzer wäre z. B. die 32-stellige Konto-ID –, ohne Leerzeichen).
+          zeilen=$(printf '%s\n' "$CLOUDFLARE_API_TOKEN" | tr -d '\r' | grep -c . || true)
+          tok=$(printf '%s\n' "$CLOUDFLARE_API_TOKEN" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | awk 'length($0)>=38 && $0 !~ /[[:space:]]/ {print; exit}')
+          [ -n "$tok" ] || { echo "::error::CLOUDFLARE_API_TOKEN enthält keinen gültigen Schlüssel ($zeilen Zeilen) – bitte neu einfügen"; exit 1; }
+          [ "$zeilen" = "1" ] || echo "::warning::CLOUDFLARE_API_TOKEN hat $zeilen Zeilen – verwendet wird die erste gültige. Bitte bei Gelegenheit sauber neu speichern."
+          echo "::add-mask::$tok"
+          export CLOUDFLARE_API_TOKEN="$tok"
           npx --yes wrangler@4 pages project create codeschmiede-updates --production-branch main 2>/dev/null || true
           npx --yes wrangler@4 pages deploy site --project-name codeschmiede-updates --branch main --commit-dirty=true
