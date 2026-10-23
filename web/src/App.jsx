@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
   Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power,
-  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale, ListChecks, Rocket, Undo2, FlaskConical, ScanSearch,
+  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale, ListChecks, Rocket, Undo2, Pin, FlaskConical, ScanSearch,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { Markdown } from "./Markdown";
@@ -33,7 +33,13 @@ const STEP_IDX = { wartet: 0, laeuft: 1, frage: 1, nacharbeit: 1, freigabe: 2, s
 const ABGESCHLOSSEN = ["wissen", "erledigt"];
 // Cloudflare Pages: Testseite eines Zweigs (klein, nur a-z0-9 und „-“, höchstens 28 Zeichen)
 const cfAlias = (zweig) => String(zweig || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 28).replace(/^-+|-+$/g, "");
-const vorschauUrl = (projekt, a) => (a?.zweig && projekt?.vorschau_domain && !ABGESCHLOSSEN.includes(a.stand) ? `https://${cfAlias(a.zweig)}.${projekt.vorschau_domain}` : projekt?.live_url || null);
+// Ohne offenen Auftrag: bei Test & Live die Testfassung (main), sonst die App – dort sieht man Änderungen zuerst
+const vorschauUrl = (projekt, a) => (a?.zweig && projekt?.vorschau_domain && !ABGESCHLOSSEN.includes(a.stand) ? `https://${cfAlias(a.zweig)}.${projekt.vorschau_domain}`
+  : (projekt?.live_zweig && /^https:\/\/[^/\s]+$/i.test(String(projekt?.test_url || "").replace(/\/$/, "")) ? String(projekt.test_url).replace(/\/$/, "") : projekt?.live_url) || null);
+// Seite in der Vorschau: gemerkte Seite des Features (Datenbank 0028), sonst die des Projekts; „cs=1“ hängt am Ende
+const SEITE = /^\/[A-Za-z0-9/_.~-]{0,150}(\?[A-Za-z0-9_=&.~%-]{0,150})?$/;
+const seiteOk = (p) => typeof p === "string" && SEITE.test(p) && !/(^|\/)\.\.(\/|$|\?)/.test(p) && !p.startsWith("//");
+const mitCs = (p) => `${p}${p.includes("?") ? "&" : "?"}cs=1`;
 const oeffneExtern = (url) => { if (isDesktop()) tauri("plugin:opener|open_url", { url }).catch(() => {}); else window.open(url, "_blank", "noopener"); };
 const fmt = (d) => new Date(d).toLocaleString("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const fehler = (e) => (e?.message || "Unbekannter Fehler").replace(/^.*?ERROR:\s*/, "");
@@ -1009,14 +1015,23 @@ function FeatureArbeitsplatz({ f, g, d, ich, darf, toast, onZurueck, onLoeschen 
       <div ref={raster} className="grid gap-0 lg:[grid-template-columns:var(--links)_8px_minmax(0,1fr)] h-auto lg:h-[calc(100vh-190px)] min-h-[560px]" style={{ "--links": `${links}%` }}>
         <AuftragsChat g={g} f={f} d={d} ich={ich} darf={darf} toast={toast} eingebettet baustein={baustein} onBausteinFertig={() => setBaustein(null)} />
         <div className="hidden lg:block cursor-col-resize group" onPointerDown={ziehen} role="separator" aria-orientation="vertical" aria-label="Breite ändern"><div className="mx-auto w-1 h-full rounded bg-slate-200 dark:bg-slate-800 group-hover:bg-emerald-600" /></div>
-        <LiveVorschau projekt={projekt} a={aktiv} toast={toast} onBaustein={setBaustein} baustein={baustein} />
+        <LiveVorschau projekt={projekt} a={aktiv} f={f} darfMerken={darf(g?.bereich_id, "auftraege")} toast={toast} onBaustein={setBaustein} baustein={baustein} />
       </div>
     </section>);
 }
 
 // Live-Vorschau: echte Testseite des Auftrags (Cloudflare), meldet neue Stände, „Zeigen & kommentieren“ über den Vorschau-Helfer der App
-function LiveVorschau({ projekt, a, toast, onBaustein, baustein }) {
+function LiveVorschau({ projekt, a, f, darfMerken, toast, onBaustein, baustein }) {
   const url = vorschauUrl(projekt, a);
+  const [gemerkt, setGemerkt] = useState(f?.vorschau_pfad || null);
+  useEffect(() => { setGemerkt(f?.vorschau_pfad || null); }, [f?.id, f?.vorschau_pfad]);
+  const startSeite = seiteOk(gemerkt) ? gemerkt : seiteOk(projekt?.vorschau_pfad) ? projekt.vorschau_pfad : "/";
+  const [jetztSeite, setJetztSeite] = useState(null);
+  const merken = async () => {
+    if (!f || !seiteOk(jetztSeite)) return;
+    const { error } = await supabase.rpc("ws_feature_vorschau_setzen", { p_feature: f.id, p_pfad: jetztSeite });
+    if (error) toast(fehler(error)); else { setGemerkt(jetztSeite); toast(`Gemerkt: ${f.name} öffnet ab jetzt ${jetztSeite}`); }
+  };
   const [breite, setBreite] = useState("100%");
   const [neu, setNeu] = useState(false); const [stand, setStand] = useState(null); const [schluessel, setSchluessel] = useState(0);
   const [zeigen, setZeigen] = useState(false); const [helfer, setHelfer] = useState(false);
@@ -1042,6 +1057,7 @@ function LiveVorschau({ projekt, a, toast, onBaustein, baustein }) {
     const an = (e) => {
       if (e.origin !== herkunft || e.source !== frame.current?.contentWindow || typeof e.data !== "object" || !e.data) return;
       if (e.data.cs === "bereit") setHelfer(true);
+      if (e.data.cs === "seite" && seiteOk(e.data.pfad)) setJetztSeite(e.data.pfad);
       if (e.data.cs === "baustein") {
         const b = { name: String(e.data.name || "").slice(0, 200), seite: String(e.data.seite || "").slice(0, 200), pfad: String(e.data.pfad || "").slice(0, 300), text: String(e.data.text || "").slice(0, 200) };
         onBaustein(b); setZeigen(false); toast(`Baustein gewählt: ${b.name} – schreib links, was sich ändern soll`);
@@ -1060,12 +1076,17 @@ function LiveVorschau({ projekt, a, toast, onBaustein, baustein }) {
         <button type="button" title="Neu laden" onClick={neuLaden} className="p-2 rounded-lg border border-slate-200 dark:border-slate-800"><RefreshCw className="w-4 h-4" /></button>
         <button type="button" aria-pressed={zeigen} disabled={!helfer} title={helfer ? "Auf ein Element in der Vorschau klicken und kommentieren" : "Die Testseite hat den Vorschau-Helfer noch nicht (kommt mit dem nächsten Stand der App)"} onClick={() => setZeigen(!zeigen)}
           className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-semibold disabled:opacity-50 ${zeigen ? "border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300" : "border-slate-200 dark:border-slate-800"}`}><MousePointerClick className="w-4 h-4" />Zeigen & kommentieren</button>
-        <button type="button" title="Im eigenen Fenster öffnen" onClick={() => oeffneExtern(`${url}${projekt?.vorschau_pfad || "/"}`)} className="p-2 rounded-lg border border-slate-200 dark:border-slate-800"><ExternalLink className="w-4 h-4" /></button>
+        <button type="button" title="Im eigenen Fenster öffnen" onClick={() => oeffneExtern(`${url}${jetztSeite || startSeite}`)} className="p-2 rounded-lg border border-slate-200 dark:border-slate-800"><ExternalLink className="w-4 h-4" /></button>
       </div>
+      {f && <div className="flex flex-wrap items-center gap-2 px-2 pt-2 text-xs">
+        <span className="text-slate-500">Seite für dieses Feature:</span><span className="font-mono">{gemerkt || "Startseite"}</span>
+        {darfMerken && helfer && jetztSeite && jetztSeite !== gemerkt && <button type="button" className={`${ghost} h-8 text-xs`} onClick={merken} title={`Ab jetzt öffnet „${f.name}“ hier: ${jetztSeite}`}><Pin className="w-3.5 h-3.5" />Diese Seite merken ({jetztSeite})</button>}
+        {jetztSeite && jetztSeite !== startSeite && <button type="button" className={`${ghost} h-8 text-xs`} onClick={() => { setJetztSeite(null); setSchluessel((k) => k + 1); }}><Undo2 className="w-3.5 h-3.5" />Zurück zur Feature-Seite</button>}
+      </div>}
       {neu && <button type="button" onClick={neuLaden} className="m-2 self-end inline-flex items-center gap-2 rounded-full bg-emerald-700 text-white px-3 py-1.5 text-sm font-semibold"><RefreshCw className="w-4 h-4" />Neuer Stand da · neu laden</button>}
       {baustein && <div className="mx-2 mt-2 text-xs rounded-lg border border-orange-400 bg-orange-50 dark:bg-orange-950/40 px-2.5 py-1.5 flex items-center gap-2">Gewählt: <b>{baustein.name}</b>{baustein.seite && <span className="text-slate-500">· {baustein.seite}</span>}<button type="button" className="ml-auto" onClick={() => onBaustein(null)} title="Auswahl aufheben"><X className="w-3.5 h-3.5" /></button></div>}
       <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-2 overflow-auto grid justify-items-center">
-        <iframe key={schluessel} ref={frame} title="Live-Vorschau" src={`${url}${projekt?.vorschau_pfad || "/"}?cs=1`} className="h-full min-h-[440px] bg-white rounded-lg border border-slate-200 dark:border-slate-800" style={{ width: breite, maxWidth: "100%" }}
+        <iframe key={schluessel} ref={frame} title="Live-Vorschau" src={`${url}${mitCs(startSeite)}`} className="h-full min-h-[440px] bg-white rounded-lg border border-slate-200 dark:border-slate-800" style={{ width: breite, maxWidth: "100%" }}
           onLoad={() => { setHelfer(false); frame.current?.contentWindow?.postMessage({ cs: "hallo" }, herkunft); }} />
       </div>
     </div>);
