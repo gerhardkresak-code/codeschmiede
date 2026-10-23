@@ -84,7 +84,8 @@ export async function uebernehmen(quelle, { geaendert, geloescht, symlinks }) {
   for (const { r, neu } of geaendert) {
     const z = await zielSicher(quelle, r); if (!z) return { ok: false, verboten: [r] };
     await mkdir(path.dirname(z), { recursive: true });
-    if (!(await realpath(path.dirname(z))).startsWith(echt)) return { ok: false, verboten: [r] };
+    const eltern = await realpath(path.dirname(z));
+    if (eltern !== echt && !eltern.startsWith(echt + path.sep)) return { ok: false, verboten: [r] };
     await writeFile(z, neu);
   }
   for (const r of geloescht) { const z = await zielSicher(quelle, r); if (z) await unlink(z).catch(() => {}); }
