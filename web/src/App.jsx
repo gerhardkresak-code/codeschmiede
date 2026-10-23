@@ -211,6 +211,7 @@ export default function App() {
           : !daten.projektId ? <div className={`${card} p-8 text-slate-500`}>Du bist noch keinem Projekt zugeordnet. Der Admin nimmt dich in ein Projekt auf.</div>
           : ansicht === "zentrale" ? <Zentrale key={daten.projektId} d={daten} ich={ich} toast={setToast} onOrt={setOrtZentrale} />
           : ansicht === "global" ? <Zentrale key={daten.projektId + "-global"} d={daten} ich={ich} toast={setToast} nurGlobal onOrt={setOrtZentrale} />
+          : ansicht === "vorschau" ? <LiveVorschauSeite key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "designer" ? <Designer key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "benutzer" ? <BenutzerRechte d={daten} ich={ich} toast={setToast} />
           : ansicht === "verbrauch" ? <Verbrauch d={daten} ich={ich} toast={setToast} />
@@ -256,7 +257,7 @@ function EinladungAnnehmen({ sitzung, onFertig }) {
 }
 
 function Spaeter({ ansicht }) {
-  const t = { vorschau: "Live-Vorschau mit Zeigen & kommentieren kommt in Schritt 3.", zweige: "Zweige & Versionen wird in Schritt 4 übernommen.", pruef: "Prüfstand wird in Schritt 4 übernommen.", wissen: "Wissensdatenbank wird in Schritt 4 übernommen.", log: "Änderungsprotokoll wird in Schritt 4 übernommen.", doku: "Dokumentation zum Herunterladen wird in Schritt 4 übernommen." }[ansicht];
+  const t = { zweige: "Zweige & Versionen wird in Schritt 4 übernommen.", pruef: "Prüfstand wird in Schritt 4 übernommen.", wissen: "Wissensdatenbank wird in Schritt 4 übernommen.", log: "Änderungsprotokoll wird in Schritt 4 übernommen.", doku: "Dokumentation zum Herunterladen wird in Schritt 4 übernommen." }[ansicht];
   return <div className={`${card} p-8 text-slate-500 flex items-center gap-3`}><Info className="w-5 h-5" />{t}</div>;
 }
 
@@ -653,6 +654,49 @@ function StationsUebersicht({ station, d, darf, toast, onSchliessen, onOeffne, o
             })}
           </div>);
       })}
+    </section>);
+}
+
+// ---------------- Live-Vorschau (Menüpunkt): aktuelle App + „Zeigen & kommentieren“ → Auftrag an Gruppe/Feature ----------------
+function LiveVorschauSeite({ d, ich, toast }) {
+  const projekt = d.projekte.find((p) => p.id === d.projektId);
+  const rolle = ich.rolle === "admin" ? "admin" : d.mitglieder.find((m) => m.projekt_id === d.projektId && m.benutzer_id === ich.id)?.rolle;
+  const darf = useCallback((bereich, recht) => rolle === "admin" || d.rechte.some((r) => r.benutzer_id === ich.id && r.bereich_id === bereich && r[recht] && (recht === "auftraege" ? ["entwickler", "texter"].includes(rolle) : rolle === "entwickler")), [d.rechte, ich, rolle]);
+  // Nur Gruppen, in denen ich Aufträge geben darf (globale Gruppen zuletzt)
+  const bereichName = (id) => d.bereiche.find((b) => b.id === id)?.name || "";
+  const gruppen = d.gruppen.filter((g) => darf(g.bereich_id, "auftraege"))
+    .sort((a, b) => (!!d.bereiche.find((x) => x.id === a.bereich_id)?.global - !!d.bereiche.find((x) => x.id === b.bereich_id)?.global) || a.name.localeCompare(b.name, "de"));
+  const [gid, setGid] = useState(() => merke.lies("cs-vorschau-gruppe") || "");
+  const [fid, setFid] = useState("");
+  const [baustein, setBaustein] = useState(null);
+  const g = gruppen.find((x) => x.id === gid) || null;
+  const feats = g ? d.features.filter((f) => f.gruppe_id === g.id && !f.ausgebaut && !f.ausgeblendet) : [];
+  const f = feats.find((x) => x.id === fid) || null;
+  const waehleGruppe = (v) => { setGid(v); setFid(""); merke.schreib("cs-vorschau-gruppe", v); };
+  return (
+    <section className="flex flex-col gap-3" aria-label="Live-Vorschau">
+      <div><h2 className="font-display font-bold text-xl leading-tight">Live-Vorschau</h2>
+        <p className="text-sm text-slate-500">Die aktuelle App. Mit <b>Zeigen & kommentieren</b> klickst du auf ein Element, wählst Gruppe (und Feature) und schreibst, was sich ändern soll – daraus wird ein Auftrag.</p></div>
+      <div className="grid gap-3 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(320px,38%)_minmax(0,1fr)] lg:h-[calc(100vh-210px)] min-h-[560px]">
+        <div className={`${card} flex flex-col min-h-0 overflow-hidden`}>
+          <div className="p-3 border-b border-slate-200 dark:border-slate-800 grid gap-2">
+            <label className="flex flex-col gap-1 text-xs text-slate-500">Gruppe
+              <select className={input} value={g?.id || ""} onChange={(e) => waehleGruppe(e.target.value)}>
+                <option value="">– Gruppe wählen –</option>
+                {gruppen.map((x) => <option key={x.id} value={x.id}>{x.name} · {bereichName(x.bereich_id)}</option>)}
+              </select></label>
+            {g && <label className="flex flex-col gap-1 text-xs text-slate-500">Feature (optional)
+              <select className={input} value={f?.id || ""} onChange={(e) => setFid(e.target.value)}>
+                <option value="">Ganze Gruppe</option>
+                {feats.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select></label>}
+            {!gruppen.length && <p className="text-xs text-slate-500">Du darfst in diesem Projekt keine Aufträge geben – die Vorschau kannst du trotzdem ansehen.</p>}
+          </div>
+          {g ? <div className="flex-1 min-h-0 flex flex-col"><AuftragsChat key={`${g.id}-${f?.id || ""}`} g={g} f={f} d={d} ich={ich} darf={darf} toast={toast} eingebettet baustein={baustein} onBausteinFertig={() => setBaustein(null)} /></div>
+            : <div className="flex-1 grid place-items-center p-6 text-sm text-slate-500 text-center"><span><MousePointerClick className="w-5 h-5 mx-auto mb-2 text-orange-500" />Zuerst eine Gruppe wählen, dann rechts auf „Zeigen & kommentieren“ und auf das Element klicken.</span></div>}
+        </div>
+        <LiveVorschau projekt={projekt} a={null} toast={toast} onBaustein={setBaustein} baustein={baustein} />
+      </div>
     </section>);
 }
 
