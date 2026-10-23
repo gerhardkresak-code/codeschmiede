@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Palette, Shapes, Stamp, Save, Send, Copy, Plus, Trash2, Undo2, Redo2, History, GitCompareArrows, Monitor, Tablet, Smartphone,
-  Sun, Moon, CircleCheck, CircleAlert, Loader2, ExternalLink, LayoutTemplate, Home, Users, Calendar, Trophy, Settings, Bell, Search,
+  Sun, Moon, CircleCheck, CircleAlert, TriangleAlert, Loader2, Bot, ShieldCheck, Sparkles, Check, X, ExternalLink, LayoutTemplate, Home, Users, Calendar, Trophy, Settings, Bell, Search,
 } from "lucide-react";
 import { supabase } from "./supabase";
 
-// App-Designer · Etappe 1 (Entwurf 0.9, freigegeben von Gerhard 2026-10-22 22:40)
+// App-Designer · Etappe 1 (Entwurf 0.9, freigegeben von Gerhard 2026-10-22 22:40) · Etappe 2: Chat mit Claude + erweiterte Prüfungen (2026-10-23)
 // Ein Grunddesign je Projekt (nicht je Rolle). Ändern → Entwurf speichern (jede Fassung bleibt) → vergleichen → als Auftrag senden.
 // Wirksam wird es erst über den normalen Weg: Freigabe → Sicherheitsprüfung → Zusammenführen → Feature-Prüfung → live.
-// Etappe 2: Chat mit Claude + Prüfungen erweitert · Etappe 3: Trainer to go liest die Werte zentral · Etappe 4/5: Bausteine, Marke.
+// Etappe 3: Trainer to go liest die Werte zentral · Etappe 4/5: Bausteine, Marke.
 
 const btn = "inline-flex items-center justify-center gap-2 h-9 px-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-display font-bold tracking-wide transition text-sm";
 const ghost = "inline-flex items-center justify-center gap-2 h-9 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition";
@@ -51,16 +51,44 @@ const flach = (o, p = "") => Object.entries(o || {}).filter(([k]) => !VERBOTEN.h
 const lum = (hex) => { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return 0; const n = parseInt(m[1], 16);
   return [16, 8, 0].map((s) => ((n >> s) & 255) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)).reduce((a, c, i) => a + c * [0.2126, 0.7152, 0.0722][i], 0); };
 const kontrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+// Farbsehschwäche simulieren (Machado 2009, volle Stärke) und Farbabstand ΔE (CIE76) – Prüfung, ob Statusfarben unterscheidbar bleiben
+const lin = (hex) => { const n = parseInt(String(hex).slice(1), 16); return [16, 8, 0].map((s) => ((n >> s) & 255) / 255).map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); };
+const MATRIX = { rot: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+  gruen: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.01182, 0.04294, 0.968881]] };
+const lab = ([r, g, b]) => { const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const [x, y, z] = [(r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047, r * 0.2126 + g * 0.7152 + b * 0.0722, (r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883].map(f);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)]; };
+const sim = (hex, m) => { const c = lin(hex); return m ? MATRIX[m].map((z) => Math.min(1, Math.max(0, z[0] * c[0] + z[1] * c[1] + z[2] * c[2]))) : c; };
+const deltaE = (a, b, m) => { const [p, q] = [lab(sim(a, m)), lab(sim(b, m))]; return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+const farbton = (hex) => { const [r, g, b] = [16, 8, 0].map((s) => ((parseInt(String(hex).slice(1), 16) >> s) & 255) / 255); const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  if (!d) return null; const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return (h * 60 + 360) % 360; };
+
+// Prüfungen: stufe „rot“ = muss (Barrierefreiheit), „hinweis“ = sollte. Gruppen für die Anzeige.
 function pruefungen(w) {
-  const out = [];
+  const out = []; const neu = (gruppe, ok, text, wert, stufe = "rot") => out.push({ gruppe, ok, text, wert, stufe });
   ["hell", "dunkel"].forEach((m) => {
     const f = w.farben[m]; const t = m === "hell" ? "Hell" : "Dunkel";
     [["text", "hintergrund", 4.5, "Text auf Hintergrund"], ["text", "flaeche", 4.5, "Text auf Karten"], ["text_leise", "flaeche", 4.5, "Leiser Text auf Karten"],
-      ["primaer_text", "primaer", 4.5, "Knopf-Text auf Hauptfarbe"], ["menue_text", "menue", 4.5, "Menü-Text"], ["primaer", "hintergrund", 3, "Hauptfarbe als Rahmen/Symbol"]]
-      .forEach(([a, b, soll, name]) => { const k = kontrast(f[a], f[b]); out.push({ ok: k >= soll, text: `${t}: ${name}`, wert: `${k.toFixed(1)} : 1 (mind. ${soll})` }); });
+      ["primaer_text", "primaer", 4.5, "Knopf-Text auf Hauptfarbe"], ["menue_text", "menue", 4.5, "Menü-Text"], ["primaer", "hintergrund", 3, "Hauptfarbe als Rahmen/Symbol"],
+      ["primaer", "menue", 3, "Aktiver Menüpunkt erkennbar"]]
+      .forEach(([a, b, soll, name]) => { const k = kontrast(f[a], f[b]); neu("Kontrast", k >= soll, `${t}: ${name}`, `${k.toFixed(1)} : 1 (mind. ${soll})`); });
+    [["erfolg", "Erfolg"], ["warnung", "Warnung"], ["fehler", "Fehler"]].forEach(([k, n]) => { const v = kontrast(f[k], f.flaeche); neu("Statusfarben", v >= 3, `${t}: ${n} auf Karten`, `${v.toFixed(1)} : 1 (mind. 3)`); });
+    const r = kontrast(f.rand, f.flaeche); neu("Kontrast", r >= 1.15, `${t}: Ränder sichtbar`, `${r.toFixed(2)} : 1 (mind. 1,15)`, "hinweis");
   });
-  out.push({ ok: w.schrift.basis >= 14, text: "Grundschrift gut lesbar", wert: `${w.schrift.basis} px (mind. 14)` });
-  out.push({ ok: w.logo.groesse >= 24, text: "Logo groß genug für Handy", wert: `${w.logo.groesse} px (mind. 24)` });
+  const h = w.farben.hell;
+  [["erfolg", "fehler", "Erfolg ↔ Fehler"], ["warnung", "fehler", "Warnung ↔ Fehler"], ["primaer", "fehler", "Hauptfarbe ↔ Fehler"]].forEach(([a, b, n]) => {
+    const minimum = Math.min(deltaE(h[a], h[b], "rot"), deltaE(h[a], h[b], "gruen"));
+    neu("Farbsehschwäche", minimum >= 15, `${n} bei Rot-Grün-Schwäche unterscheidbar`, `Abstand ${minimum.toFixed(0)} (mind. 15) – Status zusätzlich immer mit Text/Symbol`, "hinweis");
+  });
+  const [th, td] = [farbton(w.farben.hell.primaer), farbton(w.farben.dunkel.primaer)];
+  const dh = th == null || td == null ? 0 : Math.min(Math.abs(th - td), 360 - Math.abs(th - td));
+  neu("Hell & Dunkel", dh <= 25, "Hauptfarbe in beiden Modi gleich erkennbar", `Farbton-Abstand ${dh.toFixed(0)}° (höchstens 25°)`, "hinweis");
+  const dl = lum(w.farben.dunkel.hintergrund); neu("Hell & Dunkel", dl <= 0.03, "Dunkelmodus: Hintergrund dunkel genug", `Helligkeit ${(dl * 100).toFixed(1)} % (höchstens 3 %)`, "hinweis");
+  const gr = kontrast(w.farben.dunkel.text, w.farben.dunkel.hintergrund); neu("Hell & Dunkel", gr <= 18, "Dunkelmodus nicht zu grell", `${gr.toFixed(1)} : 1 (höchstens 18 – reinweiß auf schwarz blendet)`, "hinweis");
+  neu("Handy", w.schrift.basis >= 14, "Grundschrift gut lesbar", `${w.schrift.basis} px (mind. 14)`);
+  neu("Handy", w.logo.groesse >= 24, "Logo groß genug", `${w.logo.groesse} px (mind. 24)`);
+  neu("Handy", w.form.abstand >= 12, "Abstände groß genug zum Tippen", `${w.form.abstand} px (mind. 12)`, "hinweis");
+  neu("Handy", w.menue.handy === "unten", "Menü mit dem Daumen erreichbar", w.menue.handy === "unten" ? "Leiste unten" : "Menü-Knopf oben – schwerer erreichbar", "hinweis");
   return out;
 }
 
@@ -95,6 +123,7 @@ export default function Designer({ d, ich, toast }) {
   const [dunkel, setDunkel] = useState(false);
   const [dialog, setDialog] = useState(null);
   const [arbeit, setArbeit] = useState(false);
+  const [rechts, setRechts] = useState("chat");
 
   const darf = useMemo(() => {
     if (ich.rolle === "admin") return true;
@@ -157,7 +186,8 @@ export default function Designer({ d, ich, toast }) {
   if (!projekt) return null;
   if (!projekt.design_gruppe_id) return <div className={`${card} p-6 text-slate-600 dark:text-slate-300`}>Für dieses Projekt ist noch keine Design-Gruppe festgelegt. Der Admin legt sie fest (Datenbank: <code>ws_projekte.design_gruppe_id</code>).</div>;
   const befunde = pruefungen(werte);
-  const rot = befunde.filter((b) => !b.ok).length;
+  const rot = befunde.filter((b) => !b.ok && b.stufe === "rot").length;
+  const hinweise = befunde.filter((b) => !b.ok && b.stufe !== "rot").length;
 
   return (
     <div className="space-y-3">
@@ -212,12 +242,17 @@ export default function Designer({ d, ich, toast }) {
               {mitte === "vergleich" && <Vergleich entwuerfe={entwuerfe} gueltig={gueltig} aktuell={{ name: aktiv ? `${aktiv.name}${geaendert ? " (ungespeichert)" : ""}` : "Im Editor", werte }} modus={dunkel ? "dunkel" : "hell"} name={projekt.name} />}
             </div>
           </section>
-          <aside className={`${card} p-3 space-y-2 lg:col-span-2 xl:col-span-1 self-start`}>
-            <h3 className="font-display font-bold text-lg flex items-center gap-2">Prüfungen {rot ? <span className="text-xs font-bold bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 rounded-full px-2">{rot} offen</span> : <span className="text-xs font-bold bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 rounded-full px-2">alles grün</span>}</h3>
-            <ul className="space-y-1.5 text-sm">
-              {befunde.map((b) => <li key={b.text} className="flex gap-2">{b.ok ? <CircleCheck className="w-4 h-4 text-green-600 shrink-0 mt-0.5" /> : <CircleAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />}<span>{b.text}<span className="block text-xs text-slate-500">{b.wert}</span></span></li>)}
-            </ul>
-            <p className="text-xs text-slate-500 pt-2 border-t border-slate-200 dark:border-slate-800">Chat mit Claude zum Design kommt in Etappe 2. Bis dahin: Entwurf senden – der Auftrags-Chat läuft wie gewohnt.</p>
+          <aside className={`${card} lg:col-span-2 xl:col-span-1 self-start flex flex-col min-h-[520px] max-h-[calc(100vh-140px)]`}>
+            <div role="tablist" aria-label="Seitenleiste" className="flex gap-1 p-2 border-b border-slate-200 dark:border-slate-800">
+              {[["chat", "Chat mit Claude", Bot], ["pruef", "Prüfungen", ShieldCheck]].map(([id, t, I]) => (
+                <button key={id} type="button" role="tab" aria-selected={rechts === id} onClick={() => setRechts(id)}
+                  className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-sm font-semibold ${rechts === id ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"}`}>
+                  <I className="w-4 h-4" />{t}{id === "pruef" && (rot ? <span className="text-[11px] font-bold bg-red-600 text-white rounded-full px-1.5">{rot}</span> : hinweise ? <span className="text-[11px] font-bold bg-amber-500 text-amber-950 rounded-full px-1.5">{hinweise}</span> : null)}</button>))}
+            </div>
+            {rechts === "pruef" ? <Pruefliste befunde={befunde} rot={rot} hinweise={hinweise} onFragen={() => setRechts("chat")} />
+              : <DesignChat d={d} ich={ich} projekt={projekt} entwurf={aktiv} werte={werte} befunde={befunde} darf={darf} toast={toast}
+                  onUebernehmen={(v) => { if (!bearbeitbar) { toast(fest ? "Dieser Entwurf ist fest – lege eine Kopie an" : "Kein Recht zum Gestalten"); return false; }
+                    setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, v)); setGeaendert(true); setMitte("geruest"); return true; }} />}
           </aside>
         </div>)}
 
@@ -414,4 +449,100 @@ function Spaeter({ modus }) {
   const t = modus === "bausteine" ? ["Bausteine & Seiten-Vorlagen", "Kacheln, Diagramme, Listen, Formulare und Seiten-Vorlagen – mit Chat bearbeitbar. Kommt in Etappe 4 (zuerst Bestandsaufnahme der vorhandenen Bausteine in Trainer to go)."]
     : ["Marke", "Logo-Designer (Teile verschieben, hell/dunkel, 64/32/16 px) und Projektlogos in der Projektliste. Kommt in Etappe 5 – das Codeschmiede-Logo „Glühendes C“ ist bereits gewählt."];
   return <div className={`${card} p-8 text-center`}><h3 className="font-display font-bold text-xl">{t[0]}</h3><p className="text-sm text-slate-500 max-w-xl mx-auto mt-1">{t[1]}</p></div>;
+}
+
+function Pruefliste({ befunde, rot, hinweise, onFragen }) {
+  const gruppen = [...new Set(befunde.map((b) => b.gruppe))];
+  return (
+    <div className="p-3 overflow-auto space-y-3">
+      <p className="text-sm">{rot ? <b className="text-red-700 dark:text-red-300">{rot} Pflicht-Prüfung{rot === 1 ? "" : "en"} offen</b> : <b className="text-green-700 dark:text-green-400">Alle Pflicht-Prüfungen grün</b>}{hinweise ? <span className="text-amber-700 dark:text-amber-400"> · {hinweise} Hinweis{hinweise === 1 ? "" : "e"}</span> : null}</p>
+      {(rot > 0 || hinweise > 0) && <button type="button" className={`${ghost} w-full`} onClick={onFragen}><Sparkles className="w-4 h-4" />Claude um eine Lösung bitten</button>}
+      {gruppen.map((g) => (
+        <section key={g}><h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">{g}</h4>
+          <ul className="space-y-1.5 text-sm">{befunde.filter((b) => b.gruppe === g).map((b) => (
+            <li key={b.text} className="flex gap-2">{b.ok ? <CircleCheck className="w-4 h-4 text-green-600 shrink-0 mt-0.5" /> : b.stufe === "rot" ? <CircleAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" /> : <TriangleAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />}
+              <span>{b.text}<span className="block text-xs text-slate-500">{b.wert}</span></span></li>))}</ul>
+        </section>))}
+      <p className="text-xs text-slate-500 border-t border-slate-200 dark:border-slate-800 pt-2">Rot = Pflicht (Barrierefreiheit WCAG 2.1 AA) · Gelb = Empfehlung</p>
+    </div>);
+}
+
+// Chat mit Claude: läuft über die eigene Werkstatt (Abo), Claude bekommt nur die Werte, keine Werkzeuge.
+const IDEEN = ["Mach die Knöpfe besser lesbar", "Wärmer und freundlicher, aber seriös", "Moderner Dunkelmodus", "Löse die offenen Prüfungen", "Passt das für Dorf- und Profivereine?"];
+function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onUebernehmen }) {
+  const [liste, setListe] = useState([]);
+  const [text, setText] = useState("");
+  const [senden, setSenden] = useState(false);
+  const ende = React.useRef(null);
+  const holen = useCallback(async () => {
+    let q = supabase.from("ws_design_chat").select("*").eq("projekt_id", projekt.id).order("id").limit(200);
+    q = entwurf ? q.eq("entwurf_id", entwurf.id) : q.is("entwurf_id", null);
+    const { data } = await q; setListe(data || []);
+  }, [projekt.id, entwurf]);
+  useEffect(() => {
+    holen();
+    const ch = supabase.channel(`cs-design-chat-${projekt.id}-${entwurf?.id || "ohne"}`).on("postgres_changes", { event: "*", schema: "public", table: "ws_design_chat" }, holen).subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [holen, projekt.id, entwurf]);
+  useEffect(() => { ende.current?.scrollIntoView({ block: "end" }); }, [liste.length]);
+  const werkstattAn = d.pcs.some((p) => p.benutzer_id === ich.id && p.an);
+  const wartet = liste.filter((m) => !m.frage_id && m.von === ich.id && ["offen", "laeuft"].includes(m.stand));
+  const schicke = async (t) => {
+    const inhalt = (t ?? text).trim(); if (!inhalt) return;
+    const offen = befunde.filter((b) => !b.ok).map((b) => `${b.text} (${b.wert})`);
+    const frage = /prüfung/i.test(inhalt) && offen.length ? `${inhalt}\nOffene Prüfungen: ${offen.join("; ")}` : inhalt;
+    setSenden(true);
+    const { error } = await supabase.from("ws_design_chat").insert({ projekt_id: projekt.id, entwurf_id: entwurf?.id || null, text: frage.slice(0, 8000), werte });
+    setSenden(false);
+    if (error) return toast(fehler(error));
+    setText("");
+  };
+  const entscheide = async (m, e) => {
+    if (e === "uebernommen" && !onUebernehmen(m.werte)) return;
+    const { error } = await supabase.rpc("ws_design_chat_entscheiden", { p_antwort: m.id, p_entscheidung: e });
+    if (error) toast(fehler(error)); else toast(e === "uebernommen" ? "Vorschlag übernommen – zum Behalten speichern" : "Vorschlag abgelehnt");
+  };
+  const fragen = Object.fromEntries(liste.filter((m) => !m.frage_id).map((m) => [m.id, m]));
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex-1 overflow-auto p-3 space-y-2.5 text-sm">
+        {!liste.length && <div className="text-slate-500 space-y-2"><p>Frag Claude zum Design{entwurf ? ` von „${entwurf.name}“` : ""}. Claude erklärt und schlägt Werte vor – übernommen wird nur, was du anklickst.</p></div>}
+        {liste.map((m) => m.frage_id ? (
+          <div key={m.id} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-2.5 max-w-[95%]">
+            <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Bot className="w-3.5 h-3.5" />Claude</div>
+            <p className="whitespace-pre-wrap">{m.text}</p>
+            {m.werte && <Vorschlag m={m} werte={werte} kann={fragen[m.frage_id]?.von === ich.id && darf} onEntscheid={(e) => entscheide(m, e)} />}
+          </div>
+        ) : (
+          <div key={m.id} className="ml-auto rounded-xl bg-emerald-50 dark:bg-emerald-950/50 p-2.5 max-w-[90%]">
+            <div className="text-[11px] font-bold text-slate-500">{m.von === ich.id ? "Du" : d.benutzer.find((u) => u.id === m.von)?.name || "Mitglied"} · {fmt(m.erstellt)}</div>
+            <p className="whitespace-pre-wrap">{m.text}</p>
+            {m.stand === "fehler" && <p className="text-xs text-red-600 mt-1">Nicht beantwortet</p>}
+          </div>))}
+        {wartet.length > 0 && <div className="flex items-center gap-2 text-slate-500">{werkstattAn ? <><Loader2 className="w-4 h-4 animate-spin" />Claude denkt nach … (über deine Werkstatt, ca. 20–60 Sek.)</> : <span className="text-amber-700 dark:text-amber-400">Deine Werkstatt ist aus – schalte sie oben ein, dann antwortet Claude.</span>}</div>}
+        <div ref={ende} />
+      </div>
+      {darf ? (
+        <form className="border-t border-slate-200 dark:border-slate-800 p-2.5 space-y-2" onSubmit={(e) => { e.preventDefault(); schicke(); }}>
+          <div className="flex flex-wrap gap-1">{IDEEN.map((i) => <button key={i} type="button" disabled={senden} onClick={() => schicke(i)} className="text-xs rounded-full border border-slate-300 dark:border-slate-700 px-2 py-0.5 hover:bg-slate-50 dark:hover:bg-slate-800">{i}</button>)}</div>
+          <div className="flex gap-1.5">
+            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={4000} placeholder="Was soll sich am Design ändern?" className={`${input} resize-none`}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); schicke(); } }} />
+            <button className={`${btn} self-end`} disabled={senden || !text.trim()} title="Senden"><Send className="w-4 h-4" /></button>
+          </div>
+          {!werkstattAn && <p className="text-xs text-amber-700 dark:text-amber-400">Claude antwortet über deine Werkstatt – sie ist gerade aus.</p>}
+        </form>) : <p className="border-t border-slate-200 dark:border-slate-800 p-3 text-xs text-slate-500">Mitlesen möglich – fragen dürfen Entwickler mit Design-Recht.</p>}
+    </div>);
+}
+
+function Vorschlag({ m, werte, kann, onEntscheid }) {
+  const liste = aenderungen(werte, mische(werte, m.werte));
+  return (
+    <div className="mt-2 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 p-2">
+      <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300 mb-1 flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" />Vorschlag · {liste.length} Änderung{liste.length === 1 ? "" : "en"}</div>
+      {liste.length ? <ul className="space-y-0.5">{liste.slice(0, 12).map((x) => <li key={x.k} className="flex items-center gap-1.5 text-xs"><span className="font-mono text-slate-500 truncate">{x.k}</span><span className="ml-auto flex items-center gap-1"><Wert v={x.alt} />→<Wert v={x.neu} /></span></li>)}</ul>
+        : <p className="text-xs text-slate-500">Schon so eingestellt.</p>}
+      {m.entscheidung ? <p className="text-xs mt-1.5 font-semibold text-slate-500">{m.entscheidung === "uebernommen" ? "Übernommen" : "Abgelehnt"}</p>
+        : kann && liste.length > 0 && <div className="flex gap-1.5 mt-2"><button type="button" className={btn} onClick={() => onEntscheid("uebernommen")}><Check className="w-4 h-4" />Übernehmen</button><button type="button" className={ghost} onClick={() => onEntscheid("abgelehnt")}><X className="w-4 h-4" />Ablehnen</button></div>}
+    </div>);
 }

@@ -12,7 +12,7 @@
 import { createInterface } from "node:readline";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir, readFile, writeFile, access, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, access, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
@@ -22,6 +22,7 @@ import { waehleModell } from "./lib/modell.mjs";
 import { werteAus, zweigName } from "./lib/ergebnis.mjs";
 import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
 import { pruefErgebnis } from "./lib/pruefung.mjs";
+import { designPrompt, designAntwort } from "./lib/design.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -541,9 +542,66 @@ async function station(a) {
   }
 }
 
+
+// ---------- Designer-Chat (App-Designer Etappe 2, Entscheidung Gerhard 2026-10-23 09:46) ----------
+// Nur eigene Fragen (Werkstatt des Schreibenden). Claude bekommt NUR Werte + Frage: keine Werkzeuge, leerer Ordner,
+// keine Projekt-Einstellungen, keine MCP-Server – führt nichts aus, darum auch auf dem Admin-PC zulässig.
+async function claudeOhneWerkzeuge(prompt) {
+  const claude = findeClaude();
+  if (!claude) throw new Error("Claude Code wurde auf diesem PC nicht gefunden.");
+  const env = { ...process.env };
+  for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE_CODE_USE_|CLAUDE_CODE_OAUTH)/i.test(k)) delete env[k];
+  const leer = await mkdtemp(path.join(os.tmpdir(), "cs-design-"));
+  const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", "sonnet", "--tools", "", "--disallowedTools", "*",
+    "--max-turns", "2", "--no-session-persistence", "--permission-mode", "default",
+    "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", "--setting-sources", "user"];
+  let ende = null;
+  try {
+    await new Promise((fertig, fehl) => {
+      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: leer, env, shell: false, windowsHide: true });
+      const uhr = setTimeout(() => kind.kill("SIGINT"), 3 * 60 * 1000);
+      const rl = createInterface({ input: kind.stdout }); const offen = []; let fehlerText = "";
+      kind.stderr.on("data", (d) => { fehlerText = (fehlerText + d.toString()).slice(-1500); });
+      rl.on("line", (zeile) => {
+        let m; try { m = JSON.parse(zeile); } catch { return; }
+        if (m.type === "result") ende = m;
+        const lim = findeAboLimits(m); if (lim) offen.push(aboMelden(lim).catch(() => {}));
+      });
+      kind.on("error", (e) => { clearTimeout(uhr); fehl(e); });
+      kind.on("close", (code) => { clearTimeout(uhr); Promise.all(offen).then(() => (ende ? fertig() : fehl(new Error(`Claude beendet (${code}): ${fehlerText.slice(-300)}`)))); });
+    });
+  } finally { await rm(leer, { recursive: true, force: true }).catch(() => {}); }
+  if (ende?.subtype !== "success") throw new Error("Claude hat keine Antwort geliefert");
+  return ende.result || "";
+}
+
+async function designChat() {
+  const { data, error } = await db.rpc("ws_design_chat_nehmen", { p_pc: pcId });
+  if (error) { if (!/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", ohneGeheimnisse(error.message)); return false; }
+  const f = data?.[0];
+  if (!f) return false;
+  melde("status", "Designer-Chat: Claude antwortet");
+  try {
+    const { data: pj } = await db.from("ws_projekte").select("name").eq("id", f.projekt_id).maybeSingle();
+    let q = db.from("ws_design_chat").select("id, von, text").eq("projekt_id", f.projekt_id).lt("id", f.id).order("id", { ascending: false }).limit(8);
+    q = f.entwurf_id ? q.eq("entwurf_id", f.entwurf_id) : q.is("entwurf_id", null);
+    const { data: verlauf } = await q;
+    const roh = await claudeOhneWerkzeuge(designPrompt({ projektName: pj?.name || f.projekt_id, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
+    const { text, vorschlag } = designAntwort(ohneGeheimnisse(roh));
+    const { error: e2 } = await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
+    if (e2) throw e2;
+  } catch (e) {
+    await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: `Claude konnte gerade nicht antworten: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 300)}`, p_fehler: true });
+  }
+  melde("status", "Werkstatt bereit");
+  return true;
+}
+
 // ---------- Schleife ----------
 async function naechsterAuftrag() {
   if (laeuft || stopp) return;
+  // 0. Designer-Chat: kurz, eigene Fragen zuerst (nicht während der Abo-Pause)
+  if ((await aboLage()) !== "pause" && (await designChat())) return;
   // 1. Fortsetzen: eigene Rückfragen, auf die geantwortet wurde
   // (auch von früheren Werkstatt-PC-Einträgen derselben Person, z. B. nach Neuinstallation)
   const { data: meinePcs } = await db.from("ws_werkstatt_pcs").select("id").eq("benutzer_id", cfg.user_id);
