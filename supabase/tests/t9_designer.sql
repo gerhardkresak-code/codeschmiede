@@ -131,3 +131,12 @@ select ws_design_senden((select id from ws_design_entwuerfe where name='Gut'),'G
 update ws_auftraege set stand='erledigt' where titel='Grunddesign: Gut';
 select stand as gut_nach_erledigt from ws_design_entwuerfe where name='Gut';
 reset role;
+
+-- Nachprüfung 2 (N1): erledigter Auftrag läuft nicht wieder an
+set role authenticated;
+:ADM
+update ws_auftraege set stand='erledigt' where id=(select max(id) from ws_auftraege) and stand<>'erledigt';
+\echo [N1] Werkstatt setzt erledigten Auftrag wieder auf laeuft -> FEHLER
+:D1
+update ws_auftraege set stand='laeuft' where id=(select max(id) from ws_auftraege);
+reset role;

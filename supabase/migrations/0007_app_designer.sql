@@ -81,6 +81,9 @@ create table if not exists public.ws_design_entwuerfe (
   erstellt timestamptz not null default now(),
   geaendert timestamptz not null default now()
 );
+-- Nachprüfung N2: Regel auch dann erneuern, wenn die Tabelle aus einem früheren Stand schon existiert
+alter table public.ws_design_entwuerfe drop constraint if exists ws_design_entwuerfe_werte_check;
+alter table public.ws_design_entwuerfe add constraint ws_design_entwuerfe_werte_check check (pg_column_size(werte) < 65536 and public.ws_design_werte_ok(werte));
 create index if not exists ws_design_entwuerfe_projekt on public.ws_design_entwuerfe (projekt_id, stand);
 
 -- Jede gespeicherte Fassung eines Entwurfs bleibt erhalten (zurückholen, vergleichen)
@@ -189,13 +192,16 @@ drop trigger if exists ws_design_nach_auftrag on public.ws_auftraege;
 create trigger ws_design_nach_auftrag after update of stand on public.ws_auftraege for each row execute function public.ws_design_nach_auftrag();
 
 
--- Beim Anlegen: Mengenbegrenzung (Prüfung O7) und Version 1 sichern (Prüfung O5: jede Fassung bleibt)
+-- Beim Anlegen: Mengenbegrenzung (Prüfung O7/N3) und Version 1 sichern (Prüfung O5: jede Fassung bleibt)
 create or replace function public.ws_design_neu() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if tg_op = 'INSERT' and tg_when = 'BEFORE' then
-    if (select count(*) from public.ws_design_entwuerfe where projekt_id = new.projekt_id and stand = 'entwurf') >= 50 then
-      raise exception 'Zu viele offene Entwürfe in diesem Projekt (max. 50) – verwirf alte'; end if;
+    -- Nachprüfung N3: Grenze je Person (offene) und gesamt je Projekt (inkl. verworfene)
+    if (select count(*) from public.ws_design_entwuerfe where projekt_id = new.projekt_id and erstellt_von = new.erstellt_von and stand = 'entwurf') >= 20 then
+      raise exception 'Du hast schon 20 offene Entwürfe in diesem Projekt – verwirf alte'; end if;
+    if (select count(*) from public.ws_design_entwuerfe where projekt_id = new.projekt_id) >= 1000 then
+      raise exception 'Höchstzahl an Entwürfen für dieses Projekt erreicht – bitte den Admin aufräumen lassen'; end if;
     return new;
   end if;
   insert into public.ws_design_versionen (entwurf_id, nr, werte, erstellt_von) values (new.id, 1, new.werte, new.erstellt_von);
@@ -208,12 +214,12 @@ drop trigger if exists ws_design_neu_nach on public.ws_design_entwuerfe;
 create trigger ws_design_neu_nach after insert on public.ws_design_entwuerfe for each row execute function public.ws_design_neu();
 revoke execute on function public.ws_design_neu() from public, anon, authenticated;
 
--- Endstände sind fest (Prüfung O3): Ein abgebrochener oder live gegangener Auftrag läuft für Nicht-Admins nicht wieder an.
+-- Endstände sind fest (Prüfung O3/N1): Ein abgebrochener, erledigter oder live gegangener Auftrag läuft für Nicht-Admins nicht wieder an.
 create or replace function public.ws_auftraege_endstand() returns trigger
 language plpgsql set search_path = public as $$
 begin
   if current_user = 'authenticated' and not public.ws_ist_admin()
-     and old.stand in ('abgebrochen','wissen') and new.stand is distinct from old.stand
+     and old.stand in ('abgebrochen','erledigt','wissen') and new.stand is distinct from old.stand   -- Nachprüfung N1: auch erledigt
   then raise exception 'Abgeschlossene Aufträge laufen nicht wieder an – neuen Auftrag anlegen'; end if;
   return new;
 end $$;
