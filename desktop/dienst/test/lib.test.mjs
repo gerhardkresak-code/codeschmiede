@@ -154,3 +154,12 @@ test("Automatische Erlaubnis: Nachprüfung 2 (Windows-Pfade, grep, gh-Optionen)"
   assert.equal(st("grep -rn x a.md"), "erlaubt");
   assert.equal(st("git diff origin/main...HEAD -- a.md"), "erlaubt");
 });
+
+test("Automatische Erlaubnis: Nachprüfung 3 (Filter und Lese-Optionen)", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "einst3-")); writeFileSync(join(cwd, "a.md"), "x");
+  const st = (b) => einstufung("Bash", b, { adminPc: true, cwd }).stufe;
+  for (const b of ["git log | sort -o package.json", "git log | sort --output=.mcp.json", "git log | uniq - package.json", "git log | sort --compress-program=x -S 1",
+    "wc --files0-from=x", "file -m x a.md", "git log | tail -f", "git log | head -n x", "git log | cut -d ab -f 1", "git log | grep -f x"]) assert.notEqual(st(b), "erlaubt", b);
+  for (const b of ["git log --oneline | head -20", "git log | head -n 5", "git status | grep -n x", "git log | sort -r | uniq -c", "git log | cut -d , -f 1,2", "git diff --stat | tail -3", "ls -la", "cat -n a.md"])
+    assert.equal(st(b), "erlaubt", b);
+});

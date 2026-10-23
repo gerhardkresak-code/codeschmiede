@@ -91,8 +91,30 @@ function imOrdner(p, cwd, schreiben) {
 }
 const allePfade = (liste, cwd, schreiben = false) => liste.every((p) => imOrdner(p, cwd, schreiben));
 
-const FILTER = /^(head|tail|wc|sort|uniq|grep|cut)$/;
-const filterOk = (w) => FILTER.test(w[0]?.w || "") && !w[0].zitat && w.slice(1).every((x) => x.zitat || /^-[A-Za-z0-9]+$|^\d+$|^[A-Za-z0-9._:,=-]+$/.test(x.w));
+// Nachprüfung 3: feste Optionslisten je Befehl, keine freien Werte (z. B. sort -o / --compress-program, wc --files0-from)
+const OPTIONEN = {
+  head: /^-(n|c)$|^-\d+$/, tail: /^-(n|c)$|^-\d+$/, wc: /^-(l|c|w|m)$/, sort: /^-(r|n|u|rn|nr)$/, uniq: /^-(c)$/, cut: /^-(d|f)$/,
+  grep: /^-([nilcwvEFHhoqsxr]+|A|B|C)$/, ls: /^-([lahRt1A]+)$/, cat: /^-(n)$/, stat: /^$/, file: /^$/,
+};
+const ZAHL = /^\d+$/;
+// Filter hinter „|“: nur Optionen der Liste; Werte nur Zahlen (head/tail/grep -A/-B/-C) bzw. cut -d X -f N; sort/uniq ohne Argumente
+function filterOk(w) {
+  const c = w[0]?.w; if (!c || w[0].zitat || !/^(head|tail|wc|sort|uniq|grep|cut)$/.test(c)) return false;
+  for (let k = 1; k < w.length; k++) {
+    const x = w[k];
+    if (!x.zitat && x.w.startsWith("-")) {
+      if (!OPTIONEN[c].test(x.w)) return false;
+      const mitZahl = (/^(head|tail)$/.test(c) && /^-(n|c)$/.test(x.w)) || (c === "grep" && /^-(A|B|C)$/.test(x.w));
+      if (mitZahl) { if (!ZAHL.test(w[k + 1]?.w || "")) return false; k++; }
+      else if (c === "cut" && x.w === "-d") { if (!w[k + 1] || w[k + 1].w.length !== 1) return false; k++; }
+      else if (c === "cut" && x.w === "-f") { if (!/^\d+(,\d+)*$/.test(w[k + 1]?.w || "")) return false; k++; }
+      continue;
+    }
+    if (c === "grep" && k === w.findIndex((y, i) => i > 0 && (y.zitat || !y.w.startsWith("-")))) continue;   // Suchmuster
+    return false;   // keine Dateien/Positionsargumente hinter der Pipe
+  }
+  return true;
+}
 
 function eineKette(kette, cwd) {
   const [erster, ...rest] = kette;
@@ -103,6 +125,7 @@ function eineKette(kette, cwd) {
   const opt = (x) => !x.zitat && x.w.startsWith("-");
   // Lesen im Arbeitsordner (Pfade echt aufgelöst)
   if (/^(ls|cat|head|tail|wc|stat|file)$/.test(c0)) {
+    if (w.slice(1).some((x) => opt(x) && !OPTIONEN[c0].test(x.w))) return frage("Lesen mit besonderen Optionen");
     const p = w.slice(1).filter((x) => !opt(x) && !/^\d+$/.test(x.w)).map((x) => x.w);
     return allePfade(p, cwd) ? ok("Lesen im Arbeitsordner") : frage("Liest außerhalb des Arbeitsordners");
   }
