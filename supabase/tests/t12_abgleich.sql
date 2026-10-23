@@ -1,5 +1,7 @@
 -- Rechte-Test Datenbank v11 (Projekt-Abgleich). Voraussetzung: frische Datenbank, mock2.sql, 0001 → … → 0011.
 \set QUIET 1
+-- Aufruf: psql -v ON_ERROR_ROLLBACK=on -f t12_abgleich.sql (läuft in einer Transaktion, rollt am Ende zurück)
+begin;
 \pset footer off
 insert into auth.users values
  ('00000000-0000-0000-0000-0000000000d1','d1@x.at',now()),('00000000-0000-0000-0000-0000000000e1','e1@x.at',now()),
@@ -37,6 +39,10 @@ select ws_abgleich_schreiben((select id from ws_werkstatt_pcs where name='PC-E1'
 select ws_abgleich_schreiben((select id from ws_werkstatt_pcs where name='PC-B9'),'trainer-to-go','abc1234','[]','[]');
 :D1
 select ws_abgleich_schreiben((select id from ws_werkstatt_pcs where name='PC-E1'),'trainer-to-go','abc1234','[]','[]');
+reset role;
+update ws_abgleich set zeit = now() - interval '2 minutes';
+set role authenticated;
+:D1
 \echo [3] Unerlaubter Pfad -> FEHLER (2x); ungueltiges sha -> FEHLER
 select ws_abgleich_schreiben((select id from ws_werkstatt_pcs where name='PC-D1'),'trainer-to-go','abc1234','[]','[{"pfad":"src/geheim.js","inhalt":"x","sha":"abc1234"}]');
 select ws_abgleich_schreiben((select id from ws_werkstatt_pcs where name='PC-D1'),'trainer-to-go','abc1234','[]','[{"pfad":"docs/../.env.md","inhalt":"x","sha":"abc1234"}]');
@@ -55,9 +61,15 @@ reset role;
 set role anon;
 select count(*) from ws_dokumente;
 reset role;
-\echo [6] Ersetzen: D1 schreibt nur main -> 1 Zweig, 0 Dokumente
+\echo [6] Sofort nochmal -> FEHLER (Pause 60 s); nach der Pause ersetzen: 1 Zweig, 0 Dokumente
+set role authenticated;
+:D1
+select ws_abgleich_schreiben((select id from ws_werkstatt_pcs where name='PC-D1'),'trainer-to-go','abc1234','[]','[]');
+reset role;
+update ws_abgleich set zeit = now() - interval '2 minutes';
 set role authenticated;
 :D1
 select ws_abgleich_schreiben((select id from ws_werkstatt_pcs where name='PC-D1'),'trainer-to-go','abc1234','[{"name":"main","sha":"abc1234"}]','[]');
 select (select count(*) from ws_zweige) as zweige, (select count(*) from ws_dokumente) as doks;
 reset role;
+rollback;

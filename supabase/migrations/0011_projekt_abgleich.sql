@@ -55,6 +55,10 @@ begin
      or jsonb_typeof(p_dokumente) <> 'array' or jsonb_array_length(p_dokumente) > 500 then
     raise exception 'Ungültiger Abgleich'; end if;
   if p_main is null or p_main !~ '^[0-9a-f]{7,40}$' then raise exception 'Ungültiger Stand von main'; end if;
+  -- Prüfung N1: höchstens 8 MB je Abgleich und einer pro Minute und Projekt
+  if octet_length(p_dokumente::text) + octet_length(p_zweige::text) > 8 * 1024 * 1024 then raise exception 'Abgleich zu groß'; end if;
+  perform 1 from public.ws_abgleich where projekt_id = p_projekt and zeit > now() - interval '60 seconds' for update;
+  if found then raise exception 'Abgleich läuft gerade schon – bitte kurz warten'; end if;
 
   delete from public.ws_zweige where projekt_id = p_projekt
     and name not in (select z->>'name' from jsonb_array_elements(p_zweige) z);

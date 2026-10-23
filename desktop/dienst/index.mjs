@@ -670,35 +670,50 @@ async function claudeChat() {
 // Nur lesen: git fetch + Inhalte aus origin/main. Es wird kein Projekt-Code ausgeführt (auch auf dem Admin-PC zulässig).
 const DOKU = /^(docs\/[A-Za-z0-9._/-]+\.md|AGENTS\.md|README\.md)$/;
 let abgleichLaeuft = false; let abgleichZuletzt = 0;
+// Eigener Klon ohne Arbeitsdateien (nur Git-Daten): nichts wird ausgecheckt, keine Hooks, getrennt von laufenden Aufträgen
+async function abgleichRepo(projekt) {
+  const basis = path.join(cfg.daten_ordner, "projekte", projekt.id);
+  const repo = path.join(basis, "abgleich.git");
+  const keineHooks = path.join(basis, "keine-hooks");
+  await mkdir(keineHooks, { recursive: true });
+  if (!(await existiert(path.join(repo, "HEAD")))) await sh("gh", ["repo", "clone", projekt.repo, repo, "--", "--bare", "-c", `core.hooksPath=${keineHooks}`], { maxBuffer: 50 * 1024 * 1024 });
+  await git(repo, "config", "core.hooksPath", keineHooks);
+  return repo;
+}
 async function projektAbgleich() {
   if (abgleichLaeuft || stopp || Date.now() - abgleichZuletzt < 10 * 60 * 1000) return;
   abgleichLaeuft = true; abgleichZuletzt = Date.now();
   try {
     const { data: projekte } = await db.from("ws_projekte").select("*");
     for (const p of projekte || []) {
-      if (!p.repo) continue;
+      if (!p.repo || p.archiviert) continue;
       const { data: rolle } = await db.rpc("ws_rolle_im_projekt", { p_projekt: p.id });
       if (!["admin", "entwickler"].includes(rolle)) continue;
       try {
-        const repo = await arbeitsordnerRepo(p);
-        await git(repo, "fetch", "-q", "--prune", "origin", "+refs/heads/*:refs/remotes/origin/*");
-        const main = await git(repo, "rev-parse", "origin/main");
-        const roh = await git(repo, "for-each-ref", "--format=%(refname:lstrip=3)%09%(objectname)%09%(committerdate:iso-strict)%09%(contents:subject)", "refs/remotes/origin");
+        const repo = await abgleichRepo(p);
+        await git(repo, "fetch", "-q", "--prune", "origin", "+refs/heads/*:refs/heads/*");
+        const main = await git(repo, "rev-parse", "refs/heads/main");
+        const roh = await git(repo, "for-each-ref", "--format=%(refname:lstrip=2)%09%(objectname)%09%(committerdate:iso-strict)%09%(contents:subject)", "refs/heads");
         const zweige = [];
         for (const z of roh.split("\n").filter(Boolean).slice(0, 2000)) {
           const [name, sha, datum, betreff] = z.split("\t");
-          if (!name || name === "HEAD") continue;
+          if (!name) continue;
           let vor = null; let hinter = null;
-          try { [hinter, vor] = (await git(repo, "rev-list", "--left-right", "--count", `origin/main...${sha}`)).split(/\s+/).map(Number); } catch { /* ohne Abstand */ }
+          try { [hinter, vor] = (await git(repo, "rev-list", "--left-right", "--count", `${main}...${sha}`)).split(/\s+/).map(Number); } catch { /* ohne Abstand */ }
           zweige.push({ name, sha, datum: datum || null, betreff: kuerzen(ohneGeheimnisse(betreff || ""), 300), vor, hinter });
         }
-        const dateien = (await git(repo, "ls-tree", "-r", "--name-only", "origin/main", "--", "docs", "AGENTS.md", "README.md"))
+        const dateien = (await git(repo, "ls-tree", "-r", "--name-only", main, "--", "docs", "AGENTS.md", "README.md"))
           .split("\n").filter((f) => DOKU.test(f) && !f.includes("..")).slice(0, 500);
-        const dokumente = [];
+        const dokumente = []; let summe = 0;
         for (const f of dateien) {
-          const sha = await git(repo, "rev-parse", `origin/main:${f}`);
-          const inhalt = ohneGeheimnisse(await git(repo, "show", `origin/main:${f}`));
-          if (Buffer.byteLength(inhalt) <= 1048576) dokumente.push({ pfad: f, inhalt, sha });
+          try {
+            const sha = await git(repo, "rev-parse", `${main}:${f}`);
+            if ((await git(repo, "cat-file", "-t", sha)) !== "blob") continue;          // Submodule u. Ä. überspringen
+            const groesse = Number(await git(repo, "cat-file", "-s", sha));
+            if (!(groesse <= 1048576) || summe + groesse > 7 * 1024 * 1024) continue;  // je Datei 1 MB, gesamt 7 MB
+            const inhalt = ohneGeheimnisse(await git(repo, "cat-file", "blob", sha));
+            summe += Buffer.byteLength(inhalt); dokumente.push({ pfad: f, inhalt, sha });
+          } catch { /* Datei überspringen */ }
         }
         const { error } = await db.rpc("ws_abgleich_schreiben", { p_pc: pcId, p_projekt: p.id, p_main: main, p_zweige: zweige, p_dokumente: dokumente });
         if (error && !/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", `Abgleich ${p.name}: ${ohneGeheimnisse(error.message)}`);
