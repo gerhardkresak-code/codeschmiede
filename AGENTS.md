@@ -40,6 +40,9 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-23 18:06 – Konzept zuerst (Entwurf 1.0 frei):** Jedes Projekt hat als erste Gruppe im Bereich App „Konzept“. Dort wird das
+  Grundkonzept besprochen, bevor gebaut wird; bestätigte Entscheidungen stehen in `ws_wissen` (Wissensdatenbank) und gelten für alle
+  Chats, den Design-Chat und jeden Bau-Auftrag. Es gibt keine Chat-Spalte rechts mehr; Chats: Konzept, Feature-Arbeitsplatz, Design-Chat.
 - **2026-10-23 17:49 – Design zuerst:** Der App-Designer ist ab dem ersten Tag eines Projekts nutzbar – auch ohne Code, Features oder App-Adresse –
   und hat immer den Chat. Bei Projekten ohne Design führt Claude durch die Planung (erst Fragen, dann komplettes Grunddesign zur Übernahme).
 - **2026-10-23 17:30 – Logo der Codeschmiede:** Ab jetzt immer das Zeichen „Glühendes C“ (Quellen `marke/zeichen.svg`, `marke/zeichen-klein.svg`,

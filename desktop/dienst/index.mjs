@@ -23,7 +23,7 @@ import { werteAus, zweigName } from "./lib/ergebnis.mjs";
 import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
 import { pruefErgebnis } from "./lib/pruefung.mjs";
 import { designPrompt, designAntwort } from "./lib/design.mjs";
-import { assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
+import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen } from "./lib/ki.mjs";
 import { rm } from "node:fs/promises";
 
@@ -228,7 +228,11 @@ async function vorlagenFuer(feature) {
   } catch { return []; }
 }
 
-function auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, neuesProjekt, vorlagen = []) {
+// Konzept-Wissen eines Projekts (ws_wissen, Datenbank 0020) – bestätigte Entscheidungen für Chat, Design und Werkstatt
+async function holeWissen(projektId) {
+  try { const { data } = await db.from("ws_wissen").select("kapitel, text").eq("projekt_id", projektId).order("id").limit(200); return data || []; } catch { return []; }
+}
+function auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, neuesProjekt, vorlagen = [], wissen = []) {
   const verlauf = nachrichten.map((n) => `${n.von ? "Gerhard/Team" : "Werkstatt"} (${n.art}): ${n.text}`).join("\n");
   return [
     `Du bist die Werkstatt der Codeschmiede für das Projekt „${projekt.name}“ (Repository ${projekt.repo}).`,
@@ -242,6 +246,7 @@ function auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, neu
       "Sieh dir den Code dieser Features im Repository an (Seiten, Komponenten, Datenbank, Handbuch). Melde VOR dem Bauen mit einer Zeile „RÜCKFRAGE:“,",
       "was du übernimmst und was bei diesem Feature anders wird („Übernehme aus …: … · Anders: … · Passt das?“) – außer der Verlauf bestätigt das schon.",
     ].join("\n") : "",
+    wissen.length ? `PROJEKTWISSEN aus dem Konzept (von Gerhard bestätigt – halte dich daran; Widerspruch zum Auftrag mit „RÜCKFRAGE:“ klären):\n${wissenText(wissen)}` : "",
     `Verlauf:\n${verlauf}`,
     "",
     "Regeln:",
@@ -281,7 +286,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
       ? `Nacharbeit aus der Prüfung (nichts ist live gegangen):\n${nachrichten.slice(-1)[0]?.text || ""}\n\nBehebe die Befunde auf demselben Zweig ${zweig}, prüfe, committe, \`git push origin HEAD\` und antworte wieder mit „ERGEBNIS-PR: #${auftrag.pr_nummer || "<Nummer>"} ${zweig}“ (denselben Pull Request weiterverwenden).`
       : fortsetzen
       ? `Antwort von Gerhard/Team auf deine Rückfrage:\n${nachrichten.filter((n) => n.von).slice(-1)[0]?.text || ""}\n\nArbeite weiter nach denselben Regeln.`
-      : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature));
+      : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature), await holeWissen(projekt.id));
 
     // Erlaubnis-Brücke (MCP) für Werkzeuge außerhalb der freigegebenen Liste
     const mcp = { mcpServers: { werkstatt: { command: process.execPath, args: [path.join(HIER, "erlaubnis-mcp.mjs")], env: {
@@ -781,7 +786,7 @@ async function designChat() {
     const { data: alle } = await q;
     const eigene = new Set((alle || []).filter((m) => !m.frage_id && m.von === cfg.user_id).map((m) => m.id));
     const verlauf = (alle || []).filter((m) => eigene.has(m.id) || eigene.has(m.frage_id)).slice(0, 8);
-    const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, /^\[Marke\]/.test(f.text) ? "bilder" : "design", designPrompt({ projektName: pj?.name || f.projekt_id, projektId: f.projekt_id, beschreibung: pj?.beschreibung || "", anfang: !eD && !designs, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
+    const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, /^\[Marke\]/.test(f.text) ? "bilder" : "design", designPrompt({ projektName: pj?.name || f.projekt_id, projektId: f.projekt_id, wissen: wissenText((await holeWissen(f.projekt_id)).filter((w) => ["ziel", "design", "funktionen"].includes(w.kapitel))), beschreibung: pj?.beschreibung || "", anfang: !eD && !designs, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
     const { text, vorschlag } = designAntwort(ohneGeheimnisse(roh));
     const { error: e2 } = await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
     if (e2) throw e2;
@@ -818,9 +823,9 @@ async function claudeChat() {
     let lesenIn = null; try { lesenIn = await leseOrdner(projekt); } catch (e) { melde("fehler", `Lese-Ordner: ${ohneGeheimnisse(e?.message || String(e))}`); }
     const gids = (gruppen || []).map((g) => g.id);
     const { data: feats } = gids.length ? await db.from("ws_features").select("id, name, gruppe_id").in("gruppe_id", gids).eq("ausgebaut", false).limit(300) : { data: [] };
-    const prompt = assistentPrompt({ projekt, ort: f.ort, kontext: f.kontext, frage: f.text, verlauf,
+    const prompt = assistentPrompt({ projekt, ort: f.ort, kontext: f.kontext, frage: f.text, verlauf, wissen: await holeWissen(f.projekt_id),
       gruppen: (gruppen || []).map((g) => ({ id: g.id, name: g.name, global: g.ws_bereiche?.global })), features: feats || [] });
-    const aufgabe = istKonzeptFrage(f.text, verlauf) ? "konzept" : "chat";
+    const aufgabe = f.ort === "konzept" || istKonzeptFrage(f.text, verlauf) ? "konzept" : "chat";
     const { roh, ki } = await kiAntwort(projekt, aufgabe, prompt, { claudeLesenIn: lesenIn || null, dokuLesen: true, frage: f.text });
     const { text, vorschlag } = assistentAntwort(ohneGeheimnisse(roh));
     const { error: e2 } = await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
