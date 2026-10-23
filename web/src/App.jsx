@@ -318,7 +318,8 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner }) {
   const platzF = platz ? d.features.find((x) => x.id === platz) : null;
   const platzG = platzF ? d.gruppen.find((x) => x.id === platzF.gruppe_id) : null;
   // Gruppe „Konzept“ (Datenbank 0020): eigener Arbeitsplatz mit Chat und Konzept-Stand statt Feature-Karten
-  const istKonzept = !nurGlobal && !!g && g.id === alle.projekte.find((p) => p.id === alle.projektId)?.konzept_gruppe_id;
+  const konzeptId = alle.projekte.find((p) => p.id === alle.projektId)?.konzept_gruppe_id;
+  const istKonzept = !nurGlobal && !!g && g.id === konzeptId;
   return (
     <>
       <div className="flex flex-wrap gap-1.5 mb-4" role="toolbar" aria-label="Weg eines Auftrags">
@@ -343,13 +344,13 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner }) {
               {d.gruppen.filter((x) => x.bereich_id === b.id).map((x) => {
                 const Icon = WS_ICON[x.symbol] || Layers; const js = aufFor(x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const fr = js.filter((a) => a.offeneFrage).length;
                 return (
-                  <button key={x.id} type="button" aria-current={g.id === x.id} onClick={() => setSel({ g: x.id, f: null })} {...ablage(x.id)}
+                  <button key={x.id} type="button" aria-current={g.id === x.id} onClick={() => setSel({ g: x.id, f: null })} {...(x.id !== konzeptId ? ablage(x.id) : {})}
                     className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-[15px] ${ziel === x.id ? "ring-2 ring-inset ring-orange-500 bg-orange-50 dark:bg-orange-950/40" : ""} ${g.id === x.id ? "bg-emerald-50 dark:bg-emerald-950/40 font-semibold shadow-[inset_3px_0_0_#047857]" : "hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20"}`}>
                     <Icon className="w-[18px] h-[18px] shrink-0" /><span className="min-w-0 truncate">{x.name}</span>
                     <span className="ml-auto flex items-center gap-1.5">
                       {arbeitet && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />arbeitet</span>}
                       {fr > 0 && <span className="text-[11px] font-semibold bg-amber-100 text-amber-700 rounded-full px-1.5">{fr} Frage{fr > 1 ? "n" : ""}</span>}
-                      <span className="text-xs text-slate-400 tabular-nums">{d.features.filter((y) => y.gruppe_id === x.id && !y.ausgebaut).length}</span>
+                      {x.id !== konzeptId && <span className="text-xs text-slate-400 tabular-nums">{d.features.filter((y) => y.gruppe_id === x.id && !y.ausgebaut).length}</span>}
                     </span>
                   </button>);
               })}
