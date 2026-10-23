@@ -530,8 +530,8 @@ async function station(a) {
       "Antworte mit einer kurzen Liste der Befunde. Die allerletzte Zeile lautet genau „PRÜFUNG: GRÜN“ oder „PRÜFUNG: ROT“.",
     ].join("\n");
     await log(a.id, "info", art === "sicherheit" ? "Unabhängige Sicherheitsprüfung (großes Modell, nur lesen) …" : "Unabhängige Prüfung des ganzen Features (großes Modell, nur lesen) …");
-    // Prüfung durch den eingestellten Anbieter (Entscheidung 14:27: darf ein anderer als der Bauende sein). Andere Anbieter bekommen
-    // die Änderung als Text in einem leeren Ordner – sie sehen und starten keinen Projekt-Code. Claude prüft wie bisher nur lesend im Zweig.
+    // Prüfung durch einen anderen Anbieter (Entscheidung 14:27) ist VORERST GESPERRT – reiheFuer liefert für „pruefung“ nur Claude,
+    // dieser Zweig wird erst mit der Betriebssystem-Sandbox erreicht. Claude prüft wie bisher nur lesend im Zweig.
     let pruefText = null; let pruefKi = "claude/opus";
     const { reihe: pReihe } = await kiReihe(projekt.id, "pruefung");
     if (pReihe[0]?.anbieter !== "claude") {

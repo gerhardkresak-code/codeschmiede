@@ -75,7 +75,7 @@ export function saubereUmgebung() {
   return env;
 }
 // Für fremde Anbieter nur das Nötigste (Nachprüfung 2026-10-23): keine Tokens wie GH_TOKEN/SUPABASE_* aus der Umgebung
-const ERLAUBTE_UMGEBUNG = /^(PATH|PATHEXT|SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|TEMP|TMP|TMPDIR|HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\)|USERNAME|USER|LOGNAME|LANG|LC_ALL|LC_CTYPE|TERM|SHELL|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_CACHE_HOME|NUMBER_OF_PROCESSORS|PROCESSOR_ARCHITECTURE|OS)$/i;
+const ERLAUBTE_UMGEBUNG = /^(PATH|PATHEXT|SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|TEMP|TMP|TMPDIR|HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\)|USERNAME|USER|LOGNAME|LANG|LC_ALL|LC_CTYPE|TERM|SHELL|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_CACHE_HOME|HTTPS_PROXY|HTTP_PROXY|NO_PROXY|ALL_PROXY|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|SSL_CERT_DIR|CODEX_HOME|NUMBER_OF_PROCESSORS|PROCESSOR_ARCHITECTURE|OS)$/i;
 export function minimaleUmgebung(extra = {}) {
   const env = {};
   for (const [k, v] of Object.entries(process.env)) if (ERLAUBTE_UMGEBUNG.test(k)) env[k] = v;
@@ -133,7 +133,7 @@ export async function geminiFrage(prompt, { modell, signal } = {}) {
     const args = ["--approval-mode", "default", "--extensions", "none", ...(modell && MODELL.test(modell) ? [`--model=${modell}`] : [])];
     // Eigene System-Einstellungen: keine MCP-Server, keine zusätzlichen Ordner, Shell/Schreiben/Web gesperrt (Nachprüfung M1)
     const einst = path.join(tmp, "system-settings.json");
-    await writeFile(einst, JSON.stringify({ mcpServers: {}, tools: { exclude: ["run_shell_command", "write_file", "replace", "web_fetch", "google_web_search"] }, context: { includeDirectories: [] } }));
+    await writeFile(einst, JSON.stringify({ mcpServers: {}, excludeTools: ["run_shell_command", "write_file", "replace", "web_fetch", "google_web_search"], tools: { exclude: ["run_shell_command", "write_file", "replace", "web_fetch", "google_web_search"] }, context: { includeDirectories: [] } }));
     const { aus } = await lauf(prog, args, { cwd: tmp, eingabe: OHNE_WERKZEUGE + prompt, env: minimaleUmgebung({ GEMINI_CLI_SYSTEM_SETTINGS_PATH: einst }), signal });
     const t = aus.replace(/\x1b\[[0-9;]*m/g, "").trim();
     if (!t) throw new Error("Gemini hat keine Antwort geliefert");

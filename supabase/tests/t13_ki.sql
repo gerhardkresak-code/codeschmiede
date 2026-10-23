@@ -16,7 +16,7 @@ insert into ws_werkstatt_pcs(benutzer_id,name,an) values (auth.uid(),'PC-D1',tru
 :D2
 select ws_einladung_annehmen('D2') \g /dev/null
 insert into ws_werkstatt_pcs(benutzer_id,name,an) values (auth.uid(),'PC-D2',true);
-\echo [1] Admin setzt Chat-Reihe -> OK; Bauen mit ChatGPT -> FEHLER; Bauen nur Claude -> OK; doppelter Anbieter -> FEHLER; boeses Modell -> FEHLER
+\echo [1] Admin setzt Chat-Reihe -> OK; Bauen mit ChatGPT -> FEHLER; Bauen nur Claude -> OK; doppelter Anbieter -> FEHLER; boeses Modell -> FEHLER; Pruefung mit ChatGPT -> FEHLER
 :ADM
 select ws_ki_zustaendigkeit_setzen('trainer-to-go','chat','[{"anbieter":"chatgpt"},{"anbieter":"claude","modell":"sonnet"}]',90);
 select ws_ki_zustaendigkeit_setzen('trainer-to-go','bauen','[{"anbieter":"chatgpt"}]',90);
@@ -24,6 +24,7 @@ select ws_ki_zustaendigkeit_setzen('trainer-to-go','bauen','[{"anbieter":"claude
 select ws_ki_zustaendigkeit_setzen('trainer-to-go','bauen','[{"anbieter":"claude","modell":"opus"}]',90);
 select ws_ki_zustaendigkeit_setzen('trainer-to-go','chat','[{"anbieter":"claude"},{"anbieter":"claude"}]',90);
 select ws_ki_zustaendigkeit_setzen('trainer-to-go','chat','[{"anbieter":"gemini","modell":"x; rm -rf"}]',90);
+select ws_ki_zustaendigkeit_setzen('trainer-to-go','pruefung','[{"anbieter":"chatgpt"},{"anbieter":"claude"}]',90);
 \echo [2] Entwickler setzt -> FEHLER; Entwickler liest 2 Zeilen; direkt schreiben -> FEHLER
 :D1
 select ws_ki_zustaendigkeit_setzen('trainer-to-go','chat','[{"anbieter":"claude"}]',90);

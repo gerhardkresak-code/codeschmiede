@@ -49,7 +49,7 @@ returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.ws_ist_admin() then raise exception 'Zuständigkeiten stellt nur der Admin ein'; end if;
   if not exists (select 1 from public.ws_projekte where id = p_projekt) then raise exception 'Unbekanntes Projekt'; end if;
-  if not public.ws_ki_reihe_ok(p_aufgabe, p_reihe) then raise exception 'Ungültige Zuständigkeit (Bauen ist fest Claude)'; end if;
+  if not public.ws_ki_reihe_ok(p_aufgabe, p_reihe) then raise exception 'Ungültige Zuständigkeit (Bauen und Prüfungen sind fest Claude)'; end if;
   insert into public.ws_ki_zustaendigkeit (projekt_id, aufgabe, reihe, weitergeben_ab, geaendert, geaendert_von)
     values (p_projekt, p_aufgabe, p_reihe, coalesce(p_ab, 90), now(), auth.uid())
   on conflict (projekt_id, aufgabe) do update set reihe = excluded.reihe, weitergeben_ab = excluded.weitergeben_ab, geaendert = now(), geaendert_von = auth.uid();
