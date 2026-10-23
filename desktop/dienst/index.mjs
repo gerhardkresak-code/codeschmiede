@@ -26,6 +26,7 @@ import { designPrompt, designAntwort } from "./lib/design.mjs";
 import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
 import { repoAnlegen, repoSichtbarkeit, repoIstPrivat } from "./lib/repo.mjs";
 import { liveAusfuehren, pruefPrompt, enthalten } from "./lib/live.mjs";
+import { katalogFuer, einrichten, einrichtUmgebung } from "./lib/einrichten.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen } from "./lib/ki.mjs";
 import { rm } from "node:fs/promises";
 
@@ -710,11 +711,49 @@ async function kopplungMelden(anbieter, felder) {
   const { error } = await db.from("ws_ki_kopplung").upsert({ pc_id: pcId, benutzer_id: cfg.user_id, anbieter, ...felder }, { onConflict: "pc_id,anbieter" });
   if (error) throw error;
 }
+const einrichtenLaeuft = new Set(); const einrichtenStand = {};   // anbieter -> letzter gemeldeter Schritt (für „Nochmal“ während eines Laufs)
+async function einrichtenStarten(anbieter, aktion) {
+  const jetzt = () => new Date().toISOString();
+  const fertigMelden = (hinweis, geprueft = true) => kopplungMelden(anbieter, { aktion: null, schritt: "fertig", schritt_zeit: jetzt(), einricht_code: null, gekoppelt: true, hinweis, eingerichtet: jetzt(), ...(geprueft ? { geprueft: jetzt() } : {}) });
+  const { data: zeile } = await db.from("ws_ki_kopplung").select("schritt, zugelassen, zugelassen_fp").eq("pc_id", pcId).eq("anbieter", anbieter).maybeSingle();
+  // Programmname: eingebaute Anbieter fest, eigene aus ws_ki_anbieter – was installiert/gestartet wird, kommt NUR aus dem Katalog im Programm
+  let programm = ANBIETER[anbieter]?.bin || null; let def = null;
+  if (!programm) { freieZeit = 0; def = (await holeFreieAnbieter())[anbieter] || null; programm = def?.programm || null; }
+  const k = katalogFuer(programm);
+  // „Ich bin angemeldet“ nur, wenn die Werkstatt genau darum gebeten hat (Anbieter ohne prüfbare Anmeldung); keine vorgetäuschte Prüfung
+  if (aktion === "bestaetigt") {
+    if (zeile?.schritt === "bestaetigen" && k && !k.status) await fertigMelden("Im Fenster angemeldet (von dir bestätigt)", false).catch(() => {});
+    else await kopplungMelden(anbieter, { aktion: null }).catch(() => {});
+    return;
+  }
+  if (einrichtenLaeuft.has(anbieter)) { await kopplungMelden(anbieter, { aktion: null, ...(einrichtenStand[anbieter] || {}), schritt_zeit: jetzt() }).catch(() => {}); return; }
+  // Eigene Anbieter: nur mit Zustimmung zu GENAU der aktuellen Fassung (Fingerabdruck, Prüfung R1) – sonst nichts installieren
+  if (def && !(zeile?.zugelassen && def.fp && zeile.zugelassen_fp === def.fp)) {
+    await kopplungMelden(anbieter, { aktion: null, schritt: "fehler", schritt_zeit: jetzt(), hinweis: "Der Anbieter wurde geändert oder ist nicht zugelassen – bitte Seite neu laden und nochmal „Hinzufügen“." }).catch(() => {});
+    return;
+  }
+  // erst zurücksetzen, dann starten – sonst startet es bei einem Speicherfehler alle 30 Sekunden neu (wie Prüfung N4)
+  const ok = await kopplungMelden(anbieter, { aktion: null, schritt: k ? "wartet" : "fehler", schritt_zeit: jetzt(), einricht_code: null,
+    hinweis: k ? "Wird eingerichtet …" : "Für dieses Programm gibt es keine Ein-Klick-Einrichtung – bitte von Hand installieren und anmelden (Hinweis beim Anbieter)." }).then(() => true, () => false);
+  if (!ok || !k) return;
+  einrichtenLaeuft.add(anbieter);
+  melde("status", `KI-Anbieter ${k.name} wird eingerichtet`);
+  einrichten(k, { env: einrichtUmgebung(), melde: async ({ schritt, hinweis, code }) => {
+    try {
+      einrichtenStand[anbieter] = { schritt, hinweis: kuerzen(ohneGeheimnisse(hinweis || ""), 480), einricht_code: code || null };
+      if (schritt === "fertig") await fertigMelden(hinweis);
+      else await kopplungMelden(anbieter, { schritt, schritt_zeit: jetzt(), hinweis: kuerzen(ohneGeheimnisse(hinweis || ""), 480), einricht_code: code || null, ...(schritt === "fehler" ? { gekoppelt: false } : {}) });
+    } catch (e) { melde("fehler", `KI-Anbieter ${k.name}: ${ohneGeheimnisse(e?.message || String(e))}`); }
+  } }).catch((e) => kopplungMelden(anbieter, { schritt: "fehler", schritt_zeit: jetzt(), hinweis: kuerzen(ohneGeheimnisse(e?.message || String(e)), 300) }).catch(() => {}))
+    .finally(() => { einrichtenLaeuft.delete(anbieter); delete einrichtenStand[anbieter]; kopplungZuletzt = 0; });
+}
 let kopplungZuletzt = 0;
 async function kopplungAbgleich(zwingend = false) {
   if (!pcId) return;
   let auftraege = [];
   try { const { data } = await db.from("ws_ki_kopplung").select("anbieter, aktion").eq("pc_id", pcId).not("aktion", "is", null); auftraege = data || []; } catch { return; }
+  // „Hinzufügen“ (Datenbank 0025): installieren → anmelden → prüfen, im Hintergrund (kann bis 10 Minuten auf die Anmeldung warten)
+  for (const a of auftraege) if (a.aktion === "einrichten" || a.aktion === "bestaetigt") await einrichtenStarten(a.anbieter, a.aktion);
   for (const a of auftraege) if (a.aktion === "anmelden") {
     // erst zurücksetzen, dann starten – sonst öffnet sich die Anmeldung bei einem Speicherfehler alle 30 Sekunden (Prüfung N4)
     const ok = await kopplungMelden(a.anbieter, { aktion: null, hinweis: a.anbieter === "chatgpt" ? "Anmeldung im Browser geöffnet – danach „Prüfen“ klicken" : "Anmeldung bitte im Terminal starten (siehe Hinweis)" }).then(() => true, () => false);
@@ -732,7 +771,8 @@ async function kopplungAbgleich(zwingend = false) {
     try {
       const k = ANBIETER[anbieter] ? await kopplungPruefen(anbieter) : await freiPruefen(frei[anbieter], !!zugelassen[anbieter]);
       kiKopplung[anbieter] = { ...k, zugelassen: !!zugelassen[anbieter] };
-      await kopplungMelden(anbieter, { gekoppelt: k.gekoppelt, version: k.version, hinweis: k.hinweis, aktion: null, geprueft: new Date().toISOString(),
+      if (einrichtenLaeuft.has(anbieter)) continue;   // läuft gerade „Hinzufügen“: nicht dazwischenschreiben
+      await kopplungMelden(anbieter, { gekoppelt: k.gekoppelt, version: k.version, hinweis: k.hinweis, ...(auftraege.some((x) => x.anbieter === anbieter && x.aktion === "pruefen") ? { aktion: null } : {}), geprueft: new Date().toISOString(),
         ...(kiLimitBis[anbieter] > Date.now() ? { limit_bis: new Date(kiLimitBis[anbieter]).toISOString() } : { limit_bis: null }) });
     } catch (e) { if (!/does not exist|schema cache/i.test(e?.message || "")) melde("fehler", `KI-Anbieter ${anbieter}: ${ohneGeheimnisse(e?.message || String(e))}`); }
   }
@@ -1079,6 +1119,9 @@ async function start() {
   const abgleich = () => projektAbgleich().catch((e) => melde("fehler", ohneGeheimnisse(e?.message || String(e))));
   setTimeout(abgleich, 15 * 1000); setInterval(abgleich, 60 * 1000);
   const kopplung = () => kopplungAbgleich().catch(() => {});
+  // Beim Start: unterbrochene „Hinzufügen“-Läufe dieses PCs als abgebrochen melden (Prüfung O3)
+  db.from("ws_ki_kopplung").update({ schritt: "fehler", hinweis: "Abgebrochen (Programm wurde beendet) – nochmal „Hinzufügen“ klicken.", einricht_code: null, schritt_zeit: new Date().toISOString() })
+    .eq("pc_id", pcId).in("schritt", ["installieren", "anmelden", "pruefen", "bestaetigen"]).then(() => {}, () => {});
   setTimeout(() => kopplungAbgleich(true).catch(() => {}), 5 * 1000); setInterval(kopplung, 30 * 1000);
   const schleife = async () => {
     try { await naechsterAuftrag(); } catch (e) { melde("fehler", ohneGeheimnisse(e?.message || String(e))); }

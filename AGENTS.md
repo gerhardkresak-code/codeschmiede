@@ -40,6 +40,8 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-23 – KI-Anbieter per Klick (Entwurf 1.0 frei):** „Hinzufügen“ installiert (fester Katalog im Programm, nie Befehle aus der
+  Datenbank), öffnet die offizielle Anmeldung (Browser oder Fenster) und koppelt automatisch. Keine Zugangsdaten in der Codeschmiede.
 - **2026-10-23 – Zu erledigen & Live (Entwurf 1.0 frei):** Zentrale Liste „Zu erledigen“ mit Knöpfen; erst Test (main), dann Live
   (Zweig `live`) per Knopf; Live schalten und Zurücksetzen nur der Admin, Zurück nur auf Versionen, die zur Datenbank passen;
   unabhängige Prüfung per Knopf für Feature, Gruppe oder ganze App (nur lesend, Werkstatt des Admins).
