@@ -583,7 +583,10 @@ function DesignerEinrichten({ projekt, d, ich, toast }) {
   useEffect(() => {
     if (!kann) return;
     let aus = false;
-    supabase.rpc("ws_design_einrichten", { p_projekt: projekt.id }).then(({ error }) => { if (!aus && error) { setFehlerText(fehler(error)); toast(fehler(error)); } });
+    supabase.rpc("ws_design_einrichten", { p_projekt: projekt.id }).then(({ error }) => {
+      if (aus) return;
+      if (error) { setFehlerText(fehler(error)); toast(fehler(error)); } else d.holen?.();   // nicht nur auf die Live-Aktualisierung verlassen
+    });
     return () => { aus = true; };
   }, [kann, projekt.id, toast]);
   return (

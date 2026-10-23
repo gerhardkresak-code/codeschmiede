@@ -7,7 +7,7 @@ name: Programm bauen
 on:
   push:
     branches: [main, 'feature/**']
-    paths: ['desktop/**', '.github/workflows/programm.yml']
+    paths: ['desktop/**', 'marke/**', '.github/workflows/programm.yml']
   workflow_dispatch:
     inputs:
       start_url:
