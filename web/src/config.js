@@ -14,6 +14,7 @@ export const WS_ICON = {
 
 export const STAND = {
   live: { label: "Live", cls: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400" },
+  test: { label: "Im Test", cls: "bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300" },
   arbeit: { label: "In Arbeit", cls: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
   entwurf: { label: "Entwurf", cls: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300" },
   geplant: { label: "Geplant", cls: "border border-slate-300 text-slate-500 dark:border-slate-700" },

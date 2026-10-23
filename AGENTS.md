@@ -40,6 +40,9 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-23 – Zu erledigen & Live (Entwurf 1.0 frei):** Zentrale Liste „Zu erledigen“ mit Knöpfen; erst Test (main), dann Live
+  (Zweig `live`) per Knopf; Live schalten und Zurücksetzen nur der Admin, Zurück nur auf Versionen, die zur Datenbank passen;
+  unabhängige Prüfung per Knopf für Feature, Gruppe oder ganze App (nur lesend, Werkstatt des Admins).
 - **2026-10-23 18:56 – Designer nach App-Art (Entwurf 1.0 frei):** Vorschau-Muster und Designer-Einstellungen richten sich nach der App-Art
   des Projekts (Verwaltungs-App, Spiel, Webseite, Shop/Buchung); Beispieltexte kommen aus dem Konzept. Nie Trainer-to-go-Muster für andere Projekte.
 - **2026-10-23 18:38 – GitHub-Repository beim Anlegen:** Neue Projekte bekommen auf Wunsch sofort ein Repository unter `gerhardkresak-code`
