@@ -40,6 +40,9 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-23 18:38 – GitHub-Repository beim Anlegen:** Neue Projekte bekommen auf Wunsch sofort ein Repository unter `gerhardkresak-code`
+  (öffentlich, per Klick privat) mit Grundgerüst aus `gerhardkresak-code/ai-dev-os/project-template`; angelegt nur von der Werkstatt des Admins.
+  Ohne Repository laufen Konzept, App-Designer und Chat; Bau-Aufträge warten.
 - **2026-10-23 18:06 – Konzept zuerst (Entwurf 1.0 frei):** Jedes Projekt hat als erste Gruppe im Bereich App „Konzept“. Dort wird das
   Grundkonzept besprochen, bevor gebaut wird; bestätigte Entscheidungen stehen in `ws_wissen` (Wissensdatenbank) und gelten für alle
   Chats, den Design-Chat und jeden Bau-Auftrag. Es gibt keine Chat-Spalte rechts mehr; Chats: Konzept, Feature-Arbeitsplatz, Design-Chat.

@@ -1175,7 +1175,15 @@ function UpdateHinweis({ toast }) {
 function ProjekteVerwalten({ toast, aktiv, onClose, onWeg }) {
   const [liste, setListe] = useState(null); const [weg, setWeg] = useState(null); const [umfang, setUmfang] = useState(null);
   const [name, setName] = useState(""); const [busy, setBusy] = useState(false); const [tick, setTick] = useState(0);
-  useEffect(() => { supabase.from("ws_projekte").select("id, name, repo, archiviert, logo").order("name").then(({ data }) => setListe(data || [])); }, [tick]);
+  useEffect(() => {
+    const holen = () => supabase.from("ws_projekte").select("id, name, repo, archiviert, logo, repo_stand, repo_hinweis, repo_privat, repo_aktion").order("name").then(({ data }) => setListe(data || []));
+    holen(); const t = setInterval(holen, 8000); return () => clearInterval(t);   // Stand des Repository-Auftrags live sehen
+  }, [tick]);
+  const repoAnlegen = async (p, privat) => { const { error } = await supabase.rpc("ws_repo_anfordern", { p_projekt: p.id, p_privat: privat }); if (error) toast(fehler(error)); else { toast("Deine Werkstatt legt das GitHub-Repository an"); setTick((t) => t + 1); } };
+  const [oeffnen, setOeffnen] = useState(null); const [bestaetigt, setBestaetigt] = useState("");   // Öffentlich machen nur mit Eintippen (Prüfung M4)
+  const sichtbar = async (p, privat) => {
+    if (!privat && oeffnen?.id !== p.id) { setOeffnen(p); setBestaetigt(""); return; }
+    setOeffnen(null); const { error } = await supabase.rpc("ws_repo_sichtbarkeit", { p_projekt: p.id, p_privat: privat }); if (error) toast(fehler(error)); else { toast(privat ? "Wird auf privat umgestellt" : "Wird auf öffentlich umgestellt"); setTick((t) => t + 1); } };
   const archiv = async (p, aus) => {
     const { error } = await supabase.rpc("ws_projekt_archivieren", { p_projekt: p.id, p_aus: aus });
     if (error) { toast(fehler(error)); return; }
@@ -1193,6 +1201,14 @@ function ProjekteVerwalten({ toast, aktiv, onClose, onWeg }) {
     if (error) { toast(fehler(error)); return; }
     toast(`Projekt „${weg.name}“ gelöscht`); onWeg(weg.id); setWeg(null); setTick((t) => t + 1);
   };
+  if (oeffnen) return (
+    <Dialog title={`${oeffnen.repo} öffentlich machen?`} onClose={() => setOeffnen(null)}>
+      <p className="text-sm">Danach kann <b>jeder</b> den ganzen Code samt Verlauf und Dokumentation (auch docs/KONZEPT.md) bei GitHub sehen. Geheimnisse dürfen ohnehin nie im Repository stehen – prüfe das trotzdem vorher.</p>
+      <label className="flex flex-col gap-1 text-sm text-slate-500">Zur Bestätigung den Namen eingeben: <b className="text-slate-800 dark:text-slate-100 font-mono">{oeffnen.repo}</b>
+        <input id="cs-repo-oeffentlich" className={input} value={bestaetigt} onChange={(e) => setBestaetigt(e.target.value)} autoFocus /></label>
+      <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={() => setOeffnen(null)}>Abbrechen</button>
+        <button type="button" className={btn} disabled={bestaetigt.trim() !== oeffnen.repo} onClick={() => sichtbar(oeffnen, false)}>Öffentlich machen</button></div>
+    </Dialog>);
   if (weg) return (
     <Dialog title={`Projekt „${weg.name}“ endgültig löschen`} onClose={() => setWeg(null)}>
       <p className="text-sm">Gelöscht werden alle Daten dieses Projekts <b>in der Codeschmiede</b>: Bereiche, Gruppen, Features, Aufträge mit Verlauf, Chats, Designer-Entwürfe, Abgleich, KI-Zuständigkeiten, Verbrauch und Mitgliedschaften.
@@ -1214,7 +1230,12 @@ function ProjekteVerwalten({ toast, aktiv, onClose, onWeg }) {
             <div key={p.id} className="py-2.5 flex flex-wrap items-center gap-2">
               {p.logo && <LogoZeichen werte={p.logo} groesse={28} />}
               <div className="min-w-0 flex-1"><div className="font-semibold flex items-center gap-2">{p.name}{p.id === aktiv && <span className="text-[11px] rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">geöffnet</span>}{p.archiviert && <span className="text-[11px] rounded-full px-2 py-0.5 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">archiviert</span>}</div>
-                <div className="text-xs text-slate-500 font-mono break-all">{p.id}{p.repo ? ` · ${p.repo}` : ""}</div></div>
+                <div className="text-xs text-slate-500 font-mono break-all">{p.id}{p.repo ? ` · ${p.repo}` : ""}</div>
+                {p.repo_stand && p.repo_stand !== "fertig" && <div className={`text-xs mt-0.5 flex items-center gap-1 ${p.repo_stand === "fehler" ? "text-red-700 dark:text-red-400" : "text-slate-500"}`}>{["angefragt", "laeuft"].includes(p.repo_stand) && <Loader2 className="w-3 h-3 animate-spin" />}GitHub: {p.repo_hinweis}</div>}</div>
+              {!p.archiviert && !p.repo && !["angefragt", "laeuft"].includes(p.repo_stand) && <button type="button" className={`${ghost} h-9 text-xs`} onClick={() => repoAnlegen(p, false)}><GitBranch className="w-3.5 h-3.5" />GitHub-Repository anlegen</button>}
+              {p.repo && !["angefragt", "laeuft"].includes(p.repo_stand) && (p.repo_privat == null
+                ? <span className="inline-flex items-center gap-1 text-xs text-slate-500"><Lock className="w-3.5 h-3.5" />Sichtbarkeit:<button type="button" className={`${ghost} h-8 text-xs`} onClick={() => sichtbar(p, false)}>Öffentlich …</button><button type="button" className={`${ghost} h-8 text-xs`} onClick={() => sichtbar(p, true)}>Privat</button></span>
+                : <button type="button" className={`${ghost} h-9 text-xs`} title={`Jetzt ${p.repo_privat ? "privat" : "öffentlich"} – bei GitHub umstellen`} onClick={() => sichtbar(p, !p.repo_privat)}><Lock className="w-3.5 h-3.5" />{p.repo_privat ? "Öffentlich machen …" : "Auf privat stellen"}</button>)}
               {p.archiviert ? <button type="button" className={`${ghost} h-9 text-xs`} onClick={() => archiv(p, false)}><ArchiveRestore className="w-3.5 h-3.5" />Wiederherstellen</button>
                 : <button type="button" className={`${ghost} h-9 text-xs`} onClick={() => archiv(p, true)}><Archive className="w-3.5 h-3.5" />Archivieren</button>}
               <button type="button" className={`${ghost} h-9 text-xs text-red-700 dark:text-red-400`} onClick={() => vorbereiten(p)}><Trash2 className="w-3.5 h-3.5" />Löschen …</button>
@@ -1227,6 +1248,8 @@ function ProjekteVerwalten({ toast, aktiv, onClose, onWeg }) {
 // ---------------- Neues Projekt ----------------
 function NeuesProjekt({ toast, onClose, onFertig }) {
   const [name, setName] = useState(""); const [kennung, setKennung] = useState(""); const [besch, setBesch] = useState(""); const [repo, setRepo] = useState(""); const [symbol, setSymbol] = useState("layers"); const [busy, setBusy] = useState(false);
+  // GitHub-Repository gleich anlegen (Gerhard 2026-10-23 18:38): Konto gerhardkresak-code, öffentlich, per Klick privat
+  const [anlegen, setAnlegen] = useState(true); const [privat, setPrivat] = useState(false);
   const autoKennung = name.trim().toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
   const id = kennung || autoKennung;
   const gueltig = /^[a-z0-9][a-z0-9-]{1,39}$/.test(id) && name.trim() && (!repo || /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(repo.trim()));
@@ -1235,14 +1258,25 @@ function NeuesProjekt({ toast, onClose, onFertig }) {
     const { error } = await supabase.rpc("ws_projekt_anlegen", { p_id: id, p_name: name.trim(), p_beschreibung: besch.trim(), p_repo: repo.trim(), p_symbol: symbol });
     setBusy(false);
     if (error) { toast(fehler(error)); return; }
-    toast(`Projekt „${name.trim()}“ angelegt – die Werkstatt stellt beim ersten Auftrag zuerst ihre Fragen`); onFertig(id); onClose();
+    let gh = "";
+    if (!repo.trim() && anlegen) {
+      const r = await supabase.rpc("ws_repo_anfordern", { p_projekt: id, p_privat: privat });
+      gh = r.error ? ` – GitHub: ${fehler(r.error)}` : " – deine Werkstatt legt das GitHub-Repository an";
+    }
+    toast(`Projekt „${name.trim()}“ angelegt${gh}. Startet im Konzept.`); onFertig(id); onClose();
   };
   return (
     <Dialog title="Neues Projekt" onClose={onClose}>
       <label className="flex flex-col gap-1 text-sm text-slate-500">Name der App<input id="cs-pname" className={input} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></label>
       <label className="flex flex-col gap-1 text-sm text-slate-500">Kennung (klein, ohne Leerzeichen)<input id="cs-pid" className={input} value={id} onChange={(e) => setKennung(e.target.value)} /></label>
       <label className="flex flex-col gap-1 text-sm text-slate-500">Worum geht es?<textarea id="cs-pdesc" className={`${input} min-h-[70px]`} value={besch} onChange={(e) => setBesch(e.target.value)} /></label>
-      <label className="flex flex-col gap-1 text-sm text-slate-500">GitHub-Repository (Besitzer/Name, kann später ergänzt werden)<input id="cs-prepo" className={input} value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="gerhardkresak-code/neue-app" /></label>
+      <fieldset className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex flex-col gap-2 text-sm">
+        <legend className="px-1 text-slate-500">GitHub</legend>
+        <label className="flex items-start gap-2"><input id="cs-prepo-neu" type="checkbox" className="mt-1 accent-emerald-700" checked={anlegen && !repo.trim()} disabled={!!repo.trim()} onChange={(e) => setAnlegen(e.target.checked)} />
+          <span>Repository gleich anlegen: <span className="font-mono text-xs">gerhardkresak-code/{id || "…"}</span> mit Grundgerüst nach deinem Regelwerk<span className="block text-xs text-slate-500">Macht deine Werkstatt mit deiner GitHub-Anmeldung. Geht auch später unter „Projekte verwalten“ – Konzept, App-Designer und Chat funktionieren schon vorher.</span></span></label>
+        {anlegen && !repo.trim() && <label className="flex items-center gap-2 pl-6"><input id="cs-prepo-privat" type="checkbox" className="accent-emerald-700" checked={privat} onChange={(e) => setPrivat(e.target.checked)} />Privat <span className="text-xs text-slate-500">(sonst öffentlich: jeder kann Code, Dokumentation und das Konzept sehen; privat verbraucht GitHub-Freiminuten für Prüfungen)</span></label>}
+        <label className="flex flex-col gap-1 text-slate-500">Oder vorhandenes Repository eintragen (Besitzer/Name)<input id="cs-prepo" className={input} value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="gerhardkresak-code/neue-app" /></label>
+      </fieldset>
       <label className="flex flex-col gap-1 text-sm text-slate-500">Symbol<select id="cs-psym" className={input} value={symbol} onChange={(e) => setSymbol(e.target.value)}>{Object.keys(WS_ICON).map((k) => <option key={k} value={k}>{k}</option>)}</select></label>
       <p className="text-xs text-slate-500">Vorlage: App (Oberfläche & Design, Funktionen), Daten & Rechte (Datenbank, Anmeldung & Rechte), Betrieb (Handbuch & Texte, Einstellungen & Datenschutz). Es gilt dein Regelwerk AI-Dev-OS.</p>
       <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={onClose}>Abbrechen</button><button type="button" className={btn} disabled={busy || !gueltig} onClick={los}>Projekt anlegen</button></div>
