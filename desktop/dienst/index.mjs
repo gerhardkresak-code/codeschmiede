@@ -909,7 +909,8 @@ async function designChat() {
     const eigene = new Set((alle || []).filter((m) => !m.frage_id && m.von === cfg.user_id).map((m) => m.id));
     const verlauf = (alle || []).filter((m) => eigene.has(m.id) || eigene.has(m.frage_id)).slice(0, 8);
     const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, /^\[Marke\]/.test(f.text) ? "bilder" : "design", designPrompt({ projektName: pj?.name || f.projekt_id, projektId: f.projekt_id, appArt: pj?.app_art || "verwaltung", wissen: wissenText((await holeWissen(f.projekt_id)).filter((w) => ["ziel", "design", "funktionen"].includes(w.kapitel))), beschreibung: pj?.beschreibung || "", anfang: !eD && !designs, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
-    const { text, vorschlag } = designAntwort(ohneGeheimnisse(roh));
+    const { text, vorschlag: v0 } = designAntwort(ohneGeheimnisse(roh));
+    const vorschlag = /^\[Umdesign (Symbol|Baustein) /.test(f.text) ? null : v0;   // Umdesign-Gespräche: Vorschlag nur als UMDESIGN-Zeile (Prüfung 0.8.7)
     const { error: e2 } = await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
     if (e2) throw e2;
     await kiVermerken("design", f.id, ki);

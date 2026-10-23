@@ -47,7 +47,7 @@ export function umdesignBereinigen(art, w) {
 export function umdesignAusText(art, text) {
   const z = String(text || "").split(/\r?\n/).map((x) => x.trim()).reverse().find((x) => /^\**UMDESIGN:/i.test(x));
   if (!z) return null;
-  try { const v = umdesignBereinigen(art, JSON.parse(z.replace(/^\**UMDESIGN:\**\s*/i, "").replace(/^`+|`+$/g, ""))); return Object.keys(v).length ? v : null; } catch { return null; }
+  try { const v = umdesignBereinigen(art, JSON.parse(z.replace(/^\**UMDESIGN:\**\s*/i, "").replace(/^`+|`+$/g, ""))); delete v.beschreibung; return Object.keys(v).length ? v : null; } catch { return null; }
 }
 const ohneVorschlag = (t) => String(t || "").split(/\r?\n/).filter((x) => !/^\s*\**UMDESIGN:/i.test(x)).join("\n").trim();
 
@@ -73,6 +73,7 @@ function BausteinMuster({ id, e }) {
 export default function Umdesign({ projekt, d, ich, toast, ziel, verz, icons, onSchliessen }) {
   const { art, name } = ziel;
   const eintrag = art === "symbol" ? (verz?.symbole || []).find((s) => s.name === name) : (verz?.bausteine || []).find((b) => b.id === name);
+  const datei = typeof eintrag?.datei === "string" && /^src\/[A-Za-z0-9_./ -]{1,200}$/.test(eintrag.datei) && !eintrag.datei.includes("..") ? eintrag.datei : "src/components/ui";
   const alle = useMemo(() => (Array.isArray(eintrag?.stellen) ? eintrag.stellen.filter((s) => typeof s === "string" && /^src\/[A-Za-z0-9_./ -]{1,200}\.(jsx|js|tsx|ts)$/.test(s) && !s.includes("..")) : []), [eintrag]);
   const [entwurf, setEntwurf] = useState(null); const [werte, setWerte] = useState({}); const [an, setAn] = useState(() => new Set());
   const [suche, setSuche] = useState(""); const [busy, setBusy] = useState(false); const [senden, setSenden] = useState(null);
@@ -125,7 +126,7 @@ export default function Umdesign({ projekt, d, ich, toast, ziel, verz, icons, on
     ].filter(Boolean).join("\n");
     const e = werte.einstellungen || {};
     return [
-      `Grundbaustein „${name}“ (${eintrag?.datei || "src/components/ui"}) umdesignen (aus dem App-Designer der Codeschmiede).`,
+      `Grundbaustein „${name}“ (${datei}) umdesignen (aus dem App-Designer der Codeschmiede).`,
       `Einstellungen: ${Object.entries(e).map(([k, v]) => `${k} = ${v}`).join(", ") || "(keine festen Änderungen)"}.`,
       werte.beschreibung ? `Beschreibung: ${werte.beschreibung}` : "",
       an.size === alle.length ? "Gilt an allen Stellen: den Baustein selbst ändern (Varianten erhalten)."

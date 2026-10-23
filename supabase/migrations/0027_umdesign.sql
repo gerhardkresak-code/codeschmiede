@@ -44,7 +44,7 @@ begin
 end $$;
 create or replace function public.ws_umdesign_stellen_ok(s text[]) returns boolean
 language sql immutable set search_path = public as $$
-  select cardinality(s) between 1 and 800 and not exists (select 1 from unnest(s) x where x !~ '^src/[A-Za-z0-9_./ -]{1,200}\.(jsx|js|tsx|ts)$' or x ~ '\.\.')
+  select cardinality(s) between 1 and 800 and array_position(s, null) is null and not exists (select 1 from unnest(s) x where x !~ '^src/[A-Za-z0-9_./ -]{1,200}\.(jsx|js|tsx|ts)$' or x ~ '\.\.')
 $$;
 revoke execute on function public.ws_umdesign_werte_ok(text, jsonb), public.ws_umdesign_stellen_ok(text[]) from public, anon;
 grant execute on function public.ws_umdesign_werte_ok(text, jsonb), public.ws_umdesign_stellen_ok(text[]) to authenticated;
@@ -100,12 +100,13 @@ begin
   if not public.ws_darf_design(u.projekt_id) then raise exception 'Umdesignen dürfen Admin und Entwickler des Projekts'; end if;
   select design_gruppe_id into g from public.ws_projekte where id = u.projekt_id;
   if g is null then raise exception 'Das Projekt hat noch keine Design-Gruppe'; end if;
+  if u.werte - 'beschreibung' = '{}'::jsonb then raise exception 'Noch keine Änderung gewählt'; end if;
   if p_text is null or char_length(p_text) not between 10 and 7000 then raise exception 'Auftragstext fehlt oder ist zu lang'; end if;
   insert into public.ws_auftraege (gruppe_id, titel, art, erstellt_von)
     values (g, left(case u.art when 'symbol' then 'Symbol ' else 'Grundbaustein ' end || u.ziel || ' umdesignen (' || cardinality(u.stellen) || ' Stellen)', 80), 'aendern', auth.uid())
     returning id into neu;
   insert into public.ws_nachrichten (auftrag_id, von, art, text, kanal)
-    values (neu, auth.uid(), 'text', p_text || chr(10) || chr(10) || 'Werte (JSON, geprüft): ' || u.werte::text || chr(10) || 'Stellen (' || cardinality(u.stellen) || ' von ' || u.alle_stellen || '):' || chr(10) || array_to_string(u.stellen, chr(10)), 'codeschmiede');
+    values (neu, auth.uid(), 'text', p_text || chr(10) || chr(10) || 'Werte (JSON, geprüft): ' || (u.werte - 'beschreibung')::text || chr(10) || 'Stellen (' || cardinality(u.stellen) || ' von ' || u.alle_stellen || '):' || chr(10) || array_to_string(u.stellen, chr(10)), 'codeschmiede');
   update public.ws_umdesign set stand = 'gesendet', auftrag_id = neu, geaendert = now() where id = p_id;
   insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'umdesign_gesendet', jsonb_build_object('id', p_id, 'auftrag', neu));
   return neu;

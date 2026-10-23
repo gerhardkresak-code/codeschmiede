@@ -37,4 +37,12 @@ select a.titel, a.gruppe_id = p.design_gruppe_id as design_gruppe from ws_auftra
 select position('src/pages/Home.jsx' in n.text) > 0 as stellen_im_text from ws_nachrichten n join ws_umdesign u on u.auftrag_id = n.auftrag_id;
 \echo [4] Direkt schreiben -> FEHLER
 insert into ws_umdesign(projekt_id,art,ziel,stellen) values ('neu','symbol','X',array['src/a.js']);
+\echo [5] NULL-Stelle -> FEHLER; nur Beschreibung senden -> FEHLER; Beschreibung nicht als geprüft
+:ADM
+select ws_umdesign_speichern(null,'neu','symbol','Calendar','{"neu":"CalendarCheck"}',array['src/a.js',null],3);
+select ws_umdesign_speichern(null,'neu','symbol','Bell','{"beschreibung":"nur Text"}',array['src/a.js'],1) > 0 as ok;
+select ws_umdesign_senden((select max(id) from ws_umdesign),'Symbol Bell bitte ändern');
+select ws_umdesign_speichern(null,'neu','symbol','Star','{"neu":"Sparkles","beschreibung":"GEHEIMHINWEIS"}',array['src/a.js'],1) > 0 as ok;
+select ws_umdesign_senden((select max(id) from ws_umdesign),'Symbol Star bitte ändern') > 0 as ok;
+select position('GEHEIMHINWEIS' in n.text) = 0 as beschreibung_nicht_angehaengt from ws_nachrichten n join ws_umdesign u on u.auftrag_id = n.auftrag_id where u.ziel = 'Star';
 rollback;
