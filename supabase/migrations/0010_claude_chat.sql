@@ -56,13 +56,15 @@ grant usage on sequence public.ws_claude_chat_id_seq to authenticated;
 alter table public.ws_claude_chat enable row level security;
 
 -- Persönlich: eigene Fragen und die Antworten darauf (Hilfsfunktion statt Unterabfrage – sonst Rekursion in der Regel, Prüfung 2026-10-23)
-create or replace function public.ws_claude_chat_von(p_frage bigint) returns uuid
-language sql stable security definer set search_path = public as $$ select von from public.ws_claude_chat where id = p_frage $$;
-revoke execute on function public.ws_claude_chat_von(bigint) from public, anon;
-grant execute on function public.ws_claude_chat_von(bigint) to authenticated;
+-- (gibt nur zurück, ob die Frage der angemeldeten Person gehört – verrät nicht, wer gefragt hat)
+create or replace function public.ws_claude_chat_meine(p_frage bigint) returns boolean
+language sql stable security definer set search_path = public as $$ select exists (select 1 from public.ws_claude_chat where id = p_frage and von = auth.uid()) $$;
+revoke execute on function public.ws_claude_chat_meine(bigint) from public, anon;
+grant execute on function public.ws_claude_chat_meine(bigint) to authenticated;
 drop policy if exists ws_claude_chat_lesen on public.ws_claude_chat;
 create policy ws_claude_chat_lesen on public.ws_claude_chat for select to authenticated
-  using (von = auth.uid() or (frage_id is not null and public.ws_claude_chat_von(frage_id) = auth.uid()));
+  using (von = auth.uid() or (frage_id is not null and public.ws_claude_chat_meine(frage_id)));
+drop function if exists public.ws_claude_chat_von(bigint);   -- frühere Fassung
 drop policy if exists ws_claude_chat_frage on public.ws_claude_chat;
 create policy ws_claude_chat_frage on public.ws_claude_chat for insert to authenticated
   with check (public.ws_darf_fragen(projekt_id) and von = auth.uid() and frage_id is null and stand = 'offen');

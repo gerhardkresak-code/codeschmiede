@@ -90,9 +90,10 @@ const VERBOTEN = [
 ];
 
 // Zusätzliche Lese-Sperren (Chat mit Claude, Prüfung 2026-10-23)
-const LESE_SPERREN = ["Read(~/.git-credentials)", "Read(~/.npmrc)", "Read(~/.netrc)", "Read(~/.claude.json)", "Read(~/.gnupg/**)", "Read(~/AppData/**)",
-  "Read(//**/.ssh/**)", "Read(//**/GitHub CLI/**)", "Read(//**/hosts.yml)", "Read(//**/.claude.json)", "Read(//**/.git-credentials)", "Read(//**/.env*)",
-  "Grep(~/**)", "Glob(~/**)"];
+// (nicht ganz ~/AppData sperren – dort liegt unter Windows der Lese-Ordner der Werkstatt; --restricted begrenzt Grep/Glob bereits)
+const LESE_SPERREN = ["Read(~/.git-credentials)", "Read(~/.npmrc)", "Read(~/.netrc)", "Read(~/.claude.json)", "Read(~/.gnupg/**)",
+  "Read(~/AppData/Roaming/GitHub CLI/**)", "Read(~/AppData/Roaming/Microsoft/**)", "Read(~/AppData/Local/Microsoft/**)",
+  "Read(//**/.ssh/**)", "Read(//**/GitHub CLI/**)", "Read(//**/hosts.yml)", "Read(//**/.claude.json)", "Read(//**/.git-credentials)", "Read(//**/.env*)"];
 
 // ---------- Hilfen ----------
 async function existiert(p) { try { await access(p); return true; } catch { return false; } }
