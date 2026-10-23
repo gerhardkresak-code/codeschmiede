@@ -811,7 +811,7 @@ async function claudeChat() {
 
 // ---------- Projekt-Abgleich (Zweige & Dokumentation für die Zentrale) ----------
 // Nur lesen: git fetch + Inhalte aus origin/main. Es wird kein Projekt-Code ausgeführt (auch auf dem Admin-PC zulässig).
-const DOKU = /^(docs\/[A-Za-z0-9._/-]+\.md|AGENTS\.md|README\.md)$/;
+const DOKU = /^(docs\/[A-Za-z0-9._/-]+\.md|AGENTS\.md|CLAUDE\.md|README\.md)$/;
 let abgleichLaeuft = false; let abgleichZuletzt = 0;
 // Eigener Klon ohne Arbeitsdateien (nur Git-Daten): nichts wird ausgecheckt, keine Hooks, getrennt von laufenden Aufträgen
 async function abgleichRepo(projekt) {
@@ -845,7 +845,7 @@ async function projektAbgleich() {
           try { [hinter, vor] = (await git(repo, "rev-list", "--left-right", "--count", `${main}...${sha}`)).split(/\s+/).map(Number); } catch { /* ohne Abstand */ }
           zweige.push({ name, sha, datum: datum || null, betreff: kuerzen(ohneGeheimnisse(betreff || ""), 300), vor, hinter });
         }
-        const dateien = (await git(repo, "ls-tree", "-r", "--name-only", main, "--", "docs", "AGENTS.md", "README.md"))
+        const dateien = (await git(repo, "ls-tree", "-r", "--name-only", main, "--", "docs", "AGENTS.md", "CLAUDE.md", "README.md"))
           .split("\n").filter((f) => DOKU.test(f) && !f.includes("..")).slice(0, 500);
         const dokumente = []; let summe = 0;
         for (const f of dateien) {
