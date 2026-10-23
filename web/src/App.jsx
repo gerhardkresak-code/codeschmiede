@@ -15,6 +15,7 @@ import KiAnbieter from "./KiAnbieter";
 import Einrichtung, { EinrichtungChip, useEinrichtung } from "./Einrichtung";
 import { MitErwaehnung, erwaehnte, FeatureBezuege } from "./Bezuege";
 import Regelwerk from "./Regelwerk";
+import { LogoZeichen } from "./Logo";
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
 // Konzept: docs/KONZEPT.md · Datenbank: supabase/migrations/
@@ -184,7 +185,7 @@ export default function App() {
         <div className="hidden md:block mb-2">
           <label htmlFor="cs-projekt" className="text-[11px] uppercase tracking-widest text-emerald-200/60 px-2.5">Projekt</label>
           <div className="mt-1 flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-2">
-            <PIcon className="w-[18px] h-[18px] shrink-0" />
+            {aktuell?.logo ? <LogoZeichen werte={aktuell.logo} groesse={20} /> : <PIcon className="w-[18px] h-[18px] shrink-0" />}
             <select id="cs-projekt" value={daten.projektId || ""} onChange={(e) => waehle(e.target.value)} className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none [&>option]:text-slate-900">
               {daten.projekte.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -1178,7 +1179,7 @@ function UpdateHinweis({ toast }) {
 function ProjekteVerwalten({ toast, aktiv, onClose, onWeg }) {
   const [liste, setListe] = useState(null); const [weg, setWeg] = useState(null); const [umfang, setUmfang] = useState(null);
   const [name, setName] = useState(""); const [busy, setBusy] = useState(false); const [tick, setTick] = useState(0);
-  useEffect(() => { supabase.from("ws_projekte").select("id, name, repo, archiviert").order("name").then(({ data }) => setListe(data || [])); }, [tick]);
+  useEffect(() => { supabase.from("ws_projekte").select("id, name, repo, archiviert, logo").order("name").then(({ data }) => setListe(data || [])); }, [tick]);
   const archiv = async (p, aus) => {
     const { error } = await supabase.rpc("ws_projekt_archivieren", { p_projekt: p.id, p_aus: aus });
     if (error) { toast(fehler(error)); return; }
@@ -1215,6 +1216,7 @@ function ProjekteVerwalten({ toast, aktiv, onClose, onWeg }) {
         <div className="flex flex-col divide-y divide-slate-100 dark:divide-slate-800">
           {liste.map((p) => (
             <div key={p.id} className="py-2.5 flex flex-wrap items-center gap-2">
+              {p.logo && <LogoZeichen werte={p.logo} groesse={28} />}
               <div className="min-w-0 flex-1"><div className="font-semibold flex items-center gap-2">{p.name}{p.id === aktiv && <span className="text-[11px] rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">geöffnet</span>}{p.archiviert && <span className="text-[11px] rounded-full px-2 py-0.5 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">archiviert</span>}</div>
                 <div className="text-xs text-slate-500 font-mono break-all">{p.id}{p.repo ? ` · ${p.repo}` : ""}</div></div>
               {p.archiviert ? <button type="button" className={`${ghost} h-9 text-xs`} onClick={() => archiv(p, false)}><ArchiveRestore className="w-3.5 h-3.5" />Wiederherstellen</button>

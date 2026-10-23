@@ -1,6 +1,6 @@
 # Konzept · Features aus dem Gespräch anlegen und Bezüge zwischen Features
 
-Stand 2026-10-22 22:50 · Entscheidungen Gerhard 22:31 · **Entwurf, noch nicht freigegeben**
+Stand 2026-10-23 · Entscheidungen Gerhard 22:31 · **umgesetzt in 0.8.0** (Datenbank 0015)
 
 ## Beispiel (Gerhard)
 1. Gerhard legt die Gruppe „Turnier & Liga“ an, und wir chatten.

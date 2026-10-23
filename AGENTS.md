@@ -83,3 +83,6 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
   PCs lesen – Antworten mit verdächtigem Inhalt werden verworfen. Code: `desktop/dienst/lib/ki.mjs`, Datenbank 0012, Seite „KI-Anbieter“.
 - **2026-10-23 15:34 – Projekte löschen:** Angelegte Projekte kann der Admin archivieren (umkehrbar) oder endgültig löschen (nur Daten in der
   Codeschmiede, Bestätigung mit dem Projektnamen; GitHub-Repository und App bleiben).
+- **2026-10-23 15:53 – Alles fertig machen (Punkt 1–6):** Sandbox für fremde KI-Programme (Prüfen durch ChatGPT/Gemini nur mit Sandbox,
+  Claude bleibt Rückfall), Einrichtungs-Assistent, Baustein-Bibliothek, Marke mit Projektlogos, Regelwerk-Editor, Feature-Bezüge.
+  Regel für die Werkstatt: neue Bausteine nur über die Bibliothek (`docs/BAUSTEINE.md`, `node tools/bausteine.mjs`), nur Grundwerte nutzen.
