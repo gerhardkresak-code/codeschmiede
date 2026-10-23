@@ -18,6 +18,19 @@ export const ANBIETER = {
   chatgpt: { name: "ChatGPT", programm: "Codex (OpenAI)", modelle: ["automatisch"], install: "npm install -g @openai/codex", login: "codex login" },
   gemini: { name: "Gemini", programm: "Gemini CLI (Google)", modelle: ["automatisch", "gemini-2.5-pro", "gemini-2.5-flash"], install: "npm install -g @google/gemini-cli", login: "gemini" },
 };
+// Wofür eignet sich welche KI? (Gerhard 2026-10-23 19:29) – Empfehlungen nach Stand Oktober 2026, keine Garantie;
+// „aufgaben“ = Kennungen aus AUFGABEN. Bauen bleibt immer Claude.
+export const STAERKEN = {
+  claude: { gut: "Programmieren, sorgfältige Prüfungen, lange Dokumente und genaue Anweisungen; sehr gutes Deutsch.", aufgaben: ["konzept", "pruefung", "doku", "chat"] },
+  chatgpt: { gut: "Vielseitig für Ideen, Konzepte und Texte; gute zweite Meinung zu Claudes Vorschlägen.", aufgaben: ["konzept", "chat", "texte"] },
+  gemini: { gut: "Sehr viel Text auf einmal (ganze Dokumentation), Zusammenfassungen. Für persönliche Google-Konten seit Juni 2026: Antigravity verwenden.", aufgaben: ["doku", "chat"] },
+  copilot: { gut: "Ein Abo, mehrere Modelle (GPT, Claude u. a.) – praktisch als Ausweich, wenn andere Limits voll sind; Fragen rund um Code.", aufgaben: ["chat", "konzept"] },
+  antigravity: { gut: "Google-Modelle mit großem Gedächtnis für lange Texte; gut für Dokumentation, Zusammenfassungen und Design-Ideen.", aufgaben: ["doku", "design", "chat"] },
+  grok: { gut: "Schnelle, lockere Antworten und Brainstorming; kennt aktuelle Themen.", aufgaben: ["chat", "texte"] },
+  cursor: { gut: "Mehrere Modelle, stark bei Fragen zu Code und Erklärungen von Programmteilen.", aufgaben: ["chat", "konzept"] },
+  opencode: { gut: "Nutzt Konten, die du schon hast (z. B. ChatGPT oder Copilot), über ein Programm – gut als Rückfall.", aufgaben: ["chat"] },
+  "mistral-vibe": { gut: "Europäischer Anbieter (Daten in der EU), gut für Texte auf Deutsch und Französisch, Übersetzungen.", aufgaben: ["texte", "doku"] },
+};
 const AUFGABEN = [
   ["chat", "Chat überall (Fragen, Ausloten)", ""],
   ["konzept", "Konzept & Rückfragen vor dem Bauen", "Ergebnis ist die Konzept-Karte im Chat"],
@@ -41,6 +54,29 @@ const VORSCHLAG = {
   bauen: [{ anbieter: "claude" }],
 };
 const MODELL = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$/;
+
+/** Übersicht: wofür eignet sich welche KI (eingebaute + angelegte Anbieter). */
+function Eignung({ liste }) {
+  const name = (id) => AUFGABEN.find(([k]) => k === id)?.[1]?.replace(/ \(.*\)$/, "") || id;
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+      <div className="px-3 py-2 bg-slate-50 dark:bg-slate-950"><h3 className="font-display font-bold">Wofür eignet sich welche KI?</h3>
+        <p className="text-xs text-slate-500">Empfehlungen (Stand Oktober 2026) – du entscheidest unten bei den Zuständigkeiten. Gebaut wird immer von Claude.</p></div>
+      <div className="divide-y divide-slate-100 dark:divide-slate-800">
+        {Object.entries(liste).map(([id, a]) => {
+          const st = STAERKEN[id];
+          return (
+            <div key={id} className="px-3 py-2.5 grid gap-1 md:grid-cols-[170px_minmax(0,1fr)] text-sm">
+              <div className="font-semibold">{a.name}<span className="block text-xs font-normal text-slate-500">{a.programm}</span></div>
+              <div className="min-w-0 flex flex-col gap-1">
+                <span className="text-slate-700 dark:text-slate-200">{st?.gut || a.eigen?.hinweis || "Keine Beschreibung hinterlegt."}</span>
+                {st?.aufgaben?.length > 0 && <span className="flex flex-wrap gap-1">{st.aufgaben.map((t) => <span key={t} className="text-[11px] font-semibold rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">{name(t)}</span>)}</span>}
+              </div>
+            </div>);
+        })}
+      </div>
+    </div>);
+}
 
 function Zeile({ id, titel, hinweis, eintrag, admin, onSpeichern, anbieter = ANBIETER }) {
   const fest = id === "bauen";
@@ -200,6 +236,8 @@ export default function KiAnbieter({ d, ich, toast }) {
       <div><h2 className="font-display font-bold text-xl leading-tight flex items-center gap-2"><Cpu className="w-5 h-5 text-emerald-700" />KI-Anbieter</h2>
         <p className="text-sm text-slate-500">Wer übernimmt was: Anbieter und Modell je Aufgabe, in Reihenfolge. Der nächste übernimmt, wenn ein Limit voll ist oder ein Anbieter auf dem PC nicht gekoppelt ist. Jeder nutzt sein eigenes Abo.</p></div>
 
+      <Eignung liste={liste} />
+
       <div className={`${card} overflow-hidden`}>
         <div className="px-3 py-2 bg-slate-50 dark:bg-slate-950 flex flex-wrap items-center gap-2"><h3 className="font-display font-bold">Zuständigkeiten</h3><span className="text-xs text-slate-500">{admin ? "Nur du als Admin stellst das ein." : "Stellt der Admin ein."}</span></div>
         {zust?.fehlt ? <p className="p-4 text-sm text-amber-700 dark:text-amber-300">Die Datenbank-Erweiterung 0012 (KI-Anbieter) ist noch nicht eingespielt.</p>
@@ -237,6 +275,7 @@ export default function KiAnbieter({ d, ich, toast }) {
                     <div key={key} className="rounded-lg border border-slate-200 dark:border-slate-800 p-2.5 flex flex-col gap-1.5 text-xs min-w-0">
                       <div className="flex items-center gap-1.5"><b className="text-sm">{a.name}</b><span className="text-slate-500">{a.programm}</span>
                         <span className={`ml-auto inline-flex items-center gap-1 font-semibold ${k?.gekoppelt ? (limit ? "text-amber-700 dark:text-amber-300" : "text-green-700 dark:text-green-400") : "text-slate-500"}`}>{k?.gekoppelt ? (limit ? <CircleAlert className="w-3.5 h-3.5" /> : <CircleCheck className="w-3.5 h-3.5" />) : <CircleAlert className="w-3.5 h-3.5" />}{k ? (k.gekoppelt ? (limit ? `Limit voll bis ${fmt(k.limit_bis)}` : "gekoppelt") : "nicht gekoppelt") : "noch nicht geprüft"}</span></div>
+                      {STAERKEN[key] && <p className="text-slate-500 break-words"><b className="font-semibold text-slate-600 dark:text-slate-300">Gut für:</b> {STAERKEN[key].gut}</p>}
                       {k?.hinweis && <p className="text-slate-600 dark:text-slate-300 break-words">{k.hinweis}</p>}
                       {!k?.gekoppelt && key !== "claude" && <div className="flex flex-col gap-1">
                         {a.install && <><span className="text-slate-500">1. Installieren (einmal, im Terminal):</span>
