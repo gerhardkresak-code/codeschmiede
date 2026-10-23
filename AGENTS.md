@@ -70,3 +70,11 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
   Zuweisung je Tabelle über eine Liste im Designer. Beim Anlegen neuer Bausteine/Tabellen hilft Claude im Chat.
 - **2026-10-23 10:45 – Überall Chat mit Claude:** In der ganzen Codeschmiede (Designer, Bausteine, Marke, Regelwerk, Einstellungen …)
   kann Gerhard jederzeit mit Claude sprechen.
+- **2026-10-23 14:11 – Alles fertig machen:** Keine Platzhalter mehr in der Codeschmiede; offene Menüpunkte werden gebaut (0.6.0).
+- **2026-10-23 14:14–15:00 – KI-Anbieter (Entwurf 1.2 freigegeben):** Beliebig viele KI-Anbieter (Claude, ChatGPT, Gemini …) mit dem
+  eigenen Abo. Klären, Ausloten und Konzepte laufen über die eingestellten Anbieter (Standard ChatGPT), ebenso die unabhängigen Prüfungen.
+  **Bauen und Programmieren macht nur Claude – nie ein anderer Anbieter** (14:27). Je Aufgabe Anbieter **und Modell** in Reihenfolge frei
+  wählbar (14:49); der nächste übernimmt bei vollem Limit oder ohne Kopplung. Zuständigkeiten stellt **nur der Admin** ein (14:59).
+  Im Chat sieht man nicht, wer antwortet; vermerkt wird es im Protokoll. Freigegebene Konzepte (Konzept-Karte) gehen als Auftrag an Claude
+  und werden als `docs/konzepte/<datum>-<feature>.md` mit dem Bau-PR abgelegt. Andere Anbieter sehen nur Dokumentation und Dateiliste,
+  nie ausführbaren Code, und ändern nichts. Code: `desktop/dienst/lib/ki.mjs`, Datenbank 0012, Seite „KI-Anbieter“.

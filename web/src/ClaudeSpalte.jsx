@@ -82,15 +82,25 @@ export default function ClaudeSpalte({ d, ich, ort, kontext, toast }) {
 
 function Vorschlag({ m, d, ich, kann, toast }) {
   // Auftragstext immer sichtbar, bevor er angelegt wird (Prüfung 2026-10-23)
-  const v = m.vorschlag; const [offen, setOffen] = useState(true); const [busy, setBusy] = useState(false);
+  const v = m.vorschlag; const [offen, setOffen] = useState(!v.konzept); const [busy, setBusy] = useState(false);
   const g = d.gruppen.find((x) => x.id === v.gruppe_id); const f = v.feature_id ? d.features.find((x) => x.id === v.feature_id) : null;
+  // Konzept-Karte (Entwurf 1.2): offene Punkte sperren die Freigabe; das Konzept geht als erste Nachricht an den Bau
+  const k = v.konzept || null; const nochOffen = (k?.offen || []).length;
+  const slug = (f?.name || v.titel).toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "konzept";
+  const auftragsText = !k ? v.text : [
+    v.text, "", `## Freigegebenes Konzept (${new Date().toLocaleDateString("de-AT")})`,
+    k.ziel && `**Ziel:** ${k.ziel}`, k.umfang && `**Umfang:** ${k.umfang}`, k.datenschutz && `**Datenschutz:** ${k.datenschutz}`,
+    k.entscheidungen?.length && `**Entscheidungen:**\n${k.entscheidungen.map((x) => `- ${x}`).join("\n")}`,
+    k.abnahme?.length && `**Abnahme:**\n${k.abnahme.map((x) => `- ${x}`).join("\n")}`, "",
+    `Lege dieses Konzept zusätzlich als docs/konzepte/${new Date().toISOString().slice(0, 10)}-${slug}.md im Projekt ab (mit dem Bau-PR).`,
+  ].filter((x) => x !== false && x != null && x !== 0).join("\n").slice(0, 8000);
   const anlegen = async () => {
     setBusy(true);
     try {
       const texter = d.mitglieder.some((x) => x.projekt_id === d.projektId && x.benutzer_id === ich.id && x.rolle === "texter");
       const { data, error } = await supabase.from("ws_auftraege").insert({ gruppe_id: v.gruppe_id, feature_id: v.feature_id || null, titel: v.titel.slice(0, 80), art: texter ? "text" : "aendern", erstellt_von: ich.id }).select().single();
       if (error) throw error;
-      const r = await supabase.from("ws_nachrichten").insert({ auftrag_id: data.id, von: ich.id, art: "text", text: v.text, kanal: "codeschmiede" });
+      const r = await supabase.from("ws_nachrichten").insert({ auftrag_id: data.id, von: ich.id, art: "text", text: auftragsText, kanal: "codeschmiede" });
       if (r.error) throw r.error;
       await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "uebernommen", p_auftrag: data.id });
       toast(`Auftrag #${data.id} angelegt – ${g?.name || v.gruppe_id}`);
@@ -99,12 +109,17 @@ function Vorschlag({ m, d, ich, kann, toast }) {
   const ablehnen = async () => { const { error } = await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "abgelehnt" }); if (error) toast(fehler(error)); };
   return (
     <div className="mt-2 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 p-2">
-      <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1"><ClipboardList className="w-3.5 h-3.5" />Vorschlag: Auftrag</div>
+      <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1"><ClipboardList className="w-3.5 h-3.5" />{k ? "Konzept-Karte" : "Vorschlag: Auftrag"}
+        {k && <span className={`ml-auto rounded-full px-2 py-0.5 font-semibold ${nochOffen ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"}`}>{nochOffen ? `${nochOffen} offen` : "keine offenen Punkte"}</span>}</div>
       <p className="font-semibold mt-0.5">{v.titel}</p>
       <p className="text-xs text-slate-500">{g?.name || v.gruppe_id}{f ? ` › ${f.name}` : ""}</p>
+      {k && <dl className="mt-1.5 grid grid-cols-[84px_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
+        {[["Ziel", k.ziel], ["Umfang", k.umfang], ["Datenschutz", k.datenschutz]].filter(([, x]) => x).map(([t, x]) => <React.Fragment key={t}><dt className="text-slate-500 font-semibold">{t}</dt><dd className="whitespace-pre-wrap">{x}</dd></React.Fragment>)}
+        {[["Entschieden", k.entscheidungen], ["Abnahme", k.abnahme], ["Offen", k.offen]].filter(([, x]) => x?.length).map(([t, x]) => <React.Fragment key={t}><dt className={`font-semibold ${t === "Offen" ? "text-amber-700 dark:text-amber-300" : "text-slate-500"}`}>{t}</dt><dd><ul className="list-disc pl-4">{x.map((y, i) => <li key={i}>{y}</li>)}</ul></dd></React.Fragment>)}
+      </dl>}
       <button type="button" onClick={() => setOffen(!offen)} className="text-xs text-slate-500 inline-flex items-center gap-1 mt-1">{offen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}Auftragstext {offen ? "ausblenden" : "anzeigen"}</button>
-      {offen && <p className="whitespace-pre-wrap text-xs mt-1 bg-slate-50 dark:bg-slate-950 rounded p-2 max-h-48 overflow-auto">{v.text}</p>}
+      {offen && <p className="whitespace-pre-wrap text-xs mt-1 bg-slate-50 dark:bg-slate-950 rounded p-2 max-h-48 overflow-auto">{auftragsText}</p>}
       {m.entscheidung ? <p className="text-xs mt-1.5 font-semibold text-slate-500">{m.entscheidung === "uebernommen" ? `Angelegt${m.auftrag_id ? ` als Auftrag #${m.auftrag_id}` : ""}` : "Abgelehnt"}</p>
-        : kann && <div className="flex gap-1.5 mt-2"><button type="button" className={btn} disabled={busy} onClick={anlegen}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Als Auftrag anlegen</button><button type="button" className={ghost} onClick={ablehnen}><X className="w-4 h-4" />Nein</button></div>}
+        : kann && <div className="flex flex-wrap gap-1.5 mt-2"><button type="button" className={btn} disabled={busy || nochOffen > 0} title={nochOffen ? "Erst die offenen Punkte im Chat klären" : undefined} onClick={anlegen}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{k ? "Konzept freigeben & bauen" : "Als Auftrag anlegen"}</button><button type="button" className={ghost} onClick={ablehnen}><X className="w-4 h-4" />{k ? "Verwerfen" : "Nein"}</button></div>}
     </div>);
 }

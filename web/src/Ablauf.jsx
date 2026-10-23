@@ -3,6 +3,7 @@ import {
   GitBranch, Tag, Search, Loader2, Info, ShieldCheck, CircleCheck, CircleAlert, Clock, ExternalLink, BookOpen, History, Download, FileText, RefreshCw,
 } from "lucide-react";
 import { supabase } from "./supabase";
+import { KiProtokoll } from "./KiAnbieter";
 
 // Ablauf & Dokumentation (Anweisung Gerhard 2026-10-23 14:11 „Mache einfach alles fertig“):
 // Zweige & Versionen, Prüfstand, Wissensdatenbank, Änderungsprotokoll, Dokumentation.
@@ -160,7 +161,7 @@ function Ergebnis({ p, titel }) {
   return (
     <div className="text-xs flex flex-col gap-0.5">
       <span className={`inline-flex items-center gap-1.5 font-semibold ${cls}`}><I className={`w-3.5 h-3.5 ${e === "laeuft" ? "animate-spin" : ""}`} />{titel}: {e === "gruen" ? "grün" : e === "rot" ? "rot" : e === "laeuft" ? "läuft" : e || "–"}</span>
-      <span className="text-slate-500">{fmt(p.zeit)}{p.pc ? ` · ${p.pc}` : ""}</span>
+      <span className="text-slate-500">{fmt(p.zeit)}{p.pc ? ` · ${p.pc}` : ""}{p.ki ? ` · geprüft von ${p.ki}` : ""}</span>
       {p.befund && <span className="text-slate-600 dark:text-slate-300 line-clamp-3 whitespace-pre-line">{String(p.befund).slice(0, 400)}</span>}
     </div>);
 }
@@ -248,15 +249,21 @@ export function Aenderungsprotokoll({ d }) {
   const [quelle, setQuelle] = useState("projekt");
   const [cs, setCs] = useState({ laden: false, inhalt: "" });
   useEffect(() => {
-    if (quelle !== "codeschmiede" || cs.inhalt) return;
+    if (quelle !== "codeschmiede" || cs.inhalt) return undefined;
     setCs({ laden: true, inhalt: "" });
     fetch("https://raw.githubusercontent.com/gerhardkresak-code/codeschmiede/main/docs/CHANGELOG.md", { cache: "no-store" })
       .then((r) => (r.ok ? r.text() : "")).then((t) => setCs({ laden: false, inhalt: t })).catch(() => setCs({ laden: false, inhalt: "" }));
   }, [quelle, cs.inhalt]);
   const schalter = (
-    <div className="flex gap-2">{[["projekt", "Projekt"], ["codeschmiede", "Codeschmiede"]].map(([k, t]) => <button key={k} type="button" aria-pressed={quelle === k} onClick={() => setQuelle(k)} className={`h-8 px-3 rounded-lg text-sm font-semibold border ${quelle === k ? "border-emerald-600 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "border-slate-200 dark:border-slate-800"}`}>{t}</button>)}</div>);
+    <div className="flex gap-2">{[["projekt", "Projekt"], ["codeschmiede", "Codeschmiede"], ["ki", "KI-Protokoll"]].map(([k, t]) => <button key={k} type="button" aria-pressed={quelle === k} onClick={() => setQuelle(k)} className={`h-8 px-3 rounded-lg text-sm font-semibold border ${quelle === k ? "border-emerald-600 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "border-slate-200 dark:border-slate-800"}`}>{t}</button>)}</div>);
   if (quelle === "projekt") return <DokAnsicht d={d} pfad="docs/CHANGELOG.md" icon={History} titel="Änderungsprotokoll" extra={schalter}
     text="Jede Änderung: was, wer, wann. Jede Version ist als eigener Zweig gesichert." leer="Für dieses Projekt gibt es noch kein docs/CHANGELOG.md." />;
+  if (quelle === "ki") return (
+    <section className="flex flex-col gap-3" aria-label="KI-Protokoll">
+      <Kopf icon={History} titel="Änderungsprotokoll" text="Welcher KI-Anbieter hat geantwortet (im Chat bewusst nicht sichtbar)." />
+      {schalter}
+      <div className={`${card} p-3 min-w-0`}><KiProtokoll /></div>
+    </section>);
   return (
     <section className="flex flex-col gap-3" aria-label="Änderungsprotokoll Codeschmiede">
       <Kopf icon={History} titel="Änderungsprotokoll" text="Änderungen an der Codeschmiede selbst." />

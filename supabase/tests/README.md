@@ -6,3 +6,4 @@ Ablauf in einem lokalen Postgres 16: `mock2.sql` (stellt Supabase nach) → `../
 Nur erfundene Test-Konten.
 
 Ab Datenbank v11: `t12_abgleich.sql` (Projekt-Abgleich: nur eigener PC, nur Admin/Entwickler, nur erlaubte Pfade, nur lesen für Mitglieder).
+Ab Datenbank v12: `t13_ki.sql` (KI-Anbieter: nur Admin stellt ein, Bauen nur Claude, Kopplung nur eigener PC, Konzept im Vorschlag).

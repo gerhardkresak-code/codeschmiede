@@ -110,7 +110,7 @@ test("Designer-Chat: Antwort und Vorschlag zerlegen", () => {
   assert.equal(designAntwort('Text\n**VORSCHLAG:** `{"logo":{"groesse":40}}`').vorschlag.logo.groesse, 40);
   assert.equal(designAntwort('Text\nVORSCHLAG: {}').vorschlag, null);
   const p = designPrompt({ projektName: "TTG", frage: "Wärmer bitte", werte: { form: { radius: 8 } }, verlauf: [{ von: "x", text: "Hallo" }, { von: null, text: "Hi" }] });
-  assert.match(p, /KEINE Werkzeuge/); assert.match(p, /Person: Hallo/); assert.match(p, /Claude: Hi/); assert.match(p, /"radius":8/);
+  assert.match(p, /KEINE Werkzeuge/); assert.match(p, /Person: Hallo/); assert.match(p, /Assistent: Hi/); assert.match(p, /"radius":8/);
 });
 
 import { einstufung } from "../lib/einstufung.mjs";

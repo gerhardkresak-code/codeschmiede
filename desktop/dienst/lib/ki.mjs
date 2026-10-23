@@ -1,0 +1,150 @@
+// KI-Anbieter (Entwurf 1.2, freigegeben von Gerhard 2026-10-23 15:00).
+// Beliebig viele Anbieter mit dem eigenen Abo der Person: Claude (Claude Code), ChatGPT (Codex von OpenAI), Gemini (Gemini CLI von Google).
+// Je Aufgabe legt der Admin Anbieter + Modell in einer Reihenfolge fest. Bauen ist fest Claude (Entscheidung 14:27 „NEIN NIE“).
+// Andere Anbieter bekommen NIE Werkzeuge mit Schreib- oder Ausführungsrechten auf Projekt-Code: Sie laufen schreibgeschützt in einem
+// Ordner, der nur Dokumentation (*.md) und eine Dateiliste enthält – oder in einem leeren Ordner mit allem Nötigen im Text.
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+
+export const ANBIETER = {
+  claude: { name: "Claude", programm: "Claude Code", paket: "@anthropic-ai/claude-code", bin: "claude", install: "https://claude.com/claude-code" },
+  chatgpt: { name: "ChatGPT", programm: "Codex (OpenAI)", paket: "@openai/codex", bin: "codex", install: "npm install -g @openai/codex", login: "codex login" },
+  gemini: { name: "Gemini", programm: "Gemini CLI (Google)", paket: "@google/gemini-cli", bin: "gemini", install: "npm install -g @google/gemini-cli", login: "gemini" },
+};
+export const AUFGABEN = ["chat", "konzept", "design", "pruefung", "doku", "texte", "bilder", "bauen"];
+// Standard-Richtlinie (gilt, solange der Admin nichts anderes einstellt)
+export const STANDARD = {
+  chat: [{ anbieter: "chatgpt" }, { anbieter: "gemini" }, { anbieter: "claude", modell: "sonnet" }],
+  konzept: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "opus" }],
+  design: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }],
+  pruefung: [{ anbieter: "chatgpt" }, { anbieter: "gemini" }, { anbieter: "claude", modell: "opus" }],
+  doku: [{ anbieter: "gemini" }, { anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }],
+  texte: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "haiku" }],
+  bilder: [{ anbieter: "gemini" }, { anbieter: "chatgpt" }],
+  bauen: [{ anbieter: "claude" }],
+};
+const MODELL = /^[A-Za-z0-9._:-]{1,60}$/;
+
+/** Reihe prüfen/bereinigen (gleiche Regeln wie ws_ki_reihe_ok in der Datenbank). */
+export function reiheFuer(aufgabe, eintrag) {
+  if (aufgabe === "bauen") return [{ anbieter: "claude" }];
+  const r = Array.isArray(eintrag?.reihe) ? eintrag.reihe : STANDARD[aufgabe] || STANDARD.chat;
+  const gesehen = new Set();
+  return r.filter((e) => e && ANBIETER[e.anbieter] && !gesehen.has(e.anbieter) && gesehen.add(e.anbieter))
+    .map((e) => ({ anbieter: e.anbieter, ...(typeof e.modell === "string" && MODELL.test(e.modell) && e.modell !== "automatisch" ? { modell: e.modell } : {}) }));
+}
+
+/** Woran erkennt man „Limit voll“ in der Ausgabe eines Anbieters? */
+export function istLimit(text) {
+  return /usage limit|rate.?limit|quota|exceeded|too many requests|\b429\b|limit reached|resource.?exhausted/i.test(String(text || ""));
+}
+
+/** Kennung fürs Protokoll, z. B. „chatgpt/gpt-5“ oder „gemini“. */
+export const kiKennung = (e) => (e.modell ? `${e.anbieter}/${e.modell}` : e.anbieter);
+
+/** Programm eines Anbieters finden (Windows: npm-Paket über node starten, sonst Name im PATH). */
+export function findeProgramm(anbieter) {
+  const a = ANBIETER[anbieter];
+  if (!a) return null;
+  if (process.platform !== "win32") return { befehl: a.bin, vorne: [] };
+  const ordner = (process.env.PATH || "").split(";").filter(Boolean);
+  const home = process.env.USERPROFILE || os.homedir();
+  for (const o of [path.join(home, ".local", "bin"), ...ordner]) {
+    const exe = path.join(o, `${a.bin}.exe`);
+    if (existsSync(exe)) return { befehl: exe, vorne: [] };
+  }
+  for (const o of [path.join(process.env.APPDATA || path.join(home, "AppData", "Roaming"), "npm"), ...ordner]) {
+    const dir = path.join(o, "node_modules", ...a.paket.split("/"));
+    try {
+      const pj = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
+      const bin = typeof pj.bin === "string" ? pj.bin : pj.bin?.[a.bin];
+      if (bin && existsSync(path.join(dir, bin))) return { befehl: process.execPath, vorne: [path.join(dir, bin)] };
+    } catch { /* nicht hier */ }
+  }
+  return null;
+}
+
+/** Umgebung ohne fremde API-Schlüssel (es zählt das Abo-Login der Person, keine Kosten pro Aufruf). */
+export function saubereUmgebung() {
+  const env = { ...process.env };
+  for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE_CODE_USE_|CLAUDE_CODE_OAUTH|OPENAI_|CODEX_API|GEMINI_API|GOOGLE_API|GOOGLE_GENAI)/i.test(k)) delete env[k];
+  return env;
+}
+
+function lauf(prog, args, { cwd, eingabe, env, signal, minuten = 6 }) {
+  return new Promise((fertig, fehl) => {
+    const kind = spawn(prog.befehl, [...prog.vorne, ...args], { cwd, env, shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    let aus = ""; let err = "";
+    const uhr = setTimeout(() => kind.kill("SIGINT"), minuten * 60 * 1000);
+    signal?.addEventListener("abort", () => kind.kill("SIGINT"));
+    kind.stdout.on("data", (d) => { aus = (aus + d.toString()).slice(-200000); });
+    kind.stderr.on("data", (d) => { err = (err + d.toString()).slice(-4000); });
+    kind.on("error", (e) => { clearTimeout(uhr); fehl(e); });
+    kind.on("close", (code) => { clearTimeout(uhr); code === 0 ? fertig({ aus, err }) : fehl(Object.assign(new Error(`${prog.befehl} beendet (${code}): ${(err || aus).slice(-400)}`), { ausgabe: err + aus })); });
+    if (eingabe != null) kind.stdin.end(eingabe); else kind.stdin.end();
+  });
+}
+
+/** ChatGPT über Codex: schreibgeschützt, ohne Git-Prüfung, Antwort = letzte Nachricht. */
+export async function codexFrage(prompt, { ordner, modell, signal }) {
+  const prog = findeProgramm("chatgpt");
+  if (!prog) throw new Error("Codex (ChatGPT) ist auf diesem PC nicht installiert.");
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "cs-codex-"));
+  const datei = path.join(tmp, "antwort.txt");
+  try {
+    const args = ["exec", "--skip-git-repo-check", "--sandbox", "read-only", "--color", "never", "--cd", ordner || tmp, "--output-last-message", datei, ...(modell ? ["--model", modell] : []), "-"];
+    await lauf(prog, args, { cwd: ordner || tmp, eingabe: prompt, env: saubereUmgebung(), signal });
+    const t = (await readFile(datei, "utf8").catch(() => "")).trim();
+    if (!t) throw new Error("Codex hat keine Antwort geliefert");
+    return t;
+  } finally { await rm(tmp, { recursive: true, force: true }).catch(() => {}); }
+}
+
+/** Gemini über die Gemini CLI: Frage über die Standardeingabe (nicht interaktiv), Antwort = Ausgabe. */
+export async function geminiFrage(prompt, { ordner, modell, signal }) {
+  const prog = findeProgramm("gemini");
+  if (!prog) throw new Error("Gemini CLI ist auf diesem PC nicht installiert.");
+  const tmp = ordner ? null : await mkdtemp(path.join(os.tmpdir(), "cs-gemini-"));
+  try {
+    const { aus } = await lauf(prog, [...(modell ? ["--model", modell] : [])], { cwd: ordner || tmp, eingabe: prompt, env: saubereUmgebung(), signal });
+    const t = aus.replace(/\x1b\[[0-9;]*m/g, "").trim();
+    if (!t) throw new Error("Gemini hat keine Antwort geliefert");
+    return t;
+  } finally { if (tmp) await rm(tmp, { recursive: true, force: true }).catch(() => {}); }
+}
+
+/** Ist ein Anbieter auf diesem PC eingerichtet? Liefert { gekoppelt, version, hinweis }. */
+export async function kopplungPruefen(anbieter) {
+  const a = ANBIETER[anbieter];
+  const prog = findeProgramm(anbieter);
+  if (!prog) return { gekoppelt: false, version: null, hinweis: `Nicht installiert. Installieren: ${a.install}` };
+  let version = null;
+  try { version = (await lauf(prog, ["--version"], { cwd: os.tmpdir(), env: saubereUmgebung(), minuten: 1 })).aus.trim().split(/\r?\n/)[0].slice(0, 80); }
+  catch { return { gekoppelt: false, version: null, hinweis: `Nicht installiert. Installieren: ${a.install}` }; }
+  if (anbieter === "chatgpt") {
+    try {
+      const { aus, err } = await lauf(prog, ["login", "status"], { cwd: os.tmpdir(), env: saubereUmgebung(), minuten: 1 });
+      const t = `${aus}\n${err}`;
+      if (/api key/i.test(t)) return { gekoppelt: false, version, hinweis: "Mit API-Schlüssel angemeldet – bitte mit dem ChatGPT-Konto anmelden (Abo statt Kosten pro Aufruf)." };
+      return { gekoppelt: /logged in/i.test(t), version, hinweis: /logged in/i.test(t) ? "Mit ChatGPT angemeldet" : `Nicht angemeldet: ${a.login}` };
+    } catch { return { gekoppelt: false, version, hinweis: `Nicht angemeldet: im Terminal „${a.login}“ ausführen oder „Anmelden“ klicken` }; }
+  }
+  if (anbieter === "gemini") {
+    const ok = existsSync(path.join(os.homedir(), ".gemini", "oauth_creds.json"));
+    return { gekoppelt: ok, version, hinweis: ok ? "Mit Google-Konto angemeldet" : "Nicht angemeldet: im Terminal einmal „gemini“ starten und „Login with Google“ wählen" };
+  }
+  return { gekoppelt: true, version, hinweis: "Claude Code gefunden" };
+}
+
+/** Offizielle Anmeldung starten (öffnet den Browser). Nur ChatGPT hat einen eigenen Anmelde-Befehl. */
+export function anmeldungStarten(anbieter) {
+  if (anbieter !== "chatgpt") return false;
+  const prog = findeProgramm("chatgpt");
+  if (!prog) return false;
+  const kind = spawn(prog.befehl, [...prog.vorne, "login"], { cwd: os.tmpdir(), env: saubereUmgebung(), shell: false, windowsHide: false, stdio: "ignore", detached: true });
+  kind.unref();
+  return true;
+}
