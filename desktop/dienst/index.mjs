@@ -666,6 +666,47 @@ async function claudeChat() {
   return true;
 }
 
+// ---------- Projekt-Abgleich (Zweige & Dokumentation für die Zentrale) ----------
+// Nur lesen: git fetch + Inhalte aus origin/main. Es wird kein Projekt-Code ausgeführt (auch auf dem Admin-PC zulässig).
+const DOKU = /^(docs\/[A-Za-z0-9._/-]+\.md|AGENTS\.md|README\.md)$/;
+let abgleichLaeuft = false; let abgleichZuletzt = 0;
+async function projektAbgleich() {
+  if (abgleichLaeuft || stopp || Date.now() - abgleichZuletzt < 10 * 60 * 1000) return;
+  abgleichLaeuft = true; abgleichZuletzt = Date.now();
+  try {
+    const { data: projekte } = await db.from("ws_projekte").select("*");
+    for (const p of projekte || []) {
+      if (!p.repo) continue;
+      const { data: rolle } = await db.rpc("ws_rolle_im_projekt", { p_projekt: p.id });
+      if (!["admin", "entwickler"].includes(rolle)) continue;
+      try {
+        const repo = await arbeitsordnerRepo(p);
+        await git(repo, "fetch", "-q", "--prune", "origin", "+refs/heads/*:refs/remotes/origin/*");
+        const main = await git(repo, "rev-parse", "origin/main");
+        const roh = await git(repo, "for-each-ref", "--format=%(refname:lstrip=3)%09%(objectname)%09%(committerdate:iso-strict)%09%(contents:subject)", "refs/remotes/origin");
+        const zweige = [];
+        for (const z of roh.split("\n").filter(Boolean).slice(0, 2000)) {
+          const [name, sha, datum, betreff] = z.split("\t");
+          if (!name || name === "HEAD") continue;
+          let vor = null; let hinter = null;
+          try { [hinter, vor] = (await git(repo, "rev-list", "--left-right", "--count", `origin/main...${sha}`)).split(/\s+/).map(Number); } catch { /* ohne Abstand */ }
+          zweige.push({ name, sha, datum: datum || null, betreff: kuerzen(ohneGeheimnisse(betreff || ""), 300), vor, hinter });
+        }
+        const dateien = (await git(repo, "ls-tree", "-r", "--name-only", "origin/main", "--", "docs", "AGENTS.md", "README.md"))
+          .split("\n").filter((f) => DOKU.test(f) && !f.includes("..")).slice(0, 500);
+        const dokumente = [];
+        for (const f of dateien) {
+          const sha = await git(repo, "rev-parse", `origin/main:${f}`);
+          const inhalt = ohneGeheimnisse(await git(repo, "show", `origin/main:${f}`));
+          if (Buffer.byteLength(inhalt) <= 1048576) dokumente.push({ pfad: f, inhalt, sha });
+        }
+        const { error } = await db.rpc("ws_abgleich_schreiben", { p_pc: pcId, p_projekt: p.id, p_main: main, p_zweige: zweige, p_dokumente: dokumente });
+        if (error && !/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", `Abgleich ${p.name}: ${ohneGeheimnisse(error.message)}`);
+      } catch (e) { melde("fehler", `Abgleich ${p.name}: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 300)}`); }
+    }
+  } finally { abgleichLaeuft = false; }
+}
+
 // ---------- Schleife ----------
 async function naechsterAuftrag() {
   if (laeuft || stopp) return;
@@ -726,6 +767,9 @@ async function start() {
   setInterval(() => aboAusStatuszeile().catch(() => {}), 60 * 1000);
   melde("status", "Werkstatt bereit");
   setInterval(() => lebenszeichen(true).catch(() => {}), 60 * 1000);
+  // Abgleich im Hintergrund (alle 10 Min.), unabhängig von laufenden Aufträgen
+  const abgleich = () => projektAbgleich().catch((e) => melde("fehler", ohneGeheimnisse(e?.message || String(e))));
+  setTimeout(abgleich, 15 * 1000); setInterval(abgleich, 60 * 1000);
   const schleife = async () => {
     try { await naechsterAuftrag(); } catch (e) { melde("fehler", ohneGeheimnisse(e?.message || String(e))); }
     if (!stopp) setTimeout(schleife, 5000);

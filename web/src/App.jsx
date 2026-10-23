@@ -9,6 +9,7 @@ import { WS_ICON, STAND, ROLLEN, BEREICH_RECHTE } from "./config";
 import { isDesktop, tauri } from "./desktop";
 import Designer from "./Designer";
 import ClaudeSpalte from "./ClaudeSpalte";
+import { ZweigeVersionen, Pruefstand, Wissensdatenbank, Aenderungsprotokoll, Dokumentation } from "./Ablauf";
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
 // Konzept: docs/KONZEPT.md · Datenbank: supabase/migrations/
@@ -211,6 +212,11 @@ export default function App() {
           : !daten.projektId ? <div className={`${card} p-8 text-slate-500`}>Du bist noch keinem Projekt zugeordnet. Der Admin nimmt dich in ein Projekt auf.</div>
           : ansicht === "zentrale" ? <Zentrale key={daten.projektId} d={daten} ich={ich} toast={setToast} onOrt={setOrtZentrale} />
           : ansicht === "global" ? <Zentrale key={daten.projektId + "-global"} d={daten} ich={ich} toast={setToast} nurGlobal onOrt={setOrtZentrale} />
+          : ansicht === "zweige" ? <ZweigeVersionen key={daten.projektId} d={daten} />
+          : ansicht === "pruef" ? <Pruefstand key={daten.projektId} d={daten} />
+          : ansicht === "wissen" ? <Wissensdatenbank key={daten.projektId} d={daten} />
+          : ansicht === "log" ? <Aenderungsprotokoll key={daten.projektId} d={daten} />
+          : ansicht === "doku" ? <Dokumentation key={daten.projektId} d={daten} />
           : ansicht === "vorschau" ? <LiveVorschauSeite key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "designer" ? <Designer key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "benutzer" ? <BenutzerRechte d={daten} ich={ich} toast={setToast} />
@@ -257,7 +263,7 @@ function EinladungAnnehmen({ sitzung, onFertig }) {
 }
 
 function Spaeter({ ansicht }) {
-  const t = { zweige: "Zweige & Versionen wird in Schritt 4 übernommen.", pruef: "Prüfstand wird in Schritt 4 übernommen.", wissen: "Wissensdatenbank wird in Schritt 4 übernommen.", log: "Änderungsprotokoll wird in Schritt 4 übernommen.", doku: "Dokumentation zum Herunterladen wird in Schritt 4 übernommen." }[ansicht];
+  const t = `Unbekannte Ansicht „${ansicht}“.`;
   return <div className={`${card} p-8 text-slate-500 flex items-center gap-3`}><Info className="w-5 h-5" />{t}</div>;
 }
 
