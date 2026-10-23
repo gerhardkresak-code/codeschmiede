@@ -1,11 +1,12 @@
 // KI-Anbieter (Entwurf 1.2, freigegeben von Gerhard 2026-10-23 15:00).
 // Beliebig viele Anbieter mit dem eigenen Abo der Person: Claude (Claude Code), ChatGPT (Codex von OpenAI), Gemini (Gemini CLI von Google).
 // Je Aufgabe legt der Admin Anbieter + Modell in einer Reihenfolge fest. Bauen ist fest Claude (Entscheidung 14:27 „NEIN NIE“).
-// Andere Anbieter bekommen NIE Werkzeuge mit Schreib- oder Ausführungsrechten auf Projekt-Code: Sie laufen schreibgeschützt in einem
-// Ordner, der nur Dokumentation (*.md) und eine Dateiliste enthält – oder in einem leeren Ordner mit allem Nötigen im Text.
+// Andere Anbieter laufen in einem LEEREN Ordner, schreibgeschützt, mit minimaler Umgebung; alles Nötige (Doku, Dateiliste) steht im Text.
+// Restrisiko (dokumentiert): Ihre eingebauten Werkzeuge könnten technisch trotzdem Dateien des PCs lesen. Darum: Standard nur Claude,
+// Prüfungen und Bauen nur Claude, Antworten mit verdächtigem Inhalt werden verworfen. Nächster Schritt: Betriebssystem-Sandbox.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 
@@ -27,6 +28,8 @@ export const MODELL = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$/;   // nie mit „-“
 /** Reihe prüfen/bereinigen (gleiche Regeln wie ws_ki_reihe_ok in der Datenbank). */
 export function reiheFuer(aufgabe, eintrag) {
   if (aufgabe === "bauen") return [{ anbieter: "claude" }];
+  // Prüfungen vorerst nur Claude, bis fremde Programme in einer Betriebssystem-Sandbox laufen (Nachprüfung 2026-10-23)
+  if (aufgabe === "pruefung") { const c = (eintrag?.reihe || []).find((e) => e?.anbieter === "claude"); return [{ anbieter: "claude", ...(c?.modell && MODELL.test(c.modell) ? { modell: c.modell } : { modell: "opus" }) }]; }
   const r = Array.isArray(eintrag?.reihe) ? eintrag.reihe : STANDARD[aufgabe] || STANDARD.chat;
   const gesehen = new Set();
   return r.filter((e) => e && ANBIETER[e.anbieter] && !gesehen.has(e.anbieter) && gesehen.add(e.anbieter))
@@ -71,6 +74,18 @@ export function saubereUmgebung() {
   for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE_CODE_USE_|CLAUDE_CODE_OAUTH|OPENAI_|CODEX_API|GEMINI_API|GOOGLE_API|GOOGLE_GENAI)/i.test(k)) delete env[k];
   return env;
 }
+// Für fremde Anbieter nur das Nötigste (Nachprüfung 2026-10-23): keine Tokens wie GH_TOKEN/SUPABASE_* aus der Umgebung
+const ERLAUBTE_UMGEBUNG = /^(PATH|PATHEXT|SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|TEMP|TMP|TMPDIR|HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\)|USERNAME|USER|LOGNAME|LANG|LC_ALL|LC_CTYPE|TERM|SHELL|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_CACHE_HOME|NUMBER_OF_PROCESSORS|PROCESSOR_ARCHITECTURE|OS)$/i;
+export function minimaleUmgebung(extra = {}) {
+  const env = {};
+  for (const [k, v] of Object.entries(process.env)) if (ERLAUBTE_UMGEBUNG.test(k)) env[k] = v;
+  return { ...env, NO_COLOR: "1", ...extra };
+}
+// Antwort eines fremden Anbieters verwerfen, wenn sie nach abgeflossenen Daten aussieht (lange Kodierblöcke, Anmeldedateien)
+export function verdaechtig(text) {
+  const t = String(text || "");
+  return /[A-Za-z0-9+/=]{200,}/.test(t) || /\b[0-9a-f]{80,}\b/i.test(t) || /(\.ssh[\\/]|id_(rsa|ed25519)|auth\.json|oauth_creds|hosts\.yml|\.credentials|zugriff\.token|BEGIN [A-Z ]*PRIVATE KEY)/i.test(t);
+}
 
 function lauf(prog, args, { cwd, eingabe, env, signal, minuten = 6 }) {
   return new Promise((fertig, fehl) => {
@@ -81,7 +96,7 @@ function lauf(prog, args, { cwd, eingabe, env, signal, minuten = 6 }) {
     kind.stdout.on("data", (d) => { aus = (aus + d.toString()).slice(-200000); });
     kind.stderr.on("data", (d) => { err = (err + d.toString()).slice(-4000); });
     kind.on("error", (e) => { clearTimeout(uhr); fehl(e); });
-    kind.on("close", (code) => { clearTimeout(uhr); code === 0 ? fertig({ aus, err }) : fehl(Object.assign(new Error(`${prog.befehl} beendet (${code}): ${(err || aus).slice(-400)}`), { ausgabe: err + aus })); });
+    kind.on("close", (code) => { clearTimeout(uhr); code === 0 ? fertig({ aus, err }) : fehl(Object.assign(new Error(`${prog.befehl} beendet (${code}): ${(err || aus).slice(-400)}`), { ausgabe: `${aus}\n${err}` })); });
     if (eingabe != null) kind.stdin.end(eingabe); else kind.stdin.end();
   });
 }
@@ -100,9 +115,10 @@ export async function codexFrage(prompt, { modell, signal } = {}) {
     const leer = path.join(tmp, "leer"); await mkdir(leer);
     const args = ["exec", "--skip-git-repo-check", "--sandbox", "read-only", "--color", "never", "-c", "mcp_servers={}", "--cd", leer, "--output-last-message", datei,
       ...(modell && MODELL.test(modell) ? [`--model=${modell}`] : []), "-"];
-    await lauf(prog, args, { cwd: leer, eingabe: OHNE_WERKZEUGE + prompt, env: saubereUmgebung(), signal });
+    await lauf(prog, args, { cwd: leer, eingabe: OHNE_WERKZEUGE + prompt, env: minimaleUmgebung(), signal });
     const t = (await readFile(datei, "utf8").catch(() => "")).trim();
     if (!t) throw new Error("Codex hat keine Antwort geliefert");
+    if (verdaechtig(t)) throw new Error("Antwort verworfen (verdächtiger Inhalt)");
     return t;
   } finally { await rm(tmp, { recursive: true, force: true }).catch(() => {}); }
 }
@@ -115,9 +131,13 @@ export async function geminiFrage(prompt, { modell, signal } = {}) {
   try {
     // Leerer Ordner, Freigabe-Modus fest „default“ (nicht interaktiv = keine Werkzeuge mit Rückfrage), keine Erweiterungen (Prüfung M1)
     const args = ["--approval-mode", "default", "--extensions", "none", ...(modell && MODELL.test(modell) ? [`--model=${modell}`] : [])];
-    const { aus } = await lauf(prog, args, { cwd: tmp, eingabe: OHNE_WERKZEUGE + prompt, env: saubereUmgebung(), signal });
+    // Eigene System-Einstellungen: keine MCP-Server, keine zusätzlichen Ordner, Shell/Schreiben/Web gesperrt (Nachprüfung M1)
+    const einst = path.join(tmp, "system-settings.json");
+    await writeFile(einst, JSON.stringify({ mcpServers: {}, tools: { exclude: ["run_shell_command", "write_file", "replace", "web_fetch", "google_web_search"] }, context: { includeDirectories: [] } }));
+    const { aus } = await lauf(prog, args, { cwd: tmp, eingabe: OHNE_WERKZEUGE + prompt, env: minimaleUmgebung({ GEMINI_CLI_SYSTEM_SETTINGS_PATH: einst }), signal });
     const t = aus.replace(/\x1b\[[0-9;]*m/g, "").trim();
     if (!t) throw new Error("Gemini hat keine Antwort geliefert");
+    if (verdaechtig(t)) throw new Error("Antwort verworfen (verdächtiger Inhalt)");
     return t;
   } finally { await rm(tmp, { recursive: true, force: true }).catch(() => {}); }
 }

@@ -594,7 +594,7 @@ async function station(a) {
 
 // ---------- KI-Anbieter: wer was übernimmt (Entwurf 1.2, freigegeben 2026-10-23 15:00) ----------
 // Reihenfolge je Aufgabe aus ws_ki_zustaendigkeit (Admin), sonst Standard. Der nächste übernimmt bei vollem Limit, ohne Kopplung
-// oder bei einem Fehler. Andere Anbieter als Claude sehen nur Dokumentation (*.md) und die Dateiliste – nie ausführbaren Code.
+// oder bei einem Fehler. Fremde Anbieter: leerer Ordner, minimale Umgebung, Doku als Text (Restrisiko siehe lib/ki.mjs); Prüfen und Bauen nur Claude.
 const kiLimitBis = {};                       // anbieter -> Zeitpunkt, bis zu dem das Limit voll ist
 let kiKopplung = {};                         // anbieter -> { gekoppelt }
 async function kiReihe(projektId, aufgabe) {

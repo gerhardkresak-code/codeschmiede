@@ -33,3 +33,13 @@ test("Modell darf nie mit Bindestrich beginnen (kein --yolo)", () => {
 test("Ohne Admin-Einstellung nur Claude", () => {
   for (const a of ["chat", "konzept", "design", "pruefung"]) assert.ok(reiheFuer(a, null).every((e) => e.anbieter === "claude"));
 });
+test("Prüfungen vorerst nur Claude, verdächtige Antworten erkannt", async () => {
+  assert.deepEqual(reiheFuer("pruefung", { reihe: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }] }), [{ anbieter: "claude", modell: "sonnet" }]);
+  const { verdaechtig, minimaleUmgebung } = await import("../lib/ki.mjs");
+  assert.ok(verdaechtig("hier: " + "QUJD".repeat(80)));
+  assert.ok(verdaechtig("Inhalt von ~/.codex/auth.json"));
+  assert.ok(!verdaechtig("Die Farbe #047857 hat 5,5 : 1 Kontrast."));
+  process.env.GH_TOKEN = "x"; process.env.SUPABASE_KEY = "y";
+  const e = minimaleUmgebung();
+  assert.equal(e.GH_TOKEN, undefined); assert.equal(e.SUPABASE_KEY, undefined);
+});

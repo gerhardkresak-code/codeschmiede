@@ -22,6 +22,9 @@ begin
   if (select count(distinct x->>'anbieter') from jsonb_array_elements(r) x) <> jsonb_array_length(r) then return false; end if;
   -- Bauen nie durch einen anderen Anbieter (Gerhard 2026-10-23 14:27: „NEIN NIE“)
   if p_aufgabe = 'bauen' and (jsonb_array_length(r) <> 1 or r->0->>'anbieter' <> 'claude') then return false; end if;
+  -- Prüfungen vorerst nur Claude (unabhängige Prüfung 2026-10-23: fremde Programme haben ohne Betriebssystem-Sperre Lesezugriff
+  -- auf den PC; über eingeschleuste Diffs wäre das ein Weg zu Zugangsdaten). Wird mit der Sandbox freigeschaltet.
+  if p_aufgabe = 'pruefung' and exists (select 1 from jsonb_array_elements(r) x where x->>'anbieter' <> 'claude') then return false; end if;
   return true;
 end $$;
 

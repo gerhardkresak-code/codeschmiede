@@ -82,7 +82,7 @@ export default function ClaudeSpalte({ d, ich, ort, kontext, toast }) {
 
 function Vorschlag({ m, d, ich, kann, toast }) {
   // Auftragstext immer sichtbar, bevor er angelegt wird (Prüfung 2026-10-23)
-  const v = m.vorschlag; const [offen, setOffen] = useState(true);   // Auftragstext immer sichtbar (Prüfung M4) const [busy, setBusy] = useState(false);
+  const v = m.vorschlag; const [offen, setOffen] = useState(true); const [busy, setBusy] = useState(false);   // Auftragstext immer sichtbar (Prüfung M4)
   const g = d.gruppen.find((x) => x.id === v.gruppe_id); const f = v.feature_id ? d.features.find((x) => x.id === v.feature_id) : null;
   // Konzept-Karte (Entwurf 1.2): offene Punkte sperren die Freigabe; das Konzept geht als erste Nachricht an den Bau
   const k = v.konzept || null; const nochOffen = (k?.offen || []).length;

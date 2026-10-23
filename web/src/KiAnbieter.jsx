@@ -22,7 +22,7 @@ const AUFGABEN = [
   ["chat", "Chat überall (Fragen, Ausloten)", ""],
   ["konzept", "Konzept & Rückfragen vor dem Bauen", "Ergebnis ist die Konzept-Karte im Chat"],
   ["design", "Design-Chat im App-Designer", ""],
-  ["pruefung", "Unabhängige Prüfungen", "Sicherheits- und Feature-Prüfung; andere Anbieter bekommen die Änderung als Text"],
+  ["pruefung", "Unabhängige Prüfungen", "vorerst nur Claude – andere Anbieter folgen mit der Sandbox (Sicherheitsprüfung 23.10.)"],
   ["doku", "Dokumentation & Handbuch", "wird genutzt, sobald Doku-Aufträge getrennt laufen (Etappe 4)"],
   ["texte", "Texte & Übersetzungen", "wird genutzt, sobald Text-Aufträge getrennt laufen (Etappe 4)"],
   ["bilder", "Bilder & Grafiken", "wird mit Etappe 5 (Marke, Logo) genutzt; nur Anbieter, die Bilder erzeugen können"],
@@ -34,7 +34,7 @@ const VORSCHLAG = {
   chat: [{ anbieter: "chatgpt" }, { anbieter: "gemini" }, { anbieter: "claude", modell: "sonnet" }],
   konzept: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "opus" }],
   design: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }],
-  pruefung: [{ anbieter: "chatgpt" }, { anbieter: "gemini" }, { anbieter: "claude", modell: "opus" }],
+  pruefung: [{ anbieter: "claude", modell: "opus" }],
   doku: [{ anbieter: "gemini" }, { anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }],
   texte: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "haiku" }],
   bilder: [{ anbieter: "gemini" }, { anbieter: "chatgpt" }],
@@ -43,7 +43,7 @@ const VORSCHLAG = {
 const MODELL = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$/;
 
 function Zeile({ id, titel, hinweis, eintrag, admin, onSpeichern }) {
-  const fest = id === "bauen";
+  const fest = id === "bauen" || id === "pruefung";
   const [reihe, setReihe] = useState(eintrag?.reihe || STANDARD[id]);
   const [ab, setAb] = useState(eintrag?.weitergeben_ab ?? 90);
   const [busy, setBusy] = useState(false); const [eigen, setEigen] = useState(null); const [eigenText, setEigenText] = useState("");
@@ -86,6 +86,7 @@ function Zeile({ id, titel, hinweis, eintrag, admin, onSpeichern }) {
         {!fest && <label className="flex items-center gap-1">weiter ab
           {admin ? <select className={sel} value={ab} onChange={(e) => setAb(Number(e.target.value))}>{[70, 80, 90, 95, 100].map((x) => <option key={x} value={x}>{x} %</option>)}</select> : <b>{ab} %</b>}</label>}
         {admin && !fest && <button type="button" className={ghost} disabled={busy || !geaendert} onClick={speichern}>{busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}{eintrag ? "Speichern" : "Übernehmen"}</button>}
+        {admin && !fest && reihe.some((e) => e.anbieter !== "claude") && geaendert && <span className="basis-full text-[11px] text-amber-700 dark:text-amber-300">Hinweis: Fremde Anbieter bekommen Projekttexte und laufen auf dem PC; ihre Werkzeuge könnten technisch Dateien des PCs lesen.</span>}
       </div>
     </div>);
 }
@@ -154,7 +155,7 @@ export default function KiAnbieter({ d, ich, toast }) {
         {zust?.fehlt ? <p className="p-4 text-sm text-amber-700 dark:text-amber-300">Die Datenbank-Erweiterung 0012 (KI-Anbieter) ist noch nicht eingespielt.</p>
           : !zust ? <div className="p-4"><Loader2 className="w-5 h-5 animate-spin text-emerald-700" /></div>
           : AUFGABEN.map(([id, titel, hinweis]) => <Zeile key={id} id={id} titel={titel} hinweis={hinweis} eintrag={zust[id]} admin={admin} onSpeichern={speichern} />)}
-        <p className="px-3 py-2 text-xs text-slate-500 border-t border-slate-100 dark:border-slate-800">Solange hier nichts gespeichert ist, antwortet nur Claude. Andere Anbieter bekommen alles als Text (Dokumentation, Dateiliste, bei Prüfungen die Änderung) und laufen in einem leeren Ordner ohne Projekt-Dateien; sie ändern nichts. „Automatisch“ = Standardmodell des Anbieters.</p>
+        <p className="px-3 py-2 text-xs text-slate-500 border-t border-slate-100 dark:border-slate-800">Solange hier nichts gespeichert ist, antwortet nur Claude. Andere Anbieter bekommen Dokumentation und Dateiliste als Text und starten in einem leeren Ordner mit minimaler Umgebung; sie ändern nichts. <b>Restrisiko:</b> Ihre eingebauten Werkzeuge könnten technisch Dateien des PCs lesen – Antworten mit verdächtigem Inhalt werden verworfen. Prüfen und Bauen macht deshalb nur Claude. „Automatisch“ = Standardmodell des Anbieters.</p>
       </div>
 
       <div className={`${card} overflow-hidden`}>

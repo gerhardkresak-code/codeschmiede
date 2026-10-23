@@ -72,9 +72,12 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
   kann Gerhard jederzeit mit Claude sprechen.
 - **2026-10-23 14:11 – Alles fertig machen:** Keine Platzhalter mehr in der Codeschmiede; offene Menüpunkte werden gebaut (0.6.0).
 - **2026-10-23 14:14–15:00 – KI-Anbieter (Entwurf 1.2 freigegeben):** Beliebig viele KI-Anbieter (Claude, ChatGPT, Gemini …) mit dem
-  eigenen Abo. Klären, Ausloten und Konzepte laufen über die eingestellten Anbieter (Standard ChatGPT), ebenso die unabhängigen Prüfungen.
+  eigenen Abo. Klären, Ausloten und Konzepte laufen über die eingestellten Anbieter (Vorschlag ChatGPT; **solange der Admin nichts
+  speichert, nur Claude**). Unabhängige Prüfungen durch fremde Anbieter (Entscheidung 14:27) sind **vorerst gesperrt** und nur Claude,
+  bis fremde Programme in einer Betriebssystem-Sandbox laufen (unabhängige Prüfung 2026-10-23: sonst Lesezugriff auf den PC).
   **Bauen und Programmieren macht nur Claude – nie ein anderer Anbieter** (14:27). Je Aufgabe Anbieter **und Modell** in Reihenfolge frei
   wählbar (14:49); der nächste übernimmt bei vollem Limit oder ohne Kopplung. Zuständigkeiten stellt **nur der Admin** ein (14:59).
   Im Chat sieht man nicht, wer antwortet; vermerkt wird es im Protokoll. Freigegebene Konzepte (Konzept-Karte) gehen als Auftrag an Claude
-  und werden als `docs/konzepte/<datum>-<feature>.md` mit dem Bau-PR abgelegt. Andere Anbieter sehen nur Dokumentation und Dateiliste,
-  nie ausführbaren Code, und ändern nichts. Code: `desktop/dienst/lib/ki.mjs`, Datenbank 0012, Seite „KI-Anbieter“.
+  und werden als `docs/konzepte/<datum>-<feature>.md` mit dem Bau-PR abgelegt. Andere Anbieter laufen in einem leeren Ordner mit
+  minimaler Umgebung und bekommen Doku und Dateiliste als Text; **Restrisiko:** ihre eingebauten Werkzeuge könnten technisch Dateien des
+  PCs lesen – Antworten mit verdächtigem Inhalt werden verworfen. Code: `desktop/dienst/lib/ki.mjs`, Datenbank 0012, Seite „KI-Anbieter“.
