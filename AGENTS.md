@@ -62,3 +62,11 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
   ist bei jedem Programmstart automatisch an (Ausschalten gilt bis zum nächsten Start). Chats starten immer beim letzten Eintrag.
 - **2026-10-23 10:26 – Features selbst zuordnen:** Gerhard ordnet Features in der Codeschmiede selbst zu und verschiebt sie (Dialog oder
   Ziehen & Ablegen), auch in die Globalen Einstellungen. Aufträge und Verlauf bleiben beim Feature.
+- **2026-10-23 10:34 – Erlaubnisse automatisch:** Harmlose Werkstatt-Befehle (lesen, Git am eigenen Zweig, Pull Request öffnen, Dateien im
+  Arbeitsordner ändern) werden automatisch erlaubt; Gefährliches ist immer gesperrt (in main zusammenführen, Push auf main/fremde Zweige,
+  Löschen/Erzwingen, Anmeldedaten, Releases, Code ausführen auf dem Admin-PC). Gefragt wird nur bei Unklarem. Regeln: `desktop/dienst/lib/einstufung.mjs`.
+- **2026-10-23 10:34 – Tabellen & Icons gestalten:** In der Baustein-Bibliothek mehrere Tabellen-Varianten (Aussehen, Spalten-Arten,
+  Handy-Darstellung, Werkzeugleiste) und ein Icon-Stil für die ganze App. Die Standard-Variante übernimmt die Codeschmiede automatisch;
+  Zuweisung je Tabelle über eine Liste im Designer. Beim Anlegen neuer Bausteine/Tabellen hilft Claude im Chat.
+- **2026-10-23 10:45 – Überall Chat mit Claude:** In der ganzen Codeschmiede (Designer, Bausteine, Marke, Regelwerk, Einstellungen …)
+  kann Gerhard jederzeit mit Claude sprechen.

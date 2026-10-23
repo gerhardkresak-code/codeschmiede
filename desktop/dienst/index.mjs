@@ -68,6 +68,8 @@ const ERLAUBT = [
 const VERBOTEN = [
   "Bash(git push origin main*)", "Bash(git push -f*)", "Bash(git push --force*)", "Bash(git reset --hard origin*)",
   "Bash(rm -rf /*)", "Bash(rm -rf ~*)", "Bash(gh repo delete*)", "Bash(gh secret*)", "Bash(curl * | sh*)",
+  // Zusammenführen/Releases macht nur die Codeschmiede über die Stationen (gefunden 2026-10-23: Werkstatt fragte „gh pr merge 16“)
+  "Bash(gh pr merge*)", "Bash(gh release*)", "Bash(gh workflow run*)",
   // Dateien über Git/gh schreiben oder einlesen (umgeht Read/Write-Verbote)
   "Bash(git *--output*)", "Bash(git commit *-F*)", "Bash(git commit *--file*)", "Bash(git commit *--template*)", "Bash(git commit *-t *)",
   "Bash(git add *--pa*)", "Bash(git commit *--pa*)", "Bash(gh pr create *--body-file*)", "Bash(gh pr create *-F*)", "Bash(git config*)",
@@ -256,7 +258,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false } = {
 
     // Erlaubnis-Brücke (MCP) für Werkzeuge außerhalb der freigegebenen Liste
     const mcp = { mcpServers: { werkstatt: { command: process.execPath, args: [path.join(HIER, "erlaubnis-mcp.mjs")], env: {
-      CS_SUPABASE_URL: cfg.supabase_url, CS_ANON_KEY: cfg.anon_key, CS_TOKEN_DATEI: tokenDatei(), CS_AUFTRAG: String(auftrag.id), CS_GRUPPE: auftrag.gruppe_id,
+      CS_SUPABASE_URL: cfg.supabase_url, CS_ANON_KEY: cfg.anon_key, CS_TOKEN_DATEI: tokenDatei(), CS_AUFTRAG: String(auftrag.id), CS_GRUPPE: auftrag.gruppe_id, CS_ADMIN_PC: cfg.admin ? "1" : "0",
     } } } };
     const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", modell,
       "--permission-mode", "default", "--allowedTools", ERLAUBT.join(","), "--disallowedTools", VERBOTEN.join(","),

@@ -11,9 +11,11 @@ import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { ohneGeheimnisse, kuerzen } from "./lib/geheim.mjs";
 import { passtRegel, fuehrtCodeAus, dauerErlaubbar } from "./lib/ergebnis.mjs";
+import { einstufung } from "./lib/einstufung.mjs";
 
 const AUFTRAG = Number(process.env.CS_AUFTRAG);
 const GRUPPE = process.env.CS_GRUPPE;
+const ADMIN_PC = process.env.CS_ADMIN_PC === "1";
 const db = createClient(process.env.CS_SUPABASE_URL, process.env.CS_ANON_KEY, {
   accessToken: async () => (await readFile(process.env.CS_TOKEN_DATEI, "utf8")).trim(),
   auth: { persistSession: false, autoRefreshToken: false },
@@ -26,13 +28,20 @@ function beschreibe(werkzeug, eingabe) {
   return JSON.stringify(eingabe || {}).slice(0, 300);
 }
 
+const logge = (text) => db.from("ws_live_log").insert({ auftrag_id: AUFTRAG, art: "erlaubnis", text: kuerzen(ohneGeheimnisse(text), 300) }).then(() => {}, () => {});
+
 async function entscheide(werkzeug, eingabe) {
-  const text = ohneGeheimnisse(beschreibe(werkzeug, eingabe));
+  const roh = beschreibe(werkzeug, eingabe);
+  const text = ohneGeheimnisse(roh);
+  // Neue Anweisung Gerhard 2026-10-23 10:34/10:36: Harmloses automatisch erlauben, Gefährliches immer sperren, nur Unklares fragen
+  const st = einstufung(werkzeug, roh, { adminPc: ADMIN_PC });
+  if (st.stufe === "erlaubt") { await logge(`Automatisch erlaubt (${st.grund}): ${werkzeug} ${text}`); return { ok: true }; }
+  if (st.stufe === "gesperrt") { await logge(`Gesperrt (${st.grund}): ${werkzeug} ${text}`); return { ok: false, grund: st.grund }; }
   const { data: regeln } = await db.from("ws_erlaubnisse").select("werkzeug, eingabe, ws_auftraege!inner(gruppe_id)")
     .eq("status", "immer").eq("ws_auftraege.gruppe_id", GRUPPE);
-  if ((regeln || []).some((r) => passtRegel(r, werkzeug, text))) return true;
+  if ((regeln || []).some((r) => passtRegel(r, werkzeug, text))) return { ok: true };
   // Bei Befehlen, die Code ausführen: zeigen, welche Dateien die Werkstatt geändert hat (der Befehl führt sie ggf. aus)
-  let grund = "Die Werkstatt braucht das für diesen Auftrag.";
+  let grund = `Unklar (${st.grund}) – bitte entscheiden.`;
   if (werkzeug === "Bash" && !dauerErlaubbar(text) && !fuehrtCodeAus(text)) grund = "Einmalige Erlaubnis. Kein „Immer erlauben“ für diesen Befehl.";
   if (werkzeug === "Bash" && fuehrtCodeAus(text)) {
     try {
@@ -43,15 +52,15 @@ async function entscheide(werkzeug, eingabe) {
   }
   const { data: anf, error } = await db.from("ws_erlaubnisse")
     .insert({ auftrag_id: AUFTRAG, werkzeug, eingabe: kuerzen(text, 1000), grund: kuerzen(ohneGeheimnisse(grund), 1000) }).select().single();
-  if (error) return false;
+  if (error) return { ok: false };
   await db.from("ws_live_log").insert({ auftrag_id: AUFTRAG, art: "erlaubnis", text: kuerzen(`Wartet auf deine Erlaubnis: ${werkzeug} ${text}`, 300) });
   const bis = Date.now() + 30 * 60 * 1000;
   while (Date.now() < bis) {
     await new Promise((r) => setTimeout(r, 2000));
     const { data } = await db.from("ws_erlaubnisse").select("status").eq("id", anf.id).single();
-    if (data && data.status !== "offen") return data.status !== "abgelehnt";
+    if (data && data.status !== "offen") return { ok: data.status !== "abgelehnt" };
   }
-  return false;
+  return { ok: false };
 }
 
 const server = new McpServer({ name: "werkstatt", version: "0.1.0" });
@@ -60,11 +69,13 @@ server.tool(
   "Fragt in der Codeschmiede um Erlaubnis für ein Werkzeug der Werkstatt.",
   { tool_name: z.string(), input: z.any(), tool_use_id: z.string().optional() },
   async ({ tool_name, input }) => {
-    let ok = false;
-    try { ok = await entscheide(tool_name, input); } catch { ok = false; }
-    const antwort = ok
+    let r = { ok: false };
+    try { r = await entscheide(tool_name, input); } catch { r = { ok: false }; }
+    const antwort = r.ok
       ? { behavior: "allow", updatedInput: input }
-      : { behavior: "deny", message: "Nicht erlaubt (oder keine Antwort innerhalb von 30 Minuten). Suche einen anderen Weg oder stelle eine RÜCKFRAGE." };
+      : { behavior: "deny", message: r.grund
+          ? `Gesperrt: ${r.grund}. Das ist eine feste Regel der Codeschmiede – nicht umgehen; suche einen anderen Weg (z. B. Dateien mit Edit/Write ändern, Zusammenführen macht die Codeschmiede selbst) oder stelle eine RÜCKFRAGE.`
+          : "Nicht erlaubt (oder keine Antwort innerhalb von 30 Minuten). Suche einen anderen Weg oder stelle eine RÜCKFRAGE." };
     return { content: [{ type: "text", text: JSON.stringify(antwort) }] };
   },
 );
