@@ -1099,10 +1099,12 @@ function EinrichtungAuto({ ich, d, onOeffnen }) {
     if (einrichtungAutoGezeigt || !st?.desk) return;
     let gesehen = false; try { gesehen = localStorage.getItem("cs-einrichtung-gesehen") === "1"; } catch { /* egal */ }
     // offen zählt auch die laufende Werkstatt – kurz nach dem Start ist sie evtl. noch nicht an, darum nur Werkzeuge/Anmeldung werten
-    const werkzeugFehlt = ["node", "git", "claude", "gh", "gh_angemeldet"].some((k) => !st.werk?.[k]);
+    // Nur wer baut (Admin/Entwickler), braucht die Werkzeuge – Leser sehen den Assistenten nur beim ersten Start (Prüfung 0.8.0)
+    const baut = ich?.rolle === "admin" || (d?.mitglieder || []).some((m) => m.benutzer_id === ich?.id && m.rolle === "entwickler");
+    const werkzeugFehlt = baut && ["node", "git", "claude", "gh", "gh_angemeldet"].some((k) => !st.werk?.[k]);
     if (!gesehen || werkzeugFehlt) { einrichtungAutoGezeigt = true; onOeffnen(); }
     else einrichtungAutoGezeigt = true;
-  }, [st, offen, onOeffnen]);
+  }, [st, offen, onOeffnen, ich, d]);
   return null;
 }
 

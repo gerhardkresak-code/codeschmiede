@@ -43,7 +43,8 @@ export function useEinrichtung(ich, d) {
     if (!isDesktop()) { setSt({ desk: false }); return; }
     const [werk, lauf] = await Promise.all([tauri("ws_check").catch(() => null), tauri("ws_status").catch(() => null)]);
     const pcs = (dRef.current?.pcs || []).filter((p) => p.benutzer_id === ich?.id)
-      .sort((a, b) => (b.an ? 1 : 0) - (a.an ? 1 : 0) || Date.parse(b.zuletzt || 0) - Date.parse(a.zuletzt || 0));   // aktiver PC zuerst
+      .sort((a, b) => (b.an ? 1 : 0) - (a.an ? 1 : 0) || Date.parse(b.zuletzt || 0) - Date.parse(a.zuletzt || 0))   // aktiver PC zuerst
+      .filter((p, i, alle) => alle.findIndex((q) => q.name === p.name) === i);   // gleicher PC-Name nur einmal (wie KI-Anbieter)
     const { data: kopp } = await supabase.from("ws_ki_kopplung").select("*").eq("benutzer_id", ich?.id || "");
     setSt({ desk: true, werk: werk || {}, laeuft: !!lauf?.laeuft, pcs, kopp: kopp || [] });
   }, [ich?.id]);
@@ -59,9 +60,12 @@ export default function Einrichtung({ ich, d, toast, onClose }) {
   const [schritt, setSchritt] = useState(0); const [busy, setBusy] = useState(false);
   const entwickler = ich.rolle === "admin" || d.mitglieder.some((m) => m.benutzer_id === ich.id && m.rolle === "entwickler");
   const neu = async () => { setBusy(true); await pruefen(); setBusy(false); };
-  const ki = (a) => st?.kopp?.find((k) => k.anbieter === a);
+  // Welcher PC ist „dieser PC“? Der zuletzt aktive eigene; bei mehreren wählbar (Prüfung 0.8.0)
+  const [pcWahl, setPcWahl] = useState(null);
+  const pc = (st?.pcs || []).some((p) => p.id === pcWahl) ? pcWahl : st?.pcs?.[0]?.id;
+  const ki = (a) => st?.kopp?.find((k) => k.anbieter === a && k.pc_id === pc);
   const aktion = async (anbieter, a) => {
-    const pc = st?.pcs?.[0]?.id; if (!pc) { toast("Erst die Werkstatt einschalten (Schritt 4)"); return; }
+    if (!pc) { toast("Erst die Werkstatt einschalten (Schritt 4)"); return; }
     const { error } = await supabase.from("ws_ki_kopplung").upsert({ pc_id: pc, benutzer_id: ich.id, anbieter, aktion: a }, { onConflict: "pc_id,anbieter" });
     if (error) toast(error.message); else { toast(a === "anmelden" ? "Anmeldung wird geöffnet …" : "Wird geprüft …"); setTimeout(neu, 6000); }
   };
@@ -107,6 +111,10 @@ export default function Einrichtung({ ich, d, toast, onClose }) {
     { titel: "ChatGPT & Gemini (optional)", icon: Cpu, inhalt: (
       <div>
         <p className="text-sm mb-1">Für Chat, Konzepte und Design-Chat kann der Admin unter <b>Verwaltung › KI-Anbieter</b> ChatGPT oder Gemini einsetzen. Gebaut wird immer von Claude.</p>
+        {(st?.pcs?.length || 0) > 1 && (
+          <label className="flex items-center gap-2 text-xs my-2"><span className="text-slate-500">Dieser PC:</span>
+            <select value={pc || ""} onChange={(e) => setPcWahl(e.target.value)} className="border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 bg-white dark:bg-slate-900">
+              {st.pcs.map((p) => <option key={p.id} value={p.id}>{p.name || p.id}{p.an ? " (Werkstatt an)" : ""}</option>)}</select></label>)}
         <Zeile ok={!!ki("chatgpt")?.gekoppelt} titel="ChatGPT (Codex)" text={ki("chatgpt")?.hinweis || "Jedes ChatGPT-Abo mit Codex. 1. installieren, 2. anmelden (öffnet den Browser)."}>
           <Befehl text={BEFEHL.codex} toast={toast} />
           <div className="flex gap-2"><button type="button" className={ghost} onClick={() => aktion("chatgpt", "anmelden")}>Anmelden</button><button type="button" className={ghost} onClick={() => aktion("chatgpt", "pruefen")}>Prüfen</button></div></Zeile>

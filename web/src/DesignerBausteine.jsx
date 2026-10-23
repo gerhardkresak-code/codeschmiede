@@ -166,6 +166,15 @@ function NeuerBaustein({ projekt, d, ich, toast, onClose, onChat }) {
 }
 
 /** Linke Seite + Mitte im Modus „Marke“ (Logo-Designer, Projektlogo). */
+/** Texteingabe mit Entwurf: darf beim Tippen kurz leer/ungültig sein, übernommen wird nur ein gültiger Wert (Prüfung 0.8.0). */
+function Eingabe({ wert, muster, onWert, max, ...rest }) {
+  const [t, setT] = useState(wert ?? ""); const [fokus, setFokus] = useState(false);
+  const zeigen = fokus ? t : (wert ?? "");
+  return <input {...rest} value={zeigen} maxLength={max} aria-invalid={fokus && !muster.test(t)}
+    onFocus={() => { setT(wert ?? ""); setFokus(true); }} onBlur={() => setFokus(false)}
+    onChange={(e) => { setT(e.target.value); if (muster.test(e.target.value)) onWert(e.target.value); }} />;
+}
+
 export function MarkeModus({ w, aendere, bearbeitbar, projekt, ich, toast }) {
   const m = markeAus(w.marke); const dis = !bearbeitbar; const [busy, setBusy] = useState(false);
   const setze = (k, v) => aendere(["marke", k], v);
@@ -192,11 +201,11 @@ export function MarkeModus({ w, aendere, bearbeitbar, projekt, ich, toast }) {
           <div className="grid grid-cols-3 gap-1.5">{ZEICHEN.map(([z, t]) => <button key={z} type="button" disabled={dis} aria-pressed={m.zeichen === z} onClick={() => setze("zeichen", z)} className={`rounded-lg border p-1.5 flex flex-col items-center gap-1 text-[11px] ${m.zeichen === z ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950" : "border-slate-200 dark:border-slate-800"}`}>
             {z === "bild" ? <Stamp className="w-7 h-7 text-slate-400" /> : <LogoZeichen werte={{ ...m, zeichen: z }} groesse={30} />}{t}</button>)}</div>
           {[["farbe", "Hauptfarbe"], ["farbe2", "Zweitfarbe"]].map(([k, t]) => <Feld key={k} label={t}><span className="flex items-center gap-1.5"><input type="color" aria-label={t} value={m[k]} disabled={dis} onChange={(e) => setze(k, e.target.value)} className="w-8 h-7 rounded border border-slate-300 dark:border-slate-700 bg-transparent" /><input aria-label={`${t} Farbwert`} value={m[k]} disabled={dis} onChange={(e) => /^#[0-9a-fA-F]{6}$/.test(e.target.value) && setze(k, e.target.value.toLowerCase())} className={`${input} w-[84px] font-mono text-xs`} /></span></Feld>)}
-          <Feld label="Kürzel (1–3)"><input className={`${input} w-24`} value={m.kuerzel} disabled={dis} maxLength={3} onChange={(e) => /^[A-Za-z0-9ÄÖÜäöü]{1,3}$/.test(e.target.value) && setze("kuerzel", e.target.value)} /></Feld>
+          <Feld label="Kürzel (1–3)"><Eingabe className={`${input} w-24`} wert={m.kuerzel} disabled={dis} max={3} muster={/^[A-Za-z0-9ÄÖÜäöü]{1,3}$/} onWert={(v) => setze("kuerzel", v)} /></Feld>
           <Feld label="Ecken">{<select className={`${input} w-28`} value={m.form} disabled={dis} onChange={(e) => setze("form", e.target.value)}><option value="rund">Rund</option><option value="eckig">Eckig</option></select>}</Feld>
         </Abschnitt>
         <Abschnitt titel="Schriftzug">
-          <Feld label="Name"><input className={`${input} w-40`} value={m.name} disabled={dis} maxLength={40} onChange={(e) => /^[A-Za-z0-9ÄÖÜäöüß .&-]{1,40}$/.test(e.target.value) && setze("name", e.target.value)} /></Feld>
+          <Feld label="Name"><Eingabe className={`${input} w-40`} wert={m.name} disabled={dis} max={40} muster={/^[A-Za-z0-9ÄÖÜäöüß .&-]{1,40}$/} onWert={(v) => setze("name", v)} /></Feld>
           <Feld label="Stärke"><select className={`${input} w-28`} value={m.gewicht} disabled={dis} onChange={(e) => setze("gewicht", Number(e.target.value))}><option value={600}>Halbfett</option><option value={700}>Fett</option><option value={800}>Extra fett</option></select></Feld>
           <Feld label="Sperrung"><span className="flex items-center gap-2"><input type="range" min={-2} max={8} value={m.sperrung} disabled={dis} onChange={(e) => setze("sperrung", Number(e.target.value))} className="w-28 accent-emerald-700" /><span className="w-6 text-right tabular-nums text-xs">{m.sperrung}</span></span></Feld>
         </Abschnitt>

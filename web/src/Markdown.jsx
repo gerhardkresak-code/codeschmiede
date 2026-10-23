@@ -31,10 +31,10 @@ export function Markdown({ text, suche, klein = false }) {
       if (/^\s*(---|\*\*\*)\s*$/.test(l)) { out.push({ t: "hr" }); i++; continue; }
       if (!l.trim()) { i++; continue; }
       const p = []; while (i < z.length && z[i].trim() && !/^(#{1,4}\s|```|\s*\||\s*([-*]|\d+\.)\s+|>)/.test(z[i])) p.push(z[i++]);
-      out.push({ t: "p", v: p.join(" ") });
+      out.push({ t: "p", v: p.join(klein ? "\n" : " ") });   // in Chats bleiben Zeilenumbrüche (Befunde der Werkstatt)
     }
     return out;
-  }, [text]);
+  }, [text, klein]);
   const treffer = (s) => !suche || String(s).toLowerCase().includes(suche.toLowerCase());
   return (
     <div className={`${klein ? "text-[inherit] gap-1.5" : "text-sm text-slate-800 dark:text-slate-200 gap-2.5"} leading-relaxed flex flex-col min-w-0 break-words`}>
@@ -53,7 +53,7 @@ export function Markdown({ text, suche, klein = false }) {
         if (b.t === "ul" || b.t === "ol") { const L = b.t; return <L key={k} className={`${L === "ol" ? "list-decimal" : "list-disc"} pl-5 flex flex-col gap-1`}>{b.v.map((x, j) => <li key={j} className={x.tief ? "ml-4" : ""}>{inline(x.v, `l${k}${j}`)}</li>)}</L>; }
         if (b.t === "q") return <blockquote key={k} className="border-l-4 border-emerald-600 pl-3 text-slate-600 dark:text-slate-300">{inline(b.v, `q${k}`)}</blockquote>;
         if (b.t === "hr") return <hr key={k} className="border-slate-200 dark:border-slate-800" />;
-        return <p key={k}>{inline(b.v, `p${k}`)}</p>;
+        return <p key={k} className={klein ? "whitespace-pre-line" : undefined}>{inline(b.v, `p${k}`)}</p>;
       })}
     </div>);
 }

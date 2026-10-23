@@ -7,7 +7,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { sandboxLauf, sandboxArt } from "./sandbox.mjs";
+import { sandboxLauf, sandboxArt, sicherLesen } from "./sandbox.mjs";
 export { sandboxArt };
 import path from "node:path";
 import os from "node:os";
@@ -123,7 +123,8 @@ export async function codexFrage(prompt, { modell, signal } = {}) {
     const sbx = await sandboxLauf({ anbieter: "chatgpt", prog, arbeit: tmp, env: minimaleUmgebung() });
     try { await lauf(sbx ? { befehl: sbx.befehl, vorne: sbx.vorne } : prog, args, { cwd: leer, eingabe: OHNE_WERKZEUGE + prompt, env: sbx ? sbx.env : minimaleUmgebung(), signal }); }
     finally { for (const f of sbx?.nachher || []) await f(); }
-    const t = (await readFile(datei, "utf8").catch(() => "")).trim();
+    // Antwortdatei nur als echte Datei im Arbeitsordner lesen (kein Symlink auf fremde Dateien, Prüfung 0.8.0 A1)
+    const t = ((await sicherLesen(datei, tmp, 512 * 1024))?.toString("utf8") || "").trim();
     if (!t) throw new Error("Codex hat keine Antwort geliefert");
     if (verdaechtig(t)) throw new Error("Antwort verworfen (verdächtiger Inhalt)");
     return t;

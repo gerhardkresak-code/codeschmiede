@@ -72,3 +72,23 @@ test("Eigene Anbieter: Argumente mit {prompt}/{modell}, nie für Prüfungen", as
   assert.deepEqual(reiheFuer("chat", { reihe: [{ anbieter: "copilot", modell: "gpt-5" }, { anbieter: "claude" }] }), [{ anbieter: "copilot", modell: "gpt-5" }, { anbieter: "claude" }]);
   assert.deepEqual(reiheFuer("pruefung", { reihe: [{ anbieter: "copilot" }, { anbieter: "claude" }] }, "macos"), [{ anbieter: "claude" }]);
 });
+test("Sandbox (Prüfung 0.8.0): keine Symlinks zurück, keine zu weiten Freigaben, kein Schlüsselbund", async () => {
+  const { sicherLesen, zuWeit, macProfil } = await import("../lib/sandbox.mjs");
+  const fs = await import("node:fs/promises"); const p = await import("node:path");
+  const a = await fs.mkdtemp(p.join(os.tmpdir(), "cs-t-")); const draussen = await fs.mkdtemp(p.join(os.tmpdir(), "cs-g-"));
+  await fs.writeFile(p.join(draussen, "geheim.json"), '{"token":"x"}');
+  await fs.writeFile(p.join(a, "ok.json"), '{"a":1}');
+  await fs.symlink(p.join(draussen, "geheim.json"), p.join(a, "link.json"));
+  await fs.link(p.join(draussen, "geheim.json"), p.join(a, "hart.json"));
+  await fs.symlink(draussen, p.join(a, "ordner"));
+  assert.equal((await sicherLesen(p.join(a, "ok.json"), a)).toString(), '{"a":1}');
+  assert.equal(await sicherLesen(p.join(a, "link.json"), a), null);
+  assert.equal(await sicherLesen(p.join(a, "hart.json"), a), null);
+  assert.equal(await sicherLesen(p.join(a, "ordner", "geheim.json"), a), null);
+  assert.ok(zuWeit("/home/g", "/home/g") && zuWeit("/home", "/home/g") && zuWeit("/", "/home/g"));
+  assert.ok(!zuWeit("/home/g/.nvm/versions/node/v22", "/home/g") && !zuWeit("/usr/lib/node_modules", "/home/g"));
+  const m = macProfil({ home: "/Users/g", frei: ["/opt/homebrew/lib/node_modules"], schreibbar: ["/var/t/cs-1"], temp: "/var/t" });
+  assert.match(m, /deny process-exec/); assert.match(m, /com\.apple\.SecurityServer/); assert.match(m, /deny file-read\* \(subpath "\/var\/t"\)/);
+  assert.ok(m.indexOf('deny file-read* (subpath "/var/t")') < m.indexOf('allow file-read* file-write* (subpath "/var/t/cs-1")'));
+  await fs.rm(a, { recursive: true }); await fs.rm(draussen, { recursive: true });
+});

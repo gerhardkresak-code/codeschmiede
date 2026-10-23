@@ -90,9 +90,9 @@ function FeatureVorschlag({ m, d, ich, kann, toast }) {
     setBusy(true);
     try {
       if (v.feature_neu) {
-        const id = `N-${Date.now()}`;
-        const { error } = await supabase.from("ws_features").insert({ id, gruppe_id: v.feature_neu.gruppe_id, name: v.feature_neu.name, beschreibung: v.feature_neu.beschreibung || null,
-          stand: "geplant", quelle: "gespraech", neu_bis: new Date(Date.now() + 7 * 864e5).toISOString(), erstellt_von: ich.id });
+        const id = `N-G${m.id}`;   // feste Kennung je Vorschlag: ein zweiter Klick legt nichts doppelt an (Prüfung 0.8.0)
+        const { error } = await supabase.from("ws_features").upsert({ id, gruppe_id: v.feature_neu.gruppe_id, name: v.feature_neu.name, beschreibung: v.feature_neu.beschreibung || null,
+          stand: "geplant", quelle: "gespraech", neu_bis: new Date(Date.now() + 7 * 864e5).toISOString(), erstellt_von: ich.id }, { onConflict: "id", ignoreDuplicates: true });
         if (error) throw error;
         toast(`Feature „${v.feature_neu.name}“ angelegt`);
       } else {
@@ -100,7 +100,8 @@ function FeatureVorschlag({ m, d, ich, kann, toast }) {
         if (error) throw error;
         toast(`Vorlage gesetzt: ${fname(v.bezug.zu)} für ${fname(v.bezug.von)}`);
       }
-      await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "uebernommen" });
+      const { error: e2 } = await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "uebernommen" });
+      if (e2) throw e2;
     } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
   };
   const nein = async () => { const { error } = await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "abgelehnt" }); if (error) toast(fehler(error)); };
@@ -142,7 +143,8 @@ function AuftragVorschlag({ m, d, ich, kann, toast }) {
       if (error) throw error;
       const r = await supabase.from("ws_nachrichten").insert({ auftrag_id: data.id, von: ich.id, art: "text", text: auftragsText, kanal: "codeschmiede" });
       if (r.error) throw r.error;
-      await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "uebernommen", p_auftrag: data.id });
+      const { error: e2 } = await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "uebernommen", p_auftrag: data.id });
+      if (e2) toast(fehler(e2));
       toast(`Auftrag #${data.id} angelegt – ${g?.name || v.gruppe_id}`);
     } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
   };
