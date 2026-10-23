@@ -60,3 +60,5 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
   je Projekt ein Bereich „Global“ (Gruppe „Globale Einstellungen“), aufgebaut wie alle Gruppen, in der App aber nie als eigener Bereich
   sichtbar – die Features dort gelten für die ganze App und alle Nutzer (z. B. Anmeldung). Rechte wie jeder Bereich. Die Werkstatt
   ist bei jedem Programmstart automatisch an (Ausschalten gilt bis zum nächsten Start). Chats starten immer beim letzten Eintrag.
+- **2026-10-23 10:26 – Features selbst zuordnen:** Gerhard ordnet Features in der Codeschmiede selbst zu und verschiebt sie (Dialog oder
+  Ziehen & Ablegen), auch in die Globalen Einstellungen. Aufträge und Verlauf bleiben beim Feature.

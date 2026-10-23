@@ -43,6 +43,25 @@ end $$;
 drop trigger if exists ws_bereich_global_schutz on public.ws_bereiche;
 create trigger ws_bereich_global_schutz before update on public.ws_bereiche for each row execute function public.ws_bereich_global_schutz();
 
+-- Features selbst zuordnen und verschieben (Anweisung Gerhard 2026-10-23 10:26): nur Admin, nur innerhalb desselben Projekts.
+-- Die Aufträge bleiben am Feature (Verlauf wandert mit, die Oberfläche zeigt Aufträge je Feature).
+create or replace function public.ws_feature_verschieben(p_feature text, p_gruppe text) returns void
+language plpgsql security definer set search_path = public as $$
+declare alt text;
+begin
+  if not public.ws_ist_admin() then raise exception 'Nur der Admin verschiebt Features'; end if;
+  select gruppe_id into alt from public.ws_features where id = p_feature for update;
+  if alt is null then raise exception 'Feature nicht gefunden'; end if;
+  if not exists (select 1 from public.ws_gruppen where id = p_gruppe) then raise exception 'Gruppe nicht gefunden'; end if;
+  if public.ws_projekt_von_gruppe(alt) is distinct from public.ws_projekt_von_gruppe(p_gruppe) then
+    raise exception 'Features lassen sich nur innerhalb desselben Projekts verschieben'; end if;
+  if alt = p_gruppe then return; end if;
+  update public.ws_features set gruppe_id = p_gruppe, geaendert = now() where id = p_feature;
+  insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'verschieben', jsonb_build_object('feature', p_feature, 'von', alt, 'nach', p_gruppe));
+end $$;
+revoke execute on function public.ws_feature_verschieben(text, text) from public, anon;
+grant execute on function public.ws_feature_verschieben(text, text) to authenticated;
+
 commit;
 
 select b.projekt_id, b.id as bereich, g.id as gruppe, g.name from public.ws_bereiche b join public.ws_gruppen g on g.bereich_id = b.id where b.global;
