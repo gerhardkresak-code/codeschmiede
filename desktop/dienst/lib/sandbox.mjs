@@ -159,7 +159,8 @@ function ordnerVon(pfad) {
  * - Codex: eigener CODEX_HOME im Arbeitsordner mit Kopie von auth.json (danach geprüft zurückkopiert, falls erneuert)
  * - Gemini: eigenes HOME im Arbeitsordner mit Kopie der Anmeldung, danach geprüft zurück
  */
-export async function sandboxLauf({ anbieter, prog, arbeit, env }) {
+// bauen: Arbeitsordner eines Auftrags, in dem der Ersatz (ChatGPT/Codex) schreiben darf (Gerhard 2026-10-23 „Nur als Ersatz“)
+export async function sandboxLauf({ anbieter, prog, arbeit, env, bauen = null }) {
   const art = sandboxArt();
   if (!art) return null;
   const home = os.homedir();
@@ -174,7 +175,8 @@ export async function sandboxLauf({ anbieter, prog, arbeit, env }) {
   // Zertifikate (Firmen-Proxy) nur als einzelne Datei freigeben
   const zert = [process.env.NODE_EXTRA_CA_CERTS, process.env.SSL_CERT_FILE].filter((p) => p && existsSync(p)).map(echt);
   const frei = [...new Set([progOrdner, nodeOrdner, ordnerVon(start.befehl)].filter(Boolean))];
-  if ([...frei, arbeit].some((p) => zuWeit(p, home) || p === "/") || frei.some((p) => zuWeit(p, os.tmpdir()))) return null;   // Prüfung A2: lieber keine Sandbox als eine offene
+  if ([...frei, arbeit, ...(bauen ? [bauen] : [])].some((p) => zuWeit(p, home) || p === "/") || frei.some((p) => zuWeit(p, os.tmpdir()))) return null;
+  const schreib = bauen ? [arbeit, echt(bauen)] : [arbeit];   // Prüfung A2: lieber keine Sandbox als eine offene
   const kiHome = path.join(arbeit, "home"); await mkdir(kiHome, { recursive: true });
   const kiTemp = path.join(arbeit, "tmp"); await mkdir(kiTemp, { recursive: true });
   const nachher = [];
@@ -214,9 +216,10 @@ export async function sandboxLauf({ anbieter, prog, arbeit, env }) {
     } catch { /* ohne Einstellungen */ }
   }
   if (art === "macos") {
-    const profil = macProfil({ home, frei: [...frei, ...zert], schreibbar: [arbeit], temp: os.tmpdir(), starten: frei });
+    // Beim Bauen darf Codex Systemprogramme (z. B. ls, grep) starten – lesen kann es trotzdem nur Programm-, Arbeits- und Auftragsordner
+    const profil = macProfil({ home, frei: [...frei, ...zert], schreibbar: schreib, temp: os.tmpdir(), starten: bauen ? [...frei, "/bin", "/usr/bin"] : frei });
     return { befehl: "/usr/bin/sandbox-exec", vorne: ["-p", profil, start.befehl, ...start.vorne], env: neueEnv, nachher, art };
   }
-  const args = bwrapArgs({ frei: [...frei, ...zert], schreibbar: [arbeit], arbeit, home: kiHome });
+  const args = bwrapArgs({ frei: [...frei, ...zert], schreibbar: schreib, arbeit: bauen ? echt(bauen) : arbeit, home: kiHome });
   return { befehl: imPfad("bwrap"), vorne: [...args, "--", start.befehl, ...start.vorne], env: neueEnv, nachher, art };
 }

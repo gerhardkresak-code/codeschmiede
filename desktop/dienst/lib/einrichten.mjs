@@ -11,6 +11,13 @@ import { minimaleUmgebung } from "./ki.mjs";
 // art: "browser" = eigener Anmelde-Befehl öffnet den Browser (Ende mit Code 0 = angemeldet); "fenster" = Anmeldung beim ersten Start im Eingabefenster
 // install: { npm } = offizielles npm-Paket; { skript: { win, unix } } = offizielles Installationsskript; { seite } = Installer-Seite im Browser öffnen
 export const KATALOG = {
+  claude: { name: "Claude Code", programme: ["claude"], art: "browser", login: ["auth", "login"],
+    install: { skript: { win: "irm https://claude.ai/install.ps1 | iex", unix: "curl -fsSL https://claude.ai/install.sh | bash" } },
+    status: { args: ["auth", "status"], ok: /"authMethod"\s*:\s*"(claude\.ai|oauth_token)"/, nein: /"authMethod"\s*:\s*"(none|api_key|api_key_helper|third_party)"/ } },
+  gh: { name: "GitHub CLI", programme: ["gh"], install: { seite: "https://cli.github.com/" }, art: "fenster", login: ["auth", "login", "--web", "--hostname", "github.com", "--git-protocol", "https"],
+    status: { args: ["auth", "status", "--hostname", "github.com"], ok: /logged in/i, nein: /not logged|no accounts|You are not logged/i } },
+  wrangler: { name: "Cloudflare (Wrangler)", programme: ["wrangler"], install: { npm: "wrangler" }, art: "browser", login: ["login"],
+    status: { args: ["whoami"], ok: /logged in/i, nein: /not (authenticated|logged in)/i } },
   codex: { name: "ChatGPT (Codex)", programme: ["codex"], install: { npm: "@openai/codex" }, art: "browser", login: ["login"],
     status: { args: ["login", "status"], ok: /logged in/i, nein: /api key|not logged/i } },
   gemini: { name: "Gemini CLI", programme: ["gemini"], install: { npm: "@google/gemini-cli" }, art: "fenster", login: [],
@@ -110,7 +117,7 @@ function starte(befehl, args, { minuten = 10, env, beiAusgabe } = {}) {
 }
 
 /** Einmal-Code aus der Anmeldung (z. B. GitHub „ABCD-1234“) und die Anmeldeseite herausfischen. */
-const ANMELDE_HOSTS = ["github.com", "cursor.com", "x.ai", "openai.com", "chatgpt.com"];
+const ANMELDE_HOSTS = ["github.com", "cursor.com", "x.ai", "openai.com", "chatgpt.com", "claude.ai", "claude.com", "anthropic.com", "cloudflare.com"];
 export function anmeldeDaten(text) {
   const code = /\b([A-Z0-9]{4}-[A-Z0-9]{4})\b/.exec(text || "")?.[1] || null;
   let url = null;
@@ -135,7 +142,7 @@ export function oeffneSeite(url) {
 /** Programm in einem sichtbaren Fenster starten (Anmeldung beim ersten Start). */
 export function imFenster(prog, args) {
   const pfad = prog.pfad || prog.befehl;
-  if (!SICHERER_PFAD.test(pfad) || !args.every((x) => /^[A-Za-z0-9-]+$/.test(x))) return false;
+  if (!SICHERER_PFAD.test(pfad) || !args.every((x) => /^[A-Za-z0-9.-]+$/.test(x))) return false;
   try {
     if (process.platform === "win32") {
       spawn(SYSTEM.cmd, ["/c", "start", "Codeschmiede – Anmeldung", SYSTEM.cmd, "/k", pfad, ...args], { detached: true, stdio: "ignore", shell: false, windowsHide: false, env: einrichtUmgebung() }).unref();

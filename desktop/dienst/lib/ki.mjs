@@ -29,7 +29,11 @@ export const MODELL = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$/;   // nie mit „-“
 
 /** Reihe prüfen/bereinigen (gleiche Regeln wie ws_ki_reihe_ok in der Datenbank). */
 export function reiheFuer(aufgabe, eintrag, mitSandbox = undefined) {
-  if (aufgabe === "bauen") return [{ anbieter: "claude" }];
+  // Programmieren: immer zuerst Claude; als Ersatz nur ChatGPT (Codex), wenn der Admin es eingestellt hat (Gerhard 2026-10-23 „Nur als Ersatz“)
+  if (aufgabe === "bauen") {
+    const zweit = Array.isArray(eintrag?.reihe) && eintrag.reihe[0]?.anbieter === "claude" && eintrag.reihe[1]?.anbieter === "chatgpt" ? eintrag.reihe[1] : null;
+    return zweit ? [{ anbieter: "claude" }, { anbieter: "chatgpt", ...(typeof zweit.modell === "string" && MODELL.test(zweit.modell) && zweit.modell !== "automatisch" ? { modell: zweit.modell } : {}) }] : [{ anbieter: "claude" }];
+  }
   // Prüfungen durch fremde Anbieter nur, wenn dieser PC eine Betriebssystem-Sandbox hat (macOS/Linux); sonst nur Claude (Nachprüfung 2026-10-23)
   if (aufgabe === "pruefung" && !(mitSandbox ?? sandboxArt())) { const c = (eintrag?.reihe || []).find((e) => e?.anbieter === "claude"); return [{ anbieter: "claude", ...(c?.modell && MODELL.test(c.modell) ? { modell: c.modell } : { modell: "opus" }) }]; }
   const r = Array.isArray(eintrag?.reihe) ? eintrag.reihe : STANDARD[aufgabe] || STANDARD.chat;
@@ -135,6 +139,36 @@ export async function codexFrage(prompt, { modell, signal, nurSandbox = false } 
   } finally { await rm(tmp, { recursive: true, force: true }).catch(() => {}); }
 }
 
+/**
+ * Ersatz beim Programmieren (Gerhard 2026-10-23: „Nur als Ersatz“, wenn Claudes Limit voll ist): Codex ändert Dateien im Auftragsordner.
+ * Nur in der Betriebssystem-Sandbox (macOS/Linux): schreiben nur im Auftragsordner, lesen nur dort und im Programmordner, kein Benutzerordner,
+ * kein Schlüsselbund. Hochladen, Commit und Pull Request macht danach die Werkstatt selbst (nicht Codex). Prüfungen bleiben bei Claude.
+ */
+export async function codexBauen(prompt, { ordner, modell, signal } = {}) {
+  const prog = findeProgramm("chatgpt");
+  if (!prog) throw new Error("Codex (ChatGPT) ist auf diesem PC nicht installiert.");
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "cs-codexbau-"));
+  const datei = path.join(tmp, "antwort.txt");
+  try {
+    const sbx = await sandboxLauf({ anbieter: "chatgpt", prog, arbeit: tmp, env: minimaleUmgebung(), bauen: ordner });
+    if (!sbx) throw new Error("Der Ersatz beim Programmieren braucht die Betriebssystem-Sandbox (macOS/Linux) – auf diesem PC nicht möglich.");
+    // Codex-eigene Sandbox aus: sie lässt sich in der äußeren Sandbox nicht verschachteln; die äußere begrenzt Lesen/Schreiben
+    const args = ["exec", "--skip-git-repo-check", "--sandbox", "danger-full-access", "--color", "never", "-c", "mcp_servers={}", "--cd", ordner, "--output-last-message", datei,
+      ...(modell && MODELL.test(modell) ? [`--model=${modell}`] : []), "-"];
+    try { await lauf({ befehl: sbx.befehl, vorne: sbx.vorne }, args, { cwd: ordner, eingabe: prompt, env: sbx.env, signal, minuten: 45 }); }
+    finally { for (const f of sbx.nachher || []) await f(); }
+    return ((await sicherLesen(datei, tmp, 512 * 1024))?.toString("utf8") || "").trim();
+  } finally { await rm(tmp, { recursive: true, force: true }).catch(() => {}); }
+}
+
+/** Geänderte Dateien, die ein Ersatz nie ändern darf (wie die Sperren für Claude: Abläufe, Einstellungen, Pakete, Git, Geheimnisse). */
+export function gesperrteAenderungen(porcelain) {
+  const pfade = String(porcelain || "").split(/\r?\n/).filter(Boolean).flatMap((z) => z.slice(3).split(" -> ")).map((p) => p.replace(/^"|"$/g, ""));
+  const sperre = [/^\.github\//, /(^|\/)\.claude(\/|$)/, /(^|\/)\.mcp\.json$/, /(^|\/)\.gitattributes$/, /(^|\/)\.gitmodules$/, /(^|\/)package(-lock)?\.json$/,
+    /(^|\/)\.husky(\/|$)/, /(^|\/)\.git(\/|$)/, /(^|\/)\.env/, /(^|\/)\.npmrc$/, /\.(pem|key)$/i];
+  return [...new Set(pfade.filter((p) => sperre.some((r) => r.test(p))))];
+}
+
 /** Gemini über die Gemini CLI: Frage über die Standardeingabe (nicht interaktiv), Antwort = Ausgabe. */
 export async function geminiFrage(prompt, { modell, signal, nurSandbox = false } = {}) {
   const prog = findeProgramm("gemini");
@@ -178,7 +212,26 @@ export async function kopplungPruefen(anbieter) {
     const ok = existsSync(path.join(os.homedir(), ".gemini", "oauth_creds.json"));
     return { gekoppelt: ok, version, hinweis: ok ? "Mit Google-Konto angemeldet" : "Nicht angemeldet: im Terminal einmal „gemini“ starten und „Login with Google“ wählen" };
   }
-  return { gekoppelt: true, version, hinweis: "Claude Code gefunden" };
+  // Claude: wirklich prüfen, womit angemeldet ist (claude auth status, Hinweis Gerhard 2026-10-23 21:45 „Max Plan“)
+  try {
+    const r = await lauf(prog, ["auth", "status"], { cwd: os.tmpdir(), env: saubereUmgebung(), minuten: 1 }).catch((e) => ({ aus: e?.ausgabe || "" }));
+    const st = claudeStatus(r.aus);
+    return { gekoppelt: st.abo, version, hinweis: st.text };
+  } catch { return { gekoppelt: false, version, hinweis: "Anmeldung nicht prüfbar – bitte Claude Code aktualisieren („claude update“)" }; }
+}
+
+/** Antwort von „claude auth status“ (JSON) lesen – nur Anmeldeart und Abo, nie E-Mail oder Schlüssel weitergeben. */
+export function claudeStatus(aus) {
+  let j = null;
+  try { const m = /\{[\s\S]*\}/.exec(String(aus || "")); j = m ? JSON.parse(m[0]) : null; } catch { j = null; }
+  if (!j || typeof j !== "object") return { abo: false, text: "Anmeldung nicht prüfbar – bitte Claude Code aktualisieren („claude update“)" };
+  const art = typeof j.authMethod === "string" ? j.authMethod : "none";
+  const roh = [j.subscriptionType, j.subscription, j.plan, j.account?.subscriptionType].find((x) => typeof x === "string") || "";
+  const plan = /max/i.test(roh) ? "Max" : /pro/i.test(roh) ? "Pro" : /team/i.test(roh) ? "Team" : /enterprise/i.test(roh) ? "Enterprise" : "";
+  if (art === "claude.ai" || art === "oauth_token") return { abo: true, plan, text: `Mit deinem Claude-Abo angemeldet${plan ? ` (${plan})` : ""}` };
+  if (art === "api_key" || art === "api_key_helper") return { abo: false, plan: "", text: "Mit API-Schlüssel angemeldet (Kosten pro Aufruf) – bitte mit deinem Claude-Abo anmelden" };
+  if (art === "third_party") return { abo: false, plan: "", text: "Über einen Cloud-Anbieter angemeldet – bitte mit deinem Claude-Abo anmelden" };
+  return { abo: false, plan: "", text: "Nicht angemeldet – „Mit Claude anmelden“ klicken" };
 }
 
 /** Offizielle Anmeldung starten (öffnet den Browser). Nur ChatGPT hat einen eigenen Anmelde-Befehl. */

@@ -40,6 +40,9 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-23 21:57 – Logo, KI-Wahl, Einrichtung (Entwurf 1.0 frei):** Bestehende Logos einlesen (KI baut als feste Formen nach) und überall ändern;
+  überall den eingestellten KI-Anbieter anzeigen; Programmieren: Claude fest, ChatGPT (Codex) nur als Ersatz bei vollem Limit (Regel „nie ein anderer“ von Gerhard
+  bewusst gelockert, Prüfungen bleiben Claude); Konten legt die Person selbst an – die Codeschmiede öffnet Registrierung und Anmeldung.
 - **2026-10-23 – KI-Anbieter per Klick (Entwurf 1.0 frei):** „Hinzufügen“ installiert (fester Katalog im Programm, nie Befehle aus der
   Datenbank), öffnet die offizielle Anmeldung (Browser oder Fenster) und koppelt automatisch. Keine Zugangsdaten in der Codeschmiede.
 - **2026-10-23 – Zu erledigen & Live (Entwurf 1.0 frei):** Zentrale Liste „Zu erledigen“ mit Knöpfen; erst Test (main), dann Live

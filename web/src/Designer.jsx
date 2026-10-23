@@ -4,6 +4,7 @@ import {
   Sun, Moon, CircleCheck, CircleAlert, TriangleAlert, Loader2, Bot, ShieldCheck, Sparkles, Check, X, ExternalLink, LayoutTemplate, Home, Users, Calendar, Trophy, Settings, Bell, Search,
 } from "lucide-react";
 import { supabase } from "./supabase";
+import { useKiName } from "./kiName";
 import { BausteineModus, MarkeModus, BAUSTEIN_BASIS, bausteinWerteBereinigen } from "./DesignerBausteine";
 import { MARKE_BASIS } from "./Logo";
 import { Markdown } from "./Markdown";
@@ -60,7 +61,9 @@ const mische = (b, w) => { const r = tief(b); const geh = (z, q) => { if (!q || 
   if (bsp) e.beispiele = bsp; else delete e.beispiele;
   return e; };
 const setze = (o, pfad, v) => { const r = tief(o); let z = r; pfad.slice(0, -1).forEach((k) => { z[k] = z[k] || {}; z = z[k]; }); z[pfad[pfad.length - 1]] = v; return r; };
-const flach = (o, p = "") => Object.entries(o || {}).filter(([k]) => !VERBOTEN.has(k)).flatMap(([k, v]) => (v && typeof v === "object" ? flach(v, p + k + ".") : [[p + k, v]]));
+// Eingelesenes Logo (marke.vektor) als EIN Wert – sonst stünde jede Form einzeln in der Änderungsliste
+const flach = (o, p = "") => Object.entries(o || {}).filter(([k]) => !VERBOTEN.has(k)).flatMap(([k, v]) => (p + k === "marke.vektor" ? [[p + k, `eingelesenes Logo (${v?.elemente?.length || 0} Formen, ${JSON.stringify(v).length} Zeichen)`]]
+  : v && typeof v === "object" ? flach(v, p + k + ".") : [[p + k, v]]));
 
 // Kontrast nach WCAG 2.1
 const lum = (hex) => { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return 0; const n = parseInt(m[1], 16);
@@ -121,7 +124,12 @@ So umsetzen:
 - Nichts in einzelnen Seiten ändern; was die Grunddesign-Ebene noch nicht kann (z. B. Menü-Aufbau, Logo-Platz, Abstände), zentral ergänzen.
 - Hell- und Dunkelmodus, PC/Tablet/Handy prüfen; Kontrast mind. 4,5 : 1.
 - Handbuch/DESIGN.md und CHANGELOG mitführen.
-
+${werte?.marke?.zeichen === "eigen" ? `
+Marke mit eingelesenem Logo (marke.zeichen = "eigen", marke.vektor = feste Formen in 64×64):
+- Die Logo-Komponente zeichnet „eigen“ aus marke.vektor (gleich wie web/src/Logo.jsx der Codeschmiede: nur rect/circle/ellipse/path/text mit Farben #rrggbb, kein freies SVG).
+- Das Logo überall ersetzen, wo das Projekt sein Logo zeigt: Kopf/Menü, Anmeldung, App-Symbol, Favicon und PWA-Symbole (als Bilddateien aus dem Vektor erzeugen),
+  PDF-Layouts, Handbuch (Bildschirmfotos/Logo), App-Mails. Alte Logo-Dateien nur ersetzen, nicht an anderen Stellen löschen.
+` : ""}
 Alle Werte (JSON):
 ${JSON.stringify(werte, null, 1)}`;
 
@@ -140,6 +148,7 @@ export default function Designer({ d, ich, toast }) {
   const [dialog, setDialog] = useState(null);
   const [arbeit, setArbeit] = useState(false);
   const [rechts, setRechts] = useState("chat");
+  const ki = useKiName(d.projektId, "design");   // eingestellter Anbieter für den Design-Chat
   const [chatText, setChatText] = useState("");
 
   const darf = useMemo(() => {
@@ -273,12 +282,12 @@ export default function Designer({ d, ich, toast }) {
           </section></>}
           <aside className={`${card} lg:col-span-2 xl:col-span-1 self-start flex flex-col min-h-[520px] max-h-[calc(100vh-140px)]`}>
             <div role="tablist" aria-label="Seitenleiste" className="flex gap-1 p-2 border-b border-slate-200 dark:border-slate-800">
-              {[["chat", "Chat mit Claude", Bot], ["pruef", "Prüfungen", ShieldCheck]].map(([id, t, I]) => (
+              {[["chat", `Chat mit ${ki.name}`, Bot], ["pruef", "Prüfungen", ShieldCheck]].map(([id, t, I]) => (
                 <button key={id} type="button" role="tab" aria-selected={rechts === id} onClick={() => setRechts(id)}
                   className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-sm font-semibold ${rechts === id ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"}`}>
                   <I className="w-4 h-4" />{t}{id === "pruef" && (rot ? <span className="text-[11px] font-bold bg-red-600 text-white rounded-full px-1.5">{rot}</span> : hinweise ? <span className="text-[11px] font-bold bg-amber-500 text-amber-950 rounded-full px-1.5">{hinweise}</span> : null)}</button>))}
             </div>
-            {rechts === "pruef" ? <Pruefliste befunde={befunde} rot={rot} hinweise={hinweise} onFragen={() => setRechts("chat")} />
+            {rechts === "pruef" ? <Pruefliste befunde={befunde} rot={rot} hinweise={hinweise} kiName={ki.name} onFragen={() => setRechts("chat")} />
               : <DesignChat d={d} ich={ich} projekt={projekt} entwurf={aktiv} werte={werte} befunde={befunde} darf={darf} toast={toast} modus={modus} text={chatText} setText={setChatText} start={!laden && !live && !entwuerfe.length}
                   onUebernehmen={(v) => { if (!bearbeitbar) { toast(fest ? "Dieser Entwurf ist fest – lege eine Kopie an" : "Kein Recht zum Gestalten"); return false; }
                     setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, v)); setGeaendert(true); if (modus === "grund") setMitte("geruest"); return true; }} />}
@@ -493,12 +502,12 @@ function SendenDialog({ entwurf, werte, gueltig, rot, onClose, onGesendet, toast
   </Hulle>;
 }
 
-function Pruefliste({ befunde, rot, hinweise, onFragen }) {
+function Pruefliste({ befunde, rot, hinweise, onFragen, kiName = "Claude" }) {
   const gruppen = [...new Set(befunde.map((b) => b.gruppe))];
   return (
     <div className="p-3 overflow-auto space-y-3">
       <p className="text-sm">{rot ? <b className="text-red-700 dark:text-red-300">{rot} Pflicht-Prüfung{rot === 1 ? "" : "en"} offen</b> : <b className="text-green-700 dark:text-green-400">Alle Pflicht-Prüfungen grün</b>}{hinweise ? <span className="text-amber-700 dark:text-amber-400"> · {hinweise} Hinweis{hinweise === 1 ? "" : "e"}</span> : null}</p>
-      {(rot > 0 || hinweise > 0) && <button type="button" className={`${ghost} w-full`} onClick={onFragen}><Sparkles className="w-4 h-4" />Claude um eine Lösung bitten</button>}
+      {(rot > 0 || hinweise > 0) && <button type="button" className={`${ghost} w-full`} onClick={onFragen}><Sparkles className="w-4 h-4" />{kiName} um eine Lösung bitten</button>}
       {gruppen.map((g) => (
         <section key={g}><h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">{g}</h4>
           <ul className="space-y-1.5 text-sm">{befunde.filter((b) => b.gruppe === g).map((b) => (
@@ -514,6 +523,7 @@ function Pruefliste({ befunde, rot, hinweise, onFragen }) {
 const IDEEN_START = ["Lass uns das Design von Grund auf planen", "Schlag mir 3 Grundrichtungen vor", "Frag mich zu Zielgruppe und Stimmung", "Passende Farben zu meinem Logo"];
 const IDEEN = ["Mach die Knöpfe besser lesbar", "Wärmer und freundlicher, aber seriös", "Moderner Dunkelmodus", "Löse die offenen Prüfungen", "Passt das für Dorf- und Profivereine?"];
 function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onUebernehmen, modus = "grund", text, setText, start = false }) {
+  const ki = useKiName(projekt.id, "design");
   const [liste, setListe] = useState([]);
   const [senden, setSenden] = useState(false);
   const ende = React.useRef(null);
@@ -554,12 +564,12 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
         {!liste.length && (start
           ? <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/60 dark:bg-emerald-950/30 p-3 space-y-1.5 text-slate-700 dark:text-slate-200">
               <p className="font-display font-bold text-[15px] flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-emerald-700" />Design von Anfang an planen</p>
-              <p>Für {projekt.name} gibt es noch kein Design – genau richtig, um damit anzufangen. Erzähl, für wen die App ist und wie sie wirken soll. Claude stellt ein paar Fragen und schlägt dann ein komplettes Grunddesign vor (Farben, Schrift, Formen, Menü), das du mit einem Klick übernimmst.</p>
+              <p>Für {projekt.name} gibt es noch kein Design – genau richtig, um damit anzufangen. Erzähl, für wen die App ist und wie sie wirken soll. {ki.name} stellt ein paar Fragen und schlägt dann ein komplettes Grunddesign vor (Farben, Schrift, Formen, Menü), das du mit einem Klick übernimmst.</p>
               <p className="text-xs text-slate-500">Nichts geht live, bevor du einen Entwurf als Auftrag sendest.</p></div>
-          : <div className="text-slate-500 space-y-2"><p>Frag Claude zum Design{entwurf ? ` von „${entwurf.name}“` : ""}. Claude erklärt und schlägt Werte vor – übernommen wird nur, was du anklickst.</p></div>)}
+          : <div className="text-slate-500 space-y-2"><p>Frag {ki.name} zum Design{entwurf ? ` von „${entwurf.name}“` : ""}. {ki.name} erklärt und schlägt Werte vor – übernommen wird nur, was du anklickst.</p></div>)}
         {liste.map((m) => m.frage_id ? (
           <div key={m.id} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-2.5 max-w-[95%]">
-            <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Bot className="w-3.5 h-3.5" />Claude{fragen[m.frage_id] && fragen[m.frage_id].von !== ich.id ? ` · über die Werkstatt von ${d.benutzer.find((u) => u.id === fragen[m.frage_id].von)?.name || "Mitglied"}` : ""}</div>
+            <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Bot className="w-3.5 h-3.5" />{ki.von(m.ki)}{fragen[m.frage_id] && fragen[m.frage_id].von !== ich.id ? ` · über die Werkstatt von ${d.benutzer.find((u) => u.id === fragen[m.frage_id].von)?.name || "Mitglied"}` : ""}</div>
             <Markdown text={m.text} klein />
             {m.werte && <Vorschlag m={m} werte={werte} kann={fragen[m.frage_id]?.von === ich.id && darf} onEntscheid={(e) => entscheide(m, e)} />}
           </div>
@@ -569,7 +579,7 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
             <Markdown text={m.text} klein />
             {m.stand === "fehler" && <p className="text-xs text-red-600 mt-1">Nicht beantwortet</p>}
           </div>))}
-        {wartet.length > 0 && <div className="flex items-center gap-2 text-slate-500">{werkstattAn ? <><Loader2 className="w-4 h-4 animate-spin" />Claude denkt nach … (über deine Werkstatt, ca. 20–60 Sek.)</> : <span className="text-amber-700 dark:text-amber-400">Deine Werkstatt ist aus – schalte sie oben ein, dann antwortet Claude.</span>}</div>}
+        {wartet.length > 0 && <div className="flex items-center gap-2 text-slate-500">{werkstattAn ? <><Loader2 className="w-4 h-4 animate-spin" />{ki.name} denkt nach … (über deine Werkstatt, ca. 20–60 Sek.)</> : <span className="text-amber-700 dark:text-amber-400">Deine Werkstatt ist aus – schalte sie oben ein, dann antwortet Claude.</span>}</div>}
         <div ref={ende} />
       </div>
       {darf ? (
@@ -580,7 +590,7 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); schicke(); } }} />
             <button className={`${btn} self-end`} disabled={senden || !text.trim()} title="Senden"><Send className="w-4 h-4" /></button>
           </div>
-          {!werkstattAn && <p className="text-xs text-amber-700 dark:text-amber-400">Claude antwortet über deine Werkstatt – sie ist gerade aus.</p>}
+          {!werkstattAn && <p className="text-xs text-amber-700 dark:text-amber-400">{ki.name} antwortet über deine Werkstatt – sie ist gerade aus.</p>}
         </form>) : <p className="border-t border-slate-200 dark:border-slate-800 p-3 text-xs text-slate-500">Mitlesen möglich – fragen dürfen Entwickler mit Design-Recht.</p>}
     </div>);
 }
