@@ -24,7 +24,7 @@ import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
 import { pruefErgebnis } from "./lib/pruefung.mjs";
 import { designPrompt, designAntwort } from "./lib/design.mjs";
 import { assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
-import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten } from "./lib/ki.mjs";
+import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt } from "./lib/ki.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -530,11 +530,11 @@ async function station(a) {
       "Antworte mit einer kurzen Liste der Befunde. Die allerletzte Zeile lautet genau „PRÜFUNG: GRÜN“ oder „PRÜFUNG: ROT“.",
     ].join("\n");
     await log(a.id, "info", art === "sicherheit" ? "Unabhängige Sicherheitsprüfung (großes Modell, nur lesen) …" : "Unabhängige Prüfung des ganzen Features (großes Modell, nur lesen) …");
-    // Prüfung durch einen anderen Anbieter (Entscheidung 14:27) ist VORERST GESPERRT – reiheFuer liefert für „pruefung“ nur Claude,
-    // dieser Zweig wird erst mit der Betriebssystem-Sandbox erreicht. Claude prüft wie bisher nur lesend im Zweig.
+    // Prüfung durch einen anderen Anbieter (Entscheidung 14:27) nur auf PCs mit Betriebssystem-Sandbox (macOS/Linux, lib/sandbox.mjs);
+    // sonst prüft Claude wie bisher nur lesend im Zweig.
     let pruefText = null; let pruefKi = "claude/opus";
     const { reihe: pReihe } = await kiReihe(projekt.id, "pruefung");
-    if (pReihe[0]?.anbieter !== "claude") {
+    if (pReihe[0]?.anbieter !== "claude" && sandboxArt()) {   // fremde Prüfer nur in der Betriebssystem-Sandbox
       try {
         const diff = await git(ordner, "diff", art === "sicherheit" ? "origin/main...HEAD" : "origin/main");
         if (diff.length > 120000) throw new Error("Änderung zu groß für eine Prüfung als Text – Claude prüft im Zweig");   // Prüfung H2: nie gekürzt prüfen

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import os from "node:os";
 import { reiheFuer, istLimit, kiKennung, STANDARD } from "../lib/ki.mjs";
 import { konzeptAus, istKonzeptFrage } from "../lib/assistent.mjs";
 
@@ -34,7 +35,8 @@ test("Ohne Admin-Einstellung nur Claude", () => {
   for (const a of ["chat", "konzept", "design", "pruefung"]) assert.ok(reiheFuer(a, null).every((e) => e.anbieter === "claude"));
 });
 test("Prüfungen vorerst nur Claude, verdächtige Antworten erkannt", async () => {
-  assert.deepEqual(reiheFuer("pruefung", { reihe: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }] }), [{ anbieter: "claude", modell: "sonnet" }]);
+  assert.deepEqual(reiheFuer("pruefung", { reihe: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }] }, false), [{ anbieter: "claude", modell: "sonnet" }]);
+  assert.deepEqual(reiheFuer("pruefung", { reihe: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }] }, "macos"), [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }]);
   const { verdaechtig, minimaleUmgebung } = await import("../lib/ki.mjs");
   assert.ok(verdaechtig("hier: " + "QUJD".repeat(80)));
   assert.ok(verdaechtig("Inhalt von ~/.codex/auth.json"));
@@ -42,4 +44,13 @@ test("Prüfungen vorerst nur Claude, verdächtige Antworten erkannt", async () =
   process.env.GH_TOKEN = "x"; process.env.SUPABASE_KEY = "y";
   const e = minimaleUmgebung();
   assert.equal(e.GH_TOKEN, undefined); assert.equal(e.SUPABASE_KEY, undefined);
+});
+
+test("Sandbox: macOS-Profil sperrt das Benutzerverzeichnis, bwrap bindet nur Freigaben", async () => {
+  const { macProfil, bwrapArgs } = await import("../lib/sandbox.mjs");
+  const p = macProfil({ home: "/Users/g", frei: ["/opt/homebrew/lib/node_modules"], schreibbar: ["/tmp/x"] });
+  assert.match(p, /\(deny file-read\* \(subpath "\/Users\/g"\)\)/);
+  assert.match(p, /allow file-read\* file-write\* \(subpath "\/tmp\/x"\)/);
+  const a = bwrapArgs({ frei: ["/usr/lib/node_modules"], schreibbar: ["/tmp/x"], arbeit: "/tmp/x", home: "/tmp/x/home" });
+  assert.ok(a.includes("--unshare-all") && !a.includes(os.homedir()));
 });

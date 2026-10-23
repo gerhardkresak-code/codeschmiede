@@ -7,6 +7,8 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { sandboxLauf, sandboxArt } from "./sandbox.mjs";
+export { sandboxArt };
 import path from "node:path";
 import os from "node:os";
 
@@ -26,14 +28,16 @@ export const STANDARD = {
 export const MODELL = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$/;   // nie mit „-“ beginnend (Prüfung M2: sonst Schalter wie --yolo)
 
 /** Reihe prüfen/bereinigen (gleiche Regeln wie ws_ki_reihe_ok in der Datenbank). */
-export function reiheFuer(aufgabe, eintrag) {
+export function reiheFuer(aufgabe, eintrag, mitSandbox = undefined) {
   if (aufgabe === "bauen") return [{ anbieter: "claude" }];
-  // Prüfungen vorerst nur Claude, bis fremde Programme in einer Betriebssystem-Sandbox laufen (Nachprüfung 2026-10-23)
-  if (aufgabe === "pruefung") { const c = (eintrag?.reihe || []).find((e) => e?.anbieter === "claude"); return [{ anbieter: "claude", ...(c?.modell && MODELL.test(c.modell) ? { modell: c.modell } : { modell: "opus" }) }]; }
+  // Prüfungen durch fremde Anbieter nur, wenn dieser PC eine Betriebssystem-Sandbox hat (macOS/Linux); sonst nur Claude (Nachprüfung 2026-10-23)
+  if (aufgabe === "pruefung" && !(mitSandbox ?? sandboxArt())) { const c = (eintrag?.reihe || []).find((e) => e?.anbieter === "claude"); return [{ anbieter: "claude", ...(c?.modell && MODELL.test(c.modell) ? { modell: c.modell } : { modell: "opus" }) }]; }
   const r = Array.isArray(eintrag?.reihe) ? eintrag.reihe : STANDARD[aufgabe] || STANDARD.chat;
   const gesehen = new Set();
-  return r.filter((e) => e && ANBIETER[e.anbieter] && !gesehen.has(e.anbieter) && gesehen.add(e.anbieter))
+  const reihe = r.filter((e) => e && ANBIETER[e.anbieter] && !gesehen.has(e.anbieter) && gesehen.add(e.anbieter))
     .map((e) => ({ anbieter: e.anbieter, ...(typeof e.modell === "string" && MODELL.test(e.modell) && e.modell !== "automatisch" ? { modell: e.modell } : {}) }));
+  if (aufgabe === "pruefung" && !reihe.some((e) => e.anbieter === "claude")) reihe.push({ anbieter: "claude", modell: "opus" });   // Rückfall
+  return reihe.length ? reihe : (STANDARD[aufgabe] || STANDARD.chat);
 }
 
 /** Woran erkennt man „Limit voll“ in der Ausgabe eines Anbieters? */
@@ -115,7 +119,9 @@ export async function codexFrage(prompt, { modell, signal } = {}) {
     const leer = path.join(tmp, "leer"); await mkdir(leer);
     const args = ["exec", "--skip-git-repo-check", "--sandbox", "read-only", "--color", "never", "-c", "mcp_servers={}", "--cd", leer, "--output-last-message", datei,
       ...(modell && MODELL.test(modell) ? [`--model=${modell}`] : []), "-"];
-    await lauf(prog, args, { cwd: leer, eingabe: OHNE_WERKZEUGE + prompt, env: minimaleUmgebung(), signal });
+    const sbx = await sandboxLauf({ anbieter: "chatgpt", prog, arbeit: tmp, env: minimaleUmgebung() });
+    try { await lauf(sbx ? { befehl: sbx.befehl, vorne: sbx.vorne } : prog, args, { cwd: leer, eingabe: OHNE_WERKZEUGE + prompt, env: sbx ? sbx.env : minimaleUmgebung(), signal }); }
+    finally { for (const f of sbx?.nachher || []) await f(); }
     const t = (await readFile(datei, "utf8").catch(() => "")).trim();
     if (!t) throw new Error("Codex hat keine Antwort geliefert");
     if (verdaechtig(t)) throw new Error("Antwort verworfen (verdächtiger Inhalt)");
@@ -134,7 +140,10 @@ export async function geminiFrage(prompt, { modell, signal } = {}) {
     // Eigene System-Einstellungen: keine MCP-Server, keine zusätzlichen Ordner, Shell/Schreiben/Web gesperrt (Nachprüfung M1)
     const einst = path.join(tmp, "system-settings.json");
     await writeFile(einst, JSON.stringify({ mcpServers: {}, excludeTools: ["run_shell_command", "write_file", "replace", "web_fetch", "google_web_search"], tools: { exclude: ["run_shell_command", "write_file", "replace", "web_fetch", "google_web_search"] }, context: { includeDirectories: [] } }));
-    const { aus } = await lauf(prog, args, { cwd: tmp, eingabe: OHNE_WERKZEUGE + prompt, env: minimaleUmgebung({ GEMINI_CLI_SYSTEM_SETTINGS_PATH: einst }), signal });
+    const sbx = await sandboxLauf({ anbieter: "gemini", prog, arbeit: tmp, env: minimaleUmgebung({ GEMINI_CLI_SYSTEM_SETTINGS_PATH: einst }) });
+    let aus;
+    try { ({ aus } = await lauf(sbx ? { befehl: sbx.befehl, vorne: sbx.vorne } : prog, args, { cwd: tmp, eingabe: OHNE_WERKZEUGE + prompt, env: sbx ? sbx.env : minimaleUmgebung({ GEMINI_CLI_SYSTEM_SETTINGS_PATH: einst }), signal })); }
+    finally { for (const f of sbx?.nachher || []) await f(); }
     const t = aus.replace(/\x1b\[[0-9;]*m/g, "").trim();
     if (!t) throw new Error("Gemini hat keine Antwort geliefert");
     if (verdaechtig(t)) throw new Error("Antwort verworfen (verdächtiger Inhalt)");

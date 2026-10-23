@@ -22,7 +22,7 @@ const AUFGABEN = [
   ["chat", "Chat überall (Fragen, Ausloten)", ""],
   ["konzept", "Konzept & Rückfragen vor dem Bauen", "Ergebnis ist die Konzept-Karte im Chat"],
   ["design", "Design-Chat im App-Designer", ""],
-  ["pruefung", "Unabhängige Prüfungen", "vorerst nur Claude – andere Anbieter folgen mit der Sandbox (Sicherheitsprüfung 23.10.)"],
+  ["pruefung", "Unabhängige Prüfungen", "Fremde Anbieter prüfen nur auf PCs mit Sandbox (Mac/Linux); unter Windows prüft Claude. Claude bleibt immer als Rückfall."],
   ["doku", "Dokumentation & Handbuch", "wird genutzt, sobald Doku-Aufträge getrennt laufen (Etappe 4)"],
   ["texte", "Texte & Übersetzungen", "wird genutzt, sobald Text-Aufträge getrennt laufen (Etappe 4)"],
   ["bilder", "Bilder & Grafiken", "wird mit Etappe 5 (Marke, Logo) genutzt; nur Anbieter, die Bilder erzeugen können"],
@@ -34,7 +34,7 @@ const VORSCHLAG = {
   chat: [{ anbieter: "chatgpt" }, { anbieter: "gemini" }, { anbieter: "claude", modell: "sonnet" }],
   konzept: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "opus" }],
   design: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }],
-  pruefung: [{ anbieter: "claude", modell: "opus" }],
+  pruefung: [{ anbieter: "chatgpt" }, { anbieter: "gemini" }, { anbieter: "claude", modell: "opus" }],
   doku: [{ anbieter: "gemini" }, { anbieter: "chatgpt" }, { anbieter: "claude", modell: "sonnet" }],
   texte: [{ anbieter: "chatgpt" }, { anbieter: "claude", modell: "haiku" }],
   bilder: [{ anbieter: "gemini" }, { anbieter: "chatgpt" }],
@@ -43,7 +43,7 @@ const VORSCHLAG = {
 const MODELL = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$/;
 
 function Zeile({ id, titel, hinweis, eintrag, admin, onSpeichern }) {
-  const fest = id === "bauen" || id === "pruefung";
+  const fest = id === "bauen";
   const [reihe, setReihe] = useState(eintrag?.reihe || STANDARD[id]);
   const [ab, setAb] = useState(eintrag?.weitergeben_ab ?? 90);
   const [busy, setBusy] = useState(false); const [eigen, setEigen] = useState(null); const [eigenText, setEigenText] = useState("");
@@ -72,7 +72,7 @@ function Zeile({ id, titel, hinweis, eintrag, admin, onSpeichern }) {
               {admin && !fest && <>
                 <button type="button" title="Früher" disabled={i === 0} onClick={() => tausche(i, i - 1)} className="p-0.5 disabled:opacity-30"><ArrowUp className="w-3 h-3" /></button>
                 <button type="button" title="Später" disabled={i === reihe.length - 1} onClick={() => tausche(i, i + 1)} className="p-0.5 disabled:opacity-30"><ArrowDown className="w-3 h-3" /></button>
-                <button type="button" title="Entfernen" disabled={reihe.length === 1} onClick={() => setReihe(reihe.filter((_, j) => j !== i))} className="p-0.5 disabled:opacity-30"><X className="w-3 h-3" /></button>
+                <button type="button" title="Entfernen" disabled={reihe.length === 1 || (id === "pruefung" && e.anbieter === "claude")} onClick={() => setReihe(reihe.filter((_, j) => j !== i))} className="p-0.5 disabled:opacity-30"><X className="w-3 h-3" /></button>
               </>}
             </span>);
         })}
