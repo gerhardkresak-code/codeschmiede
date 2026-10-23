@@ -782,16 +782,17 @@ function ZuErledigen({ d, ich, toast, onOeffne }) {
 
 // Weg bis live: Test (main) und Live (Zweig „live“) nebeneinander; einrichten, live schalten, zurück – nur der Admin
 function LiveWeg({ d, ich, projekt, toast }) {
-  const [versionen, setVersionen] = useState([]); const [auftrag, setAuftrag] = useState(null);
+  const [versionen, setVersionen] = useState([]); const [auftrag, setAuftrag] = useState(null); const [testStand, setTestStand] = useState(null);
   const [frage, setFrage] = useState(null); const [busy, setBusy] = useState(false);
   const [testUrl, setTestUrl] = useState("");
   const admin = ich.rolle === "admin";
   const holen = useCallback(async () => {
-    const [v, a] = await Promise.all([
+    const [v, a, t] = await Promise.all([
       supabase.from("ws_live_versionen").select("*").eq("projekt_id", d.projektId).order("id", { ascending: false }).limit(20),
       supabase.from("ws_live_auftraege").select("*").eq("projekt_id", d.projektId).order("id", { ascending: false }).limit(1),
+      supabase.from("ws_abgleich").select("main_sha, zeit").eq("projekt_id", d.projektId).maybeSingle(),   // Stand von main aus dem Abgleich (alle 10 Minuten)
     ]);
-    setVersionen(v.data || []); setAuftrag(a.data?.[0] || null);
+    setVersionen(v.data || []); setAuftrag(a.data?.[0] || null); setTestStand(/^[0-9a-f]{40}$/.test(t.data?.main_sha || "") ? t.data : null);
   }, [d.projektId]);
   useEffect(() => {
     holen();
@@ -804,7 +805,7 @@ function LiveWeg({ d, ich, projekt, toast }) {
   if (!projekt) return null;
   const offen = auftrag && ["wartet", "laeuft"].includes(auftrag.stand);
   const anfordern = async (art, version) => {
-    setBusy(true); const { error } = await supabase.rpc("ws_live_anfordern", { p_projekt: projekt.id, p_art: art, p_version: version?.id ?? null }); setBusy(false); setFrage(null);
+    setBusy(true); const { error } = await supabase.rpc("ws_live_anfordern", { p_projekt: projekt.id, p_art: art, p_version: version?.id ?? null, p_commit: art === "live" ? testStand?.main_sha ?? null : null }); setBusy(false); setFrage(null);
     toast(error ? fehler(error) : art === "einrichten" ? "Wird eingerichtet – die Werkstatt des Admins legt den Zweig „live“ an" : art === "live" ? "Live schalten gestartet" : `Zurück auf ${version.bezeichnung} gestartet`);
     holen();
   };
@@ -849,12 +850,13 @@ function LiveWeg({ d, ich, projekt, toast }) {
           <div className="rounded-xl border border-blue-300 dark:border-blue-900 p-4 flex flex-col gap-2">
             <div className="flex items-center gap-2"><FlaskConical className="w-5 h-5 text-blue-600" /><b className="font-display text-lg">Test</b><span className="text-xs text-slate-500">neuester Hauptstand (main)</span></div>
             {projekt.test_url && <a className="text-sm font-mono text-blue-700 dark:text-blue-300 break-all" href={projekt.test_url} target="_blank" rel="noreferrer">{projekt.test_url.replace(/^https:\/\//, "")}</a>}
+            <span className="text-xs text-slate-500">{testStand ? <>Stand <span className="font-mono">{testStand.main_sha.slice(0, 7)}</span> · abgeglichen {fmt(testStand.zeit)}{jetzt?.commit_sha === testStand.main_sha ? " · gleich wie live" : ""}</> : "Stand noch unbekannt – der Abgleich der Werkstatt läuft alle 10 Minuten"}</span>
             <p className="text-sm text-slate-600 dark:text-slate-300">{imTest.length ? <>Neu gegenüber live: {imTest.slice(0, 5).map((f) => f.name).join(" · ")}{imTest.length > 5 ? " …" : ""}</> : "Gleich wie live oder nur kleine Änderungen ohne Feature."}</p>
             <div className="flex gap-2 flex-wrap mt-auto">
               {projekt.test_url && <a className={`${ghost} h-9`} href={projekt.test_url} target="_blank" rel="noreferrer"><ExternalLink className="w-4 h-4" />Testseite öffnen</a>}
               {admin && (frage?.art === "live"
-                ? <span className="flex gap-2 flex-wrap items-center text-sm">Testfassung live schalten?<button type="button" className={`${btn} h-9 text-sm`} disabled={busy} onClick={() => anfordern("live")}>Ja, live schalten</button><button type="button" className={`${ghost} h-9`} onClick={() => setFrage(null)}>Abbrechen</button></span>
-                : <button type="button" className={`${btn} h-9 text-sm`} disabled={busy || offen} onClick={() => setFrage({ art: "live" })}><Rocket className="w-4 h-4" />Live schalten</button>)}
+                ? <span className="flex gap-2 flex-wrap items-center text-sm">Stand {testStand?.main_sha.slice(0, 7)} live schalten? Genau dieser Stand geht live.<button type="button" className={`${btn} h-9 text-sm`} disabled={busy} onClick={() => anfordern("live")}>Ja, live schalten</button><button type="button" className={`${ghost} h-9`} onClick={() => setFrage(null)}>Abbrechen</button></span>
+                : <button type="button" className={`${btn} h-9 text-sm`} disabled={busy || offen || !testStand || jetzt?.commit_sha === testStand?.main_sha} onClick={() => setFrage({ art: "live" })}><Rocket className="w-4 h-4" />Live schalten</button>)}
             </div>
           </div>
           <div className="rounded-xl border border-green-300 dark:border-green-900 p-4 flex flex-col gap-2">
@@ -869,7 +871,10 @@ function LiveWeg({ d, ich, projekt, toast }) {
                     : <button type="button" className={`${ghost} h-8 text-xs ml-auto`} disabled={!!s || busy || offen} title={s || "Nur der Admin"} onClick={() => setFrage({ v })}><Undo2 className="w-3.5 h-3.5" />{s ? "gesperrt" : "Zurück …"}</button>)}
                   {s && <span className="basis-full text-xs text-slate-500">{s}</span>}
                 </div>); })}</div>}
-            {admin && <button type="button" className="text-xs text-slate-500 underline self-start mt-auto" onClick={() => umgestellt(false)}>Test & Live ausschalten (main geht wieder direkt live – vorher bei Cloudflare zurückstellen)</button>}
+            {admin && (frage?.art === "aus"
+              ? <span className="flex gap-2 flex-wrap items-center text-[13px] mt-auto rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-400 p-2">Test & Live ausschalten? Stelle vorher bei Cloudflare den Produktionszweig wieder auf „main“. Danach geht main direkt live und alles im Test gilt als live.
+                  <button type="button" className={`${btn} h-8 text-sm`} disabled={busy} onClick={() => { setFrage(null); umgestellt(false); }}>Ja, ausschalten</button><button type="button" className={`${ghost} h-8`} onClick={() => setFrage(null)}>Abbrechen</button></span>
+              : <button type="button" className="text-xs text-slate-500 underline self-start mt-auto" onClick={() => setFrage({ art: "aus" })}>Test & Live ausschalten …</button>)}
           </div>
         </div>)}
     </section>);
@@ -879,7 +884,7 @@ function LiveWeg({ d, ich, projekt, toast }) {
 const PRUEF_UMFANG = [["feature", "Ein Feature", "Code, Rechte, Datenschutz, Aussehen", "etwa 3–5 %"], ["gruppe", "Eine ganze Gruppe", "alle Features der Gruppe zusammen", "etwa 8–15 %"], ["app", "Die ganze App", "große Sicherheits- und Qualitätsprüfung", "etwa 20–40 %"]];
 function JetztPruefen({ d, ich, darf, projekt, toast }) {
   const [umfang, setUmfang] = useState("feature"); const [ziel, setZiel] = useState(""); const [busy, setBusy] = useState(false);
-  const [liste, setListe] = useState([]); const [offen, setOffen] = useState(null); const [gruppeFuer, setGruppeFuer] = useState("");
+  const [liste, setListe] = useState([]); const [offen, setOffen] = useState(null); const [gruppeFuer, setGruppeFuer] = useState(""); const [bestaetigen, setBestaetigen] = useState(null);
   const konzept = projekt?.konzept_gruppe_id;
   const gruppen = d.gruppen.filter((g) => g.id !== konzept && darf(g.bereich_id, "freigeben"));
   const features = d.features.filter((f) => !f.ausgebaut && gruppen.some((g) => g.id === f.gruppe_id));
@@ -925,7 +930,10 @@ function JetztPruefen({ d, ich, darf, projekt, toast }) {
             {p.stand === "wartet" && (ich.rolle === "admin" || p.von === ich.id) && <button type="button" className={`${ghost} h-8 text-xs self-start`} onClick={async () => { const { error } = await supabase.rpc("ws_pruefung_abbrechen", { p_id: p.id }); toast(error ? fehler(error) : "Prüfung abgebrochen"); holen(); }}><X className="w-3.5 h-3.5" />Abbrechen</button>}
             {p.stand === "rot" && !p.auftrag_id && auftragsGruppen.length > 0 && <div className="flex gap-2 flex-wrap items-center">
               {p.umfang === "app" && <select aria-label="Gruppe für den Auftrag" className={`${input} h-8 py-0 text-sm max-w-[180px]`} value={gruppeFuer} onChange={(e) => setGruppeFuer(e.target.value)}><option value="">Gruppe wählen …</option>{auftragsGruppen.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select>}
-              <button type="button" className={`${btn} h-8 text-sm`} disabled={p.umfang === "app" && !gruppeFuer} onClick={() => alsAuftrag(p)}><Send className="w-3.5 h-3.5" />Befunde als Auftrag</button></div>}
+              {bestaetigen === p.id
+                ? <span className="flex gap-2 flex-wrap items-center text-[13px] basis-full">Diese Befunde (oben) gehen als Auftrag an die Werkstatt – vorher durchlesen.
+                    <button type="button" className={`${btn} h-8 text-sm`} onClick={() => { setBestaetigen(null); alsAuftrag(p); }}>Ja, Auftrag stellen</button><button type="button" className={`${ghost} h-8`} onClick={() => setBestaetigen(null)}>Abbrechen</button></span>
+                : <button type="button" className={`${btn} h-8 text-sm`} disabled={p.umfang === "app" && !gruppeFuer} onClick={() => { setOffen(p.id); setBestaetigen(p.id); }}><Send className="w-3.5 h-3.5" />Befunde als Auftrag …</button>}</div>}
             {p.auftrag_id && <span className="text-xs text-slate-500">Daraus wurde Auftrag #{p.auftrag_id}.</span>}
           </div>))}</div>}
     </section>);

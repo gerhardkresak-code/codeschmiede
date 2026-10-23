@@ -25,7 +25,7 @@ import { pruefErgebnis } from "./lib/pruefung.mjs";
 import { designPrompt, designAntwort } from "./lib/design.mjs";
 import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
 import { repoAnlegen, repoSichtbarkeit, repoIstPrivat } from "./lib/repo.mjs";
-import { liveAusfuehren, pruefPrompt } from "./lib/live.mjs";
+import { liveAusfuehren, pruefPrompt, enthalten } from "./lib/live.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen } from "./lib/ki.mjs";
 import { rm } from "node:fs/promises";
 
@@ -429,16 +429,20 @@ async function lokalePruefung(ordner) {
 // ---------- Prüfung durch eine unabhängige Claude-Sitzung (nur lesen) ----------
 const PRUEF_ERLAUBT = ["Read", "Grep", "Glob", "Bash(git diff origin/main...HEAD)", "Bash(git diff --stat origin/main...HEAD)",
   "Bash(git diff origin/main)", "Bash(git diff --stat origin/main)", "Bash(git log --oneline -30)", "Bash(git status)"];
-async function claudePruefung(auftragId, ordner, prompt) {
+async function claudePruefung(auftragId, ordner, prompt, { nurLesen = false, grenzeMin = 0 } = {}) {
   const claude = findeClaude();
   if (!claude) throw new Error("Claude Code wurde auf diesem PC nicht gefunden.");
   const env = { ...process.env };
   for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE_CODE_USE_|CLAUDE_CODE_OAUTH)/i.test(k)) delete env[k];
-  const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", "opus", "--permission-mode", "default",
-    "--allowedTools", PRUEF_ERLAUBT.join(","), "--disallowedTools", ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", ...VERBOTEN].join(","),
-    "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", "--setting-sources", "user"];
+  // nurLesen (Prüfen per Knopf, Prüfung O2): wie der Chat – Datei-Werkzeuge nur im Prüf-Ordner (--restricted), keine Rückfragen, feste Lese-Sperren
+  const werkzeuge = nurLesen
+    ? ["--restricted", "--tools", "Read,Grep,Glob", "--disallowedTools", ["Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task", "mcp__*", ...VERBOTEN.filter((v) => v.startsWith("Read(")), ...LESE_SPERREN].join(","), "--permission-prompts", "none"]
+    : ["--allowedTools", PRUEF_ERLAUBT.join(","), "--disallowedTools", ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", ...VERBOTEN, ...LESE_SPERREN].join(",")];
+  const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", "opus", "--permission-mode", "default", ...werkzeuge,
+    "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", "--setting-sources", "user", "--settings", JSON.stringify({ disableAllHooks: true })];
+  const zeit = grenzeMin ? setTimeout(() => laeuft?.abort?.abort(), grenzeMin * 60 * 1000) : null;
   let ende = null; let kosten = 0;
-  await new Promise((fertig, fehl) => {
+  try { await new Promise((fertig, fehl) => {
     const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: ordner, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     laeuft.kind = kind;
     laeuft.abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
@@ -451,7 +455,7 @@ async function claudePruefung(auftragId, ordner, prompt) {
     });
     kind.on("error", (e) => fehl(e));
     kind.on("close", (code) => Promise.all(offen).then(() => (ende ? fertig() : fehl(new Error(`Prüfung beendet (${code}): ${fehlerText.slice(-300)}`)))));
-  });
+  }); } finally { if (zeit) clearTimeout(zeit); }
   return { text: ende?.result || "", kosten, ok: ende?.subtype === "success" };
 }
 
@@ -947,8 +951,24 @@ async function liveArbeit() {
   const a = data?.[0]; if (!a) return false;
   melde("status", a.art === "einrichten" ? "Test & Live wird eingerichtet" : a.art === "live" ? "Live schalten" : "Live zurücksetzen");
   try {
-    const r = await liveAusfuehren({ sh: ghGrenze, auftrag: a, melde: (t) => melde("status", t) });
-    const { error: e2 } = await db.rpc("ws_live_ergebnis", { p_pc: pcId, p_id: a.id, p_commit: r.commit, p_bezeichnung: r.bezeichnung, p_migrationen: r.migrationen });
+    const { data: projekt } = await db.from("ws_projekte").select("id, vorschau_domain").eq("id", a.projekt_id).single();
+    const r = await liveAusfuehren({ sh: ghGrenze, auftrag: a, mussLaufen: !!projekt?.vorschau_domain, melde: (t) => melde("status", t) });
+    // Feature-Stände: live ist ein Feature, wenn der Stand seines letzten live gegangenen Auftrags im neuen Live-Stand enthalten ist (Prüfung R1/Hinweis 2)
+    const liveF = []; const testF = [];
+    if (a.art !== "einrichten") {
+      const { data: gr } = await db.from("ws_gruppen").select("id, ws_bereiche!inner(projekt_id)").eq("ws_bereiche.projekt_id", a.projekt_id);
+      const gids = (gr || []).map((g) => g.id);
+      const { data: fs } = gids.length ? await db.from("ws_features").select("id, stand").in("gruppe_id", gids).in("stand", a.art === "live" ? ["test"] : ["test", "live"]) : { data: [] };
+      for (const f of fs || []) {
+        const { data: au } = await db.from("ws_auftraege").select("live_commit").eq("feature_id", f.id).not("live_commit", "is", null).order("id", { ascending: false }).limit(1);
+        const c = au?.[0]?.live_commit; if (!c) continue;
+        let drin = false; try { drin = await enthalten(ghGrenze, a.repo, c, r.commit); } catch { continue; }
+        if (drin && f.stand === "test") liveF.push(f.id);
+        if (!drin && f.stand === "live") testF.push(f.id);
+      }
+    }
+    const { error: e2 } = await db.rpc("ws_live_ergebnis", { p_pc: pcId, p_id: a.id, p_commit: r.commit, p_bezeichnung: r.bezeichnung, p_migrationen: r.migrationen,
+      p_live_features: liveF, p_test_features: testF, p_hinweis: r.hinweis || null });
     if (e2) throw e2;
   } catch (e) {
     const t = kuerzen(ohneGeheimnisse(e?.stderr || e?.message || String(e)), 600);
@@ -978,7 +998,7 @@ async function pruefArbeit() {
     }
     const ordner = await leseOrdner(projekt);   // nur lesen: main im eigenen Lese-Ordner, kein Code wird ausgeführt
     const sha = await git(ordner, "rev-parse", "HEAD");
-    const lauf = await claudePruefung(null, ordner, pruefPrompt({ projekt, umfang: p.umfang, feature, gruppe, features }));
+    const lauf = await claudePruefung(null, ordner, pruefPrompt({ projekt, umfang: p.umfang, feature, gruppe, features }), { nurLesen: true, grenzeMin: 45 });
     const e = pruefErgebnis(lauf.text);
     const ergebnis = e.ergebnis === "gruen" ? "gruen" : e.ergebnis === "rot" ? "rot" : "fehler";
     const { error: e2 } = await db.rpc("ws_pruefung_ergebnis", { p_pc: pcId, p_id: p.id, p_ergebnis: ergebnis, p_befund: kuerzen(ohneGeheimnisse(e.befund || lauf.text || ""), 8000), p_ki: "claude/opus", p_commit: sha, p_kosten: lauf.kosten || 0 });

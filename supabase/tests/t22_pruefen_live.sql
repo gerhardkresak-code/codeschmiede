@@ -75,13 +75,15 @@ select ws_live_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),(s
 select ws_live_umgestellt('neu', true, 'javascript:alert(1)');
 select ws_live_umgestellt('neu', true, 'https://main.neu.pages.dev');
 select live_zweig, test_url from ws_projekte where id='neu';
+\echo [8b] Live ohne Test-Stand -> FEHLER
+select ws_live_anfordern('neu','live');
 \echo [9] Live schalten -> v2 mit neuer Migration; zurück auf v1 -> FEHLER (Datenbank passt nicht)
-select ws_live_anfordern('neu','live') > 0 as ok;
+select ws_live_anfordern('neu','live',null,repeat('f',40)) > 0 as ok;
 select art from ws_live_nehmen((select id from ws_werkstatt_pcs where name='PC-ADM'));
 select ws_live_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),(select max(id) from ws_live_auftraege),repeat('2',40),'v2',array['0001.sql','0002.sql','0003.sql']);
 select ws_live_anfordern('neu','zurueck',(select id from ws_live_versionen where bezeichnung='v1'));
 \echo [10] v3 ohne neue Migration; zurück auf v2 -> OK; auf aktuelle -> FEHLER; fremde Version -> FEHLER
-select ws_live_anfordern('neu','live') > 0 as ok;
+select ws_live_anfordern('neu','live',null,repeat('f',40)) > 0 as ok;
 select art from ws_live_nehmen((select id from ws_werkstatt_pcs where name='PC-ADM'));
 select ws_live_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),(select max(id) from ws_live_auftraege),repeat('3',40),'v3',array['0001.sql','0002.sql','0003.sql']);
 select ws_live_anfordern('neu','zurueck',(select id from ws_live_versionen where bezeichnung='v3'));
@@ -90,7 +92,7 @@ select art, commit_sha = repeat('2',40) as v2 from ws_live_nehmen((select id fro
 select ws_live_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),(select max(id) from ws_live_auftraege),repeat('2',40),'v2',array['0001.sql','0002.sql','0003.sql']);
 select bezeichnung, art from ws_live_versionen where projekt_id='neu' order by id;
 \echo [11] Fehler melden -> Stand fehler, keine Version
-select ws_live_anfordern('neu','live') > 0 as ok;
+select ws_live_anfordern('neu','live',null,repeat('f',40)) > 0 as ok;
 select art from ws_live_nehmen((select id from ws_werkstatt_pcs where name='PC-ADM'));
 select ws_live_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),(select max(id) from ws_live_auftraege),null,null,null,'GitHub nicht erreichbar');
 select stand, hinweis from ws_live_auftraege order by id desc limit 1;
@@ -98,8 +100,23 @@ select count(*) as versionen from ws_live_versionen where projekt_id='neu';
 \echo [12] Feature im Test wird beim Live schalten live
 reset role; update ws_features set stand='test' where id='N-1'; set role authenticated;
 :ADM
-select ws_live_anfordern('neu','live') > 0 as ok;
+select ws_live_anfordern('neu','live',null,repeat('f',40)) > 0 as ok;
 select art from ws_live_nehmen((select id from ws_werkstatt_pcs where name='PC-ADM'));
-select ws_live_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),(select max(id) from ws_live_auftraege),repeat('4',40),'v4',array['0001.sql','0002.sql','0003.sql']);
+select ws_live_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),(select max(id) from ws_live_auftraege),repeat('4',40),'v4',array['0001.sql','0002.sql','0003.sql'],null,array['N-1','trainer-fremd']);
 select stand from ws_features where id='N-1';
+\echo [13] Leser sieht keine Prüfungen; Entwickler sieht Feature-, aber keine App-Prüfung; fremder PC meldet -> FEHLER
+reset role;
+insert into auth.users values ('00000000-0000-0000-0000-0000000000e1','e1@x.at',now()) on conflict do nothing;
+insert into ws_benutzer(id,name,rolle,aktiv) values ('00000000-0000-0000-0000-0000000000e1','Leser','leser',true) on conflict do nothing;
+insert into ws_projekt_mitglieder values ('neu','00000000-0000-0000-0000-0000000000e1','leser') on conflict do nothing;
+set role authenticated;
+\set E1 'select set_config(''request.jwt.claim.sub'',''00000000-0000-0000-0000-0000000000e1'',false) \\g /dev/null'
+:E1
+select count(*) as leser_sieht from ws_pruefungen;
+:D1
+select umfang, count(*) from ws_pruefungen group by umfang order by umfang;
+:ADM
+select ws_live_anfordern('neu','live',null,repeat('f',40)) > 0 as ok;
+select art from ws_live_nehmen((select id from ws_werkstatt_pcs where name='PC-ADM'));
+select ws_live_ergebnis((select id from ws_werkstatt_pcs where name='PC-D1'),(select max(id) from ws_live_auftraege),repeat('5',40),'v5',array['x']);
 rollback;
