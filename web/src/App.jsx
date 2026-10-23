@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
   Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power, Hammer,
-  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette,
+  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { WS_ICON, STAND, ROLLEN, BEREICH_RECHTE } from "./config";
@@ -129,7 +129,9 @@ function useAuftragDetails(ids) {
 }
 
 // ---------------- Hauptseite ----------------
-const merke = { lies: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, schreib: (k, v) => { try { localStorage.setItem(k, v); } catch { /* ohne Speicher */ } } };
+// „sitzung“ = nur bis zum Programmende (sessionStorage), sonst dauerhaft (localStorage)
+const speicher = (art) => (art === "sitzung" ? sessionStorage : localStorage);
+const merke = { lies: (k, art) => { try { return speicher(art).getItem(k); } catch { return null; } }, schreib: (k, v, art) => { try { speicher(art).setItem(k, v); } catch { /* ohne Speicher */ } } };
 
 export default function App() {
   const [sitzung, setSitzung] = useState(undefined);
@@ -158,7 +160,7 @@ export default function App() {
   if (!sitzung) return <Anmelden />;
   if (!ich) return <EinladungAnnehmen sitzung={sitzung} onFertig={ladeIch} />;
 
-  const nav = [["zentrale", "Auftrags-Zentrale", Inbox], ["vorschau", "Live-Vorschau", Eye], ["designer", "App-Designer", Palette], ["_", "Ablauf"], ["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen], ["_", "Dokumentation"], ["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["_", "Verwaltung"], ["benutzer", "Benutzer & Rechte", KeyRound], ["verbrauch", "Verbrauch & Limits", Gauge]];
+  const nav = [["zentrale", "Auftrags-Zentrale", Inbox], ["vorschau", "Live-Vorschau", Eye], ["designer", "App-Designer", Palette], ["global", "Globale Einstellungen", Globe], ["_", "Ablauf"], ["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen], ["_", "Dokumentation"], ["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["_", "Verwaltung"], ["benutzer", "Benutzer & Rechte", KeyRound], ["verbrauch", "Verbrauch & Limits", Gauge]];
   const offen = daten.auftraege.filter((a) => a.offeneFrage).length;
   const aktuell = daten.projekte.find((p) => p.id === daten.projektId);
   const PIcon = WS_ICON[aktuell?.symbol] || Layers;
@@ -206,6 +208,7 @@ export default function App() {
         {daten.laden ? <div className="grid place-items-center py-20"><Loader2 className="w-6 h-6 animate-spin text-emerald-700" /></div>
           : !daten.projektId ? <div className={`${card} p-8 text-slate-500`}>Du bist noch keinem Projekt zugeordnet. Der Admin nimmt dich in ein Projekt auf.</div>
           : ansicht === "zentrale" ? <Zentrale key={daten.projektId} d={daten} ich={ich} toast={setToast} />
+          : ansicht === "global" ? <Zentrale key={daten.projektId + "-global"} d={daten} ich={ich} toast={setToast} nurGlobal />
           : ansicht === "designer" ? <Designer key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "benutzer" ? <BenutzerRechte d={daten} ich={ich} toast={setToast} />
           : ansicht === "verbrauch" ? <Verbrauch d={daten} ich={ich} toast={setToast} />
@@ -249,7 +252,16 @@ function Spaeter({ ansicht }) {
 }
 
 // ---------------- Zentrale ----------------
-function Zentrale({ d, ich, toast }) {
+// nurGlobal: Ansicht „Globale Einstellungen“ (Anweisung Gerhard 2026-10-23 10:20) – Bereich, der in der App nie als eigener Bereich erscheint;
+// seine Features gelten für die ganze App. In der Auftrags-Zentrale wird er ausgeblendet.
+function Zentrale({ d: alle, ich, toast, nurGlobal = false }) {
+  const d = useMemo(() => {
+    const bereiche = alle.bereiche.filter((b) => !!b.global === nurGlobal);
+    const bids = new Set(bereiche.map((b) => b.id));
+    const gruppen = alle.gruppen.filter((g) => bids.has(g.bereich_id)); const gids = new Set(gruppen.map((g) => g.id));
+    const fids = new Set(alle.features.filter((f) => gids.has(f.gruppe_id)).map((f) => f.id));
+    return { ...alle, bereiche, gruppen, auftraege: nurGlobal ? alle.auftraege.filter((a) => gids.has(a.gruppe_id) || fids.has(a.feature_id)) : alle.auftraege };
+  }, [alle, nurGlobal]);
   const [sel, setSel] = useState({ g: d.gruppen[0]?.id, f: null });
   const [dlg, setDlg] = useState(null);
   const rolle = ich.rolle === "admin" ? "admin" : d.mitglieder.find((m) => m.projekt_id === d.projektId && m.benutzer_id === ich.id)?.rolle;
@@ -257,11 +269,26 @@ function Zentrale({ d, ich, toast }) {
   const g = d.gruppen.find((x) => x.id === sel.g) || d.gruppen[0];
   const feats = d.features.filter((f) => f.gruppe_id === g?.id && !f.ausgebaut);
   const f = sel.f ? d.features.find((x) => x.id === sel.f) : null;
-  const aufFor = (gid, fid) => d.auftraege.filter((a) => a.gruppe_id === gid && (fid === undefined || a.feature_id === fid));
+  const aufFor = (gid, fid) => d.auftraege.filter((a) => (fid === undefined ? a.gruppe_id === gid : a.feature_id === fid));
   const [station, setStation] = useState(null);
   const [platz, setPlatz] = useState(null); // Feature-Arbeitsplatz (Doppelklick)
+  // Features selbst zuordnen (Anweisung Gerhard 2026-10-23 10:26): Admin, per Dialog oder Ziehen auf eine Gruppe
+  const kannVerschieben = ich.rolle === "admin";
+  const [ziel, setZiel] = useState(null);
+  const verschiebe = async (fid, gid) => {
+    const feat = alle.features.find((x) => x.id === fid); if (!feat || feat.gruppe_id === gid) return;
+    const { error } = await supabase.rpc("ws_feature_verschieben", { p_feature: fid, p_gruppe: gid });
+    const gz = alle.gruppen.find((x) => x.id === gid);
+    if (error) toast(fehler(error)); else { toast(`„${feat.name}“ verschoben nach ${gz?.name || gid}`); await alle.holen?.(); }
+  };
+  const ablage = (gid) => kannVerschieben ? {
+    onDragOver: (e) => { if (e.dataTransfer.types.includes("text/cs-feature")) { e.preventDefault(); setZiel(gid); } },
+    onDragLeave: () => setZiel((z) => (z === gid ? null : z)),
+    onDrop: (e) => { e.preventDefault(); setZiel(null); const fid = e.dataTransfer.getData("text/cs-feature"); if (fid) verschiebe(fid, gid); },
+  } : {};
+  const globalGruppe = alle.gruppen.find((x) => alle.bereiche.find((b) => b.id === x.bereich_id)?.global);
   const fragen = d.auftraege.filter((a) => a.offeneFrage).length;
-  if (!g) return <div className={`${card} p-8 text-slate-500`}>Noch keine Gruppen angelegt.</div>;
+  if (!g) return <div className={`${card} p-8 text-slate-500`}>{nurGlobal ? "Für dieses Projekt gibt es noch keine globalen Einstellungen (Datenbank 0009 einspielen)." : "Noch keine Gruppen angelegt."}</div>;
   const platzF = platz ? d.features.find((x) => x.id === platz) : null;
   const platzG = platzF ? d.gruppen.find((x) => x.id === platzF.gruppe_id) : null;
   return (
@@ -288,8 +315,8 @@ function Zentrale({ d, ich, toast }) {
               {d.gruppen.filter((x) => x.bereich_id === b.id).map((x) => {
                 const Icon = WS_ICON[x.symbol] || Layers; const js = aufFor(x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const fr = js.filter((a) => a.offeneFrage).length;
                 return (
-                  <button key={x.id} type="button" aria-current={g.id === x.id} onClick={() => setSel({ g: x.id, f: null })}
-                    className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-[15px] ${g.id === x.id ? "bg-emerald-50 dark:bg-emerald-950/40 font-semibold shadow-[inset_3px_0_0_#047857]" : "hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20"}`}>
+                  <button key={x.id} type="button" aria-current={g.id === x.id} onClick={() => setSel({ g: x.id, f: null })} {...ablage(x.id)}
+                    className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-[15px] ${ziel === x.id ? "ring-2 ring-inset ring-orange-500 bg-orange-50 dark:bg-orange-950/40" : ""} ${g.id === x.id ? "bg-emerald-50 dark:bg-emerald-950/40 font-semibold shadow-[inset_3px_0_0_#047857]" : "hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20"}`}>
                     <Icon className="w-[18px] h-[18px] shrink-0" /><span className="min-w-0 truncate">{x.name}</span>
                     <span className="ml-auto flex items-center gap-1.5">
                       {arbeitet && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />arbeitet</span>}
@@ -299,7 +326,9 @@ function Zentrale({ d, ich, toast }) {
                   </button>);
               })}
             </div>))}
-          {ich.rolle === "admin" && <button type="button" onClick={() => setDlg({ art: "gruppe" })} className="w-full flex items-center gap-2 px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 text-emerald-700 font-semibold text-sm"><Plus className="w-4 h-4" />Neue Gruppe</button>}
+          {!nurGlobal && kannVerschieben && globalGruppe && <div {...ablage(globalGruppe.id)} className={`mx-3 my-2 rounded-lg border border-dashed px-3 py-2 text-xs flex items-center gap-2 ${ziel === globalGruppe.id ? "border-orange-500 bg-orange-50 text-orange-800 dark:bg-orange-950/40 dark:text-orange-200" : "border-slate-300 dark:border-slate-700 text-slate-500"}`}><Globe className="w-4 h-4" />Hierher ziehen = Globale Einstellungen</div>}
+          {nurGlobal && <p className="px-4 py-3 text-xs text-slate-500 border-t border-slate-200 dark:border-slate-800">Diese Features gelten für die ganze App und alle Nutzer. In der App selbst gibt es dafür keinen eigenen Bereich.</p>}
+          {ich.rolle === "admin" && !nurGlobal && <button type="button" onClick={() => setDlg({ art: "gruppe" })} className="w-full flex items-center gap-2 px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 text-emerald-700 font-semibold text-sm"><Plus className="w-4 h-4" />Neue Gruppe</button>}
         </nav>
 
         <section className={card}>
@@ -320,6 +349,7 @@ function Zentrale({ d, ich, toast }) {
               const js = aufFor(g.id, x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const neu = x.neu_bis && new Date(x.neu_bis) > new Date(); const frageHier = js.some((a) => a.offeneFrage);
               return (
                 <button key={x.id} type="button" aria-current={sel.f === x.id} onClick={() => setSel({ g: g.id, f: x.id })} onDoubleClick={() => setPlatz(x.id)}
+                  draggable={kannVerschieben} onDragStart={(e) => { e.dataTransfer.setData("text/cs-feature", x.id); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setZiel(null)}
                   onKeyDown={(e) => { if (e.key === "Enter" && sel.f === x.id) { e.preventDefault(); setPlatz(x.id); } }} title="Einmal klicken: Kurzinfo · doppelt klicken: Arbeitsplatz mit Chat und Live-Vorschau"
                   className={`text-left flex flex-col gap-2 rounded-xl border p-3.5 min-w-0 ${frageHier ? "ring-1 ring-amber-400" : ""} ${x.ausgeblendet ? "opacity-55" : ""} ${sel.f === x.id ? "border-emerald-600 ring-1 ring-emerald-600 bg-emerald-50 dark:bg-emerald-950/40" : "border-slate-200 dark:border-slate-800 hover:border-emerald-600"} ${arbeitet ? "shadow-[inset_0_3px_0_#2563eb]" : ""}`}>
                   <div className="flex items-start justify-between gap-2"><h3 className="font-display font-semibold text-[17px] leading-tight">{x.name}</h3>
@@ -335,18 +365,19 @@ function Zentrale({ d, ich, toast }) {
           </div>
         </section>
 
-        {f ? <FeatureKurzinfo f={f} g={g} d={d} onOeffnen={() => setPlatz(f.id)} onGruppe={() => setSel({ g: g.id, f: null })} />
+        {f ? <FeatureKurzinfo f={f} g={g} d={d} onOeffnen={() => setPlatz(f.id)} onGruppe={() => setSel({ g: g.id, f: null })} onVerschieben={kannVerschieben ? () => setDlg({ art: "verschieben", f }) : null} />
           : <AuftragsChat g={g} f={null} d={d} ich={ich} darf={darf} toast={toast} kanal="gruppe" />}
       </div>}
       {dlg?.art === "feature" && <NeuesFeature g={g} ich={ich} texter={rolle === "texter"} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: g.id, f: id })} />}
       {dlg?.art === "gruppe" && <NeueGruppe d={d} ich={ich} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: id, f: null })} />}
       {dlg?.art === "loeschen" && <Loeschen f={dlg.f} g={g} ich={ich} toast={toast} onClose={() => setDlg(null)} />}
+      {dlg?.art === "verschieben" && <Verschieben f={dlg.f} d={alle} onClose={() => setDlg(null)} onWahl={async (gid) => { setDlg(null); await verschiebe(dlg.f.id, gid); setSel({ g: g.id, f: null }); }} />}
     </>
   );
 }
 
 function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschmiede", baustein, onBausteinFertig, eingebettet }) {
-  const auftraege = d.auftraege.filter((a) => a.gruppe_id === g.id && (!f || a.feature_id === f.id));
+  const auftraege = d.auftraege.filter((a) => (f ? a.feature_id === f.id : a.gruppe_id === g.id));   // je Feature: Verlauf bleibt beim Verschieben
   const ids = auftraege.map((a) => a.id);
   const { nachrichten, log, erlaubnisse } = useAuftragDetails(ids);
   const [text, setText] = useState(""); const [busy, setBusy] = useState(false); const [tab, setTab] = useState("gespraech");
@@ -356,6 +387,9 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
   const kannFrei = darf(g.bereich_id, "freigeben");
   const name = (id) => d.benutzer.find((u) => u.id === id)?.name || "Mitglied";
   useEffect(() => { if (!laufend) setTab("gespraech"); }, [laufend]);
+  // Chats starten immer beim letzten Eintrag (Neue Anweisung Gerhard 2026-10-23 10:20)
+  const verlaufRef = useRef(null);
+  useEffect(() => { const el = verlaufRef.current; if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [nachrichten.length, log.length, tab, g.id, f?.id]);
 
   const senden = async () => {
     const t = text.trim(); if (!t) return; setBusy(true);
@@ -395,14 +429,14 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
         </div>
       </div>
       {tab === "live" && laufend ? (
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 text-[13px] min-h-[240px]" aria-live="polite">
+        <div ref={verlaufRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 text-[13px] min-h-[240px]" aria-live="polite">
           {log.filter((l) => l.auftrag_id === laufend.id).map((l) => (
             <div key={l.id} className="grid grid-cols-[auto_minmax(0,1fr)] gap-2"><time className="text-xs text-slate-400 tabular-nums">{new Date(l.erstellt).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" })}</time>
               <div className="min-w-0"><span>{l.text}</span>{l.ausschnitt && <pre className="mt-1 font-mono text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-2 overflow-x-auto">{l.ausschnitt.split("\n").map((z, i) => <span key={i} className={z.startsWith("+") ? "text-green-600" : z.startsWith("-") ? "text-red-600" : ""}>{z + "\n"}</span>)}</pre>}</div></div>))}
           {offeneErl.filter((e) => e.auftrag_id === laufend.id).map((e) => <ErlaubnisKarte key={e.id} e={e} g={g} kann={kannFrei} onEntscheid={erlauben} />)}
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 min-h-[220px]" aria-live="polite">
+        <div ref={verlaufRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 min-h-[220px]" aria-live="polite">
           {zahlBeantwortet > 0 && <button type="button" onClick={() => setAlleFragen(!alleFragen)} className="self-center text-xs text-slate-500 underline underline-offset-2">{alleFragen ? "Beantwortete Rückfragen ausblenden" : `${zahlBeantwortet} beantwortete Rückfrage${zahlBeantwortet > 1 ? "n" : ""} (abgeschlossen) anzeigen`}</button>}
           {auftraege.length === 0 && <div className="text-sm text-slate-500 text-center py-8">{f ? `Noch kein Auftrag zu „${f.name}“.` : `Noch kein Auftrag für ${g.name}.`} Beschreibe unten, was sich ändern soll.<br /><span className="text-xs">Bitte keine Daten von Vereinsmitgliedern hineinschreiben.</span></div>}
           {auftraege.map((a) => (
@@ -504,7 +538,28 @@ function PruefBefunde({ a }) {
 }
 
 // ---------------- Kurzinfo (einfacher Klick auf ein Feature) ----------------
-function FeatureKurzinfo({ f, g, d, onOeffnen, onGruppe }) {
+// Feature in eine andere Gruppe verschieben – alle Gruppen des Projekts, auch „Globale Einstellungen“
+function Verschieben({ f, d, onClose, onWahl }) {
+  const [q, setQ] = useState("");
+  const bereiche = [...d.bereiche].sort((a, b) => (a.global ? 1 : 0) - (b.global ? 1 : 0));
+  return (
+    <Dialog title={`„${f.name}“ verschieben`} onClose={onClose}>
+      <p className="text-sm text-slate-500 mb-2">Wähle die neue Gruppe. Laufende und abgeschlossene Aufträge bleiben beim Feature.</p>
+      <input autoFocus className={`${input} mb-2`} placeholder="Gruppe suchen …" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="max-h-[50vh] overflow-auto space-y-2">
+        {bereiche.map((b) => {
+          const gs = d.gruppen.filter((x) => x.bereich_id === b.id && x.name.toLowerCase().includes(q.toLowerCase()));
+          if (!gs.length) return null;
+          return (<div key={b.id}><div className="text-[11px] uppercase tracking-widest font-semibold text-slate-500 px-1 pb-1 flex items-center gap-1">{b.global && <Globe className="w-3.5 h-3.5" />}{b.global ? "Global – gilt für die ganze App" : b.name}</div>
+            {gs.map((x) => { const Icon = WS_ICON[x.symbol] || Layers; const jetzt = x.id === f.gruppe_id;
+              return <button key={x.id} type="button" disabled={jetzt} onClick={() => onWahl(x.id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-sm ${jetzt ? "opacity-50" : "hover:bg-emerald-50 dark:hover:bg-emerald-950/40"}`}><Icon className="w-4 h-4" />{x.name}{jetzt && <span className="ml-auto text-xs">aktuell</span>}</button>; })}
+          </div>);
+        })}
+      </div>
+    </Dialog>);
+}
+
+function FeatureKurzinfo({ f, g, d, onOeffnen, onGruppe, onVerschieben }) {
   const js = d.auftraege.filter((a) => a.feature_id === f.id);
   const letzter = js[js.length - 1];
   const laufend = js.find((a) => a.stand === "laeuft");
@@ -522,7 +577,8 @@ function FeatureKurzinfo({ f, g, d, onOeffnen, onGruppe }) {
       </dl>
       <button type="button" className={btn} onClick={onOeffnen}><Layers className="w-4 h-4" />Öffnen: Chat & Live-Vorschau</button>
       <button type="button" className={ghost} onClick={onGruppe}><MessageSquare className="w-4 h-4" />Zum Chat der Gruppe</button>
-      <p className="text-xs text-slate-500">Tipp: Doppelklick auf die Karte öffnet den Arbeitsplatz direkt.</p>
+      {onVerschieben && <button type="button" className={ghost} onClick={onVerschieben}><FolderInput className="w-4 h-4" />Verschieben …</button>}
+      <p className="text-xs text-slate-500">Tipp: Doppelklick auf die Karte öffnet den Arbeitsplatz direkt.{onVerschieben ? " Zum Verschieben die Karte auf eine Gruppe links ziehen." : ""}</p>
     </aside>);
 }
 
@@ -698,7 +754,7 @@ function NeuesFeature({ g, ich, texter, toast, onClose, onFertig }) {
 }
 
 function NeueGruppe({ d, ich, toast, onClose, onFertig }) {
-  const [name, setName] = useState(""); const [bereich, setBereich] = useState(d.bereiche[0]?.id); const [symbol, setSymbol] = useState("layers"); const [busy, setBusy] = useState(false);
+  const [name, setName] = useState(""); const [bereich, setBereich] = useState(d.bereiche.find((b) => !b.global)?.id); const [symbol, setSymbol] = useState("layers"); const [busy, setBusy] = useState(false);
   const los = async () => {
     if (!name.trim()) return; setBusy(true);
     const slug = name.trim().toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "gruppe-" + Date.now();
@@ -711,7 +767,7 @@ function NeueGruppe({ d, ich, toast, onClose, onFertig }) {
   return (
     <Dialog title="Neue Gruppe" onClose={onClose}>
       <label className="flex flex-col gap-1 text-sm text-slate-500">Name<input id="ws-gname" className={input} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></label>
-      <label className="flex flex-col gap-1 text-sm text-slate-500">Bereich<select id="ws-gbereich" className={input} value={bereich} onChange={(e) => setBereich(e.target.value)}>{d.bereiche.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+      <label className="flex flex-col gap-1 text-sm text-slate-500">Bereich<select id="ws-gbereich" className={input} value={bereich} onChange={(e) => setBereich(e.target.value)}>{d.bereiche.filter((b) => !b.global).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
       <label className="flex flex-col gap-1 text-sm text-slate-500">Symbol<select id="ws-gsymbol" className={input} value={symbol} onChange={(e) => setSymbol(e.target.value)}>{Object.keys(WS_ICON).map((k) => <option key={k} value={k}>{k}</option>)}</select></label>
       <p className="text-xs text-slate-500">Die Gruppe bekommt eine eigene Werkstatt mit Gruppenwissen in docs/gruppen/.</p>
       <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={onClose}>Abbrechen</button><button type="button" className={btn} disabled={busy || !name.trim()} onClick={los}>Anlegen</button></div>
@@ -949,6 +1005,7 @@ function Verbrauch({ d, ich, toast }) {
 }
 
 // ---------------- Werkstatt (nur im Programm) ----------------
+let werkstattAutoVersucht = false;   // einmal je Programmstart
 function WerkstattSchalter({ ich, sitzung, d, toast }) {
   const [st, setSt] = useState(null); const [busy, setBusy] = useState(false);
   const desk = isDesktop();
@@ -961,25 +1018,33 @@ function WerkstattSchalter({ ich, sitzung, d, toast }) {
     return () => { aus = true; clearInterval(t); };
   }, [desk]);
   useEffect(() => { if (desk && st?.laeuft && sitzung?.access_token) tauri("ws_token", { token: sitzung.access_token }).catch(() => {}); }, [desk, st?.laeuft, sitzung?.access_token]);
-  if (!desk) return <span className="text-xs text-slate-500" title="Die Werkstatt läuft nur im Programm Codeschmiede">Werkstatt-PCs online: <b>{d.pcs.filter((p) => p.an && Date.now() - new Date(p.zuletzt).getTime() < 180000).length}</b></span>;
-  if (!darfWerkstatt) return <UpdateHinweis toast={toast} />;
   const an = !!st?.laeuft;
-  const umschalten = async () => {
+  const umschalten = async (auto = false) => {
     setBusy(true);
     try {
-      if (an) { await tauri("ws_stop"); toast("Werkstatt aus: dieser PC übernimmt keine Aufträge mehr"); return; }
+      if (an) { await tauri("ws_stop"); merke.schreib("cs-werkstatt-aus", "1", "sitzung"); toast("Werkstatt aus: dieser PC übernimmt keine Aufträge mehr (beim nächsten Start wieder an)"); return; }
       const v = await tauri("ws_check");
       const namen = { claude: "Claude Code", node: "Node.js", git: "Git", gh: "GitHub CLI" };
       const fehlt = ["claude", "node", "git", "gh"].filter((k) => !v[k]);
-      if (fehlt.length) { toast(`Auf diesem PC fehlt: ${fehlt.map((k) => namen[k]).join(", ")}`); return; }
-      if (!v.gh_angemeldet) { toast("GitHub ist auf diesem PC nicht angemeldet (einmal „gh auth login“)"); return; }
+      if (fehlt.length) { toast(`${auto ? "Werkstatt konnte nicht automatisch starten – " : ""}Auf diesem PC fehlt: ${fehlt.map((k) => namen[k]).join(", ")}`); return; }
+      if (!v.gh_angemeldet) { toast(`${auto ? "Werkstatt konnte nicht automatisch starten – " : ""}GitHub ist auf diesem PC nicht angemeldet (einmal „gh auth login“)`); return; }
+      merke.schreib("cs-werkstatt-aus", "", "sitzung");
       await tauri("ws_start", { config: { supabase_url: import.meta.env.VITE_SUPABASE_URL, anon_key: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, access_token: sitzung.access_token, user_id: ich.id, admin: ich.rolle === "admin" } });
-      toast("Werkstatt an: dieser PC übernimmt Aufträge");
+      toast(auto ? "Werkstatt automatisch eingeschaltet" : "Werkstatt an: dieser PC übernimmt Aufträge");
     } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
   };
+  // Neue Anweisung Gerhard 2026-10-23 10:20/10:22: Werkstatt ist bei jedem Programmstart an. Ausschalten gilt bis zum nächsten Start.
+  useEffect(() => {
+    if (!desk || !darfWerkstatt || !st || st.laeuft || busy || werkstattAutoVersucht || !sitzung?.access_token) return;
+    if (merke.lies("cs-werkstatt-aus", "sitzung") === "1") return;
+    werkstattAutoVersucht = true;
+    umschalten(true);
+  }, [desk, darfWerkstatt, st, busy, sitzung?.access_token]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!desk) return <span className="text-xs text-slate-500" title="Die Werkstatt läuft nur im Programm Codeschmiede">Werkstatt-PCs online: <b>{d.pcs.filter((p) => p.an && Date.now() - new Date(p.zuletzt).getTime() < 180000).length}</b></span>;
+  if (!darfWerkstatt) return <UpdateHinweis toast={toast} />;
   return (
     <>
-      <button type="button" role="switch" aria-checked={an} disabled={busy} onClick={umschalten} className="inline-flex items-center gap-2.5 rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 pl-1.5 pr-3 py-1 text-sm">
+      <button type="button" role="switch" aria-checked={an} disabled={busy} onClick={() => umschalten(false)} className="inline-flex items-center gap-2.5 rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 pl-1.5 pr-3 py-1 text-sm">
         <span className={`relative w-9 h-5 rounded-full transition ${an ? "bg-green-600" : "bg-slate-300 dark:bg-slate-700"}`}><i className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${an ? "left-[18px]" : "left-0.5"}`} /></span>
         Werkstatt {an ? "an" : "aus"}{st?.auftrag ? <span className="text-xs text-slate-500">· Auftrag #{st.auftrag}</span> : null}
       </button>

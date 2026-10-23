@@ -56,3 +56,9 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - **2026-10-22 22:40 – Dauerhafte PR-Freigabe:** „Ich gebe alle PR somit frei“ gilt dauerhaft (Gerhard 22:40). Claude führt Pull Requests
   zusammen, sobald alle Prüfungen grün sind; rote Prüfungen, offene Befunde der unabhängigen Prüfung oder Datenbank-Änderungen, die Gerhard
   noch einspielen muss, halten den PR an. Entwürfe brauchen weiter Gerhards Freigabe vor dem Bau.
+- **2026-10-23 10:20 – Globale Einstellungen, Werkstatt an, Chats am Ende:** Unter dem App-Designer gibt es „Globale Einstellungen“:
+  je Projekt ein Bereich „Global“ (Gruppe „Globale Einstellungen“), aufgebaut wie alle Gruppen, in der App aber nie als eigener Bereich
+  sichtbar – die Features dort gelten für die ganze App und alle Nutzer (z. B. Anmeldung). Rechte wie jeder Bereich. Die Werkstatt
+  ist bei jedem Programmstart automatisch an (Ausschalten gilt bis zum nächsten Start). Chats starten immer beim letzten Eintrag.
+- **2026-10-23 10:26 – Features selbst zuordnen:** Gerhard ordnet Features in der Codeschmiede selbst zu und verschiebt sie (Dialog oder
+  Ziehen & Ablegen), auch in die Globalen Einstellungen. Aufträge und Verlauf bleiben beim Feature.
