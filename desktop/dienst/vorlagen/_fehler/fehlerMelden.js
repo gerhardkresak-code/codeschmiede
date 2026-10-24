@@ -64,7 +64,7 @@ export function fehlerMelden(fehler, extra = {}) {
     };
     fetch(`${URL_.replace(/\/$/, "")}/rest/v1/rpc/ws_fehler_melden`, {
       method: "POST", keepalive: true, credentials: "omit",
-      headers: { "Content-Type": "application/json", apikey: ANON, Authorization: `Bearer ${ANON}` },
+      headers: { "Content-Type": "application/json", "apikey": ANON, Authorization: `Bearer ${ANON}` },
       body: JSON.stringify({ p_schluessel: SCHLUESSEL, p_daten: daten }),
     }).catch(() => {});
   } catch { /* der Melder darf die App nie stören */ }

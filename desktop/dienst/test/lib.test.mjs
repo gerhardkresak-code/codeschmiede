@@ -11,6 +11,12 @@ test("Geheimnisse werden entfernt", () => {
   assert.equal(ohneGeheimnisse("password=geheim123"), "password=[entfernt]");
   assert.equal(ohneGeheimnisse("export GH=ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaa"), "export GH=[entfernt]");
   assert.equal(ohneGeheimnisse("normaler Text bleibt"), "normaler Text bleibt");
+  assert.equal(ohneGeheimnisse("with: { persist-credentials: false }"), "with: { persist-credentials: false }");
+  assert.equal(ohneGeheimnisse("token: 'true'"), "token: 'true'");
+  assert.equal(ohneGeheimnisse("password=falsehood123"), "password=[entfernt]");
+  assert.equal(ohneGeheimnisse("api_key: nullwert99"), "api_key: [entfernt]");
+  assert.equal(ohneGeheimnisse("password: false-x9"), "password: [entfernt]");
+  assert.equal(ohneGeheimnisse('fetch(u, { credentials: "omit" })'), 'fetch(u, { credentials: "omit" })');
 });
 
 test("Modellwahl nach Aufwand", () => {
@@ -180,4 +186,18 @@ test("Design-Chat: Umdesign-Fragen bekommen eigene Anleitung", async () => {
   assert.match(p, /UMDESIGN: \{"neu":"CalendarCheck"\}/); assert.match(p, /Symbol „Calendar“/); assert.ok(!/VORSCHLAG: \{"farben"/.test(p));
   const b = designPrompt({ projektName: "TTG", frage: "[Umdesign Baustein ui-alert] Wunsch: auffälliger", werte: {} });
   assert.match(b, /einstellungen/); assert.match(b, /Grundbaustein „ui-alert“/);
+});
+
+test("Vorlagen enthalten keine vermeintlichen Geheimnisse (sonst lehnt der Hand-Auftrag sie ab)", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const wurzel = new URL("../vorlagen/", import.meta.url).pathname;
+  const dateien = [];
+  const lauf = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) lauf(p); else dateien.push(p); } };
+  lauf(wurzel);
+  for (const p of dateien) {
+    if (/\.(png|ico|icns|jpg|woff2?)$/i.test(p)) continue;
+    const t = fs.readFileSync(p, "utf8");
+    assert.equal(og(t), t, `Vorlage ${path.relative(wurzel, p)} würde als Geheimnis gelten`);
+  }
 });

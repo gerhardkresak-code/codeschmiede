@@ -14,8 +14,9 @@ const MUSTER = [
 ];
 // Zugangsdaten in Adressen (postgres://name:passwort@…) – Name bleibt, Passwort fällt weg
 const URL_PASSWORT = /\b([a-z][a-z0-9+.-]*:\/\/[^\s:@\/]+:)[^\s@\/]+@/gi;
+// Schalter wie persist-credentials: false sind keine Geheimnisse (Datenbank-Station 2026-10-24).
 // NAME = wert, auch mit Unterstrich davor/danach (GITHUB_TOKEN=…, SUPABASE_SERVICE_ROLE_KEY: "…", password = "a b c")
-const ZUWEISUNG = /([A-Za-z0-9_]*(?:pass(?:wort|word)?|pwd|secret|token|api[_-]?key|apikey|private[_-]?key|service[_-]?role[_-]?key|credential)[A-Za-z0-9_]*)(\s*[:=]\s*)(?:"[^"\n]{4,}"|'[^'\n]{4,}'|[^\s"'&]{4,})/gi;
+const ZUWEISUNG = /([A-Za-z0-9_]*(?:pass(?:wort|word)?|pwd|secret|token|api[_-]?key|apikey|private[_-]?key|service[_-]?role[_-]?key|credential)[A-Za-z0-9_]*)(\s*[:=]\s*)(?!["']?(?:true|false|null|none|omit|include|same-origin)["']?(?=[\s,;})\]]|$))(?:"[^"\n]{4,}"|'[^'\n]{4,}'|[^\s"'&]{4,})/gi;
 
 export function ohneGeheimnisse(text) {
   if (text == null) return text;
