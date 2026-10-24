@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Palette, Shapes, Stamp, Save, Send, Copy, Plus, Trash2, Undo2, Redo2, History, GitCompareArrows, Monitor, Tablet, Smartphone,
-  Sun, Moon, CircleCheck, CircleAlert, TriangleAlert, Loader2, Bot, ShieldCheck, Sparkles, Check, X, ExternalLink, LayoutTemplate, Home, Users, Calendar, Trophy, Settings, Bell, Search,
+  Sun, Moon, LayoutGrid, CircleCheck, CircleAlert, TriangleAlert, Loader2, Bot, ShieldCheck, Sparkles, Check, X, ExternalLink, LayoutTemplate, Home, Users, Calendar, Trophy, Settings, Bell, Search,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { useKiName } from "./kiName";
@@ -9,6 +9,7 @@ import { useAutoHoehe } from "./autoHoehe";
 import { BausteineModus, MarkeModus, BAUSTEIN_BASIS, bausteinWerteBereinigen } from "./DesignerBausteine";
 import { MARKE_BASIS } from "./Logo";
 import { Markdown } from "./Markdown";
+const SeitenModus = lazy(() => import("./SeitenModus"));
 import { APP_ARTEN, ART_BASIS, ArtEinstellungen, ArtMuster, beispieleBereinigen, beispieleFuer, menueSymbol } from "./DesignerArten";
 
 // App-Designer · Etappe 1 (Entwurf 0.9, freigegeben von Gerhard 2026-10-22 22:40) · Etappe 2: Chat mit Claude + erweiterte Prüfungen (2026-10-23)
@@ -227,7 +228,7 @@ export default function Designer({ d, ich, toast }) {
       {/* Kopfleiste: Entwurf wählen, rückgängig, speichern, vergleichen, senden */}
       <div className={`${card} p-2.5 flex flex-wrap items-center gap-2`}>
         <div role="tablist" aria-label="Bereich" className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-0.5">
-          {[["grund", "Grunddesign", Palette], ["bausteine", "Bausteine", Shapes], ["marke", "Marke", Stamp]].map(([id, t, I]) => (
+          {[["grund", "Grunddesign", Palette], ["bausteine", "Bausteine", Shapes], ["marke", "Marke", Stamp], ["seiten", "Seiten", LayoutGrid]].map(([id, t, I]) => (
             <button key={id} type="button" role="tab" aria-selected={modus === id} onClick={() => setModus(id)}
               className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-semibold ${modus === id ? "bg-white dark:bg-slate-900 shadow-sm text-emerald-800 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300"}`}><I className="w-4 h-4" />{t}</button>))}
         </div>
@@ -257,7 +258,7 @@ export default function Designer({ d, ich, toast }) {
       {!darf && <p className="text-sm text-slate-500">Nur ansehen: Gestalten dürfen Entwickler mit dem Recht „Aufträge geben“ im Bereich der Design-Gruppe.</p>}
       {fest && <p className="text-sm text-slate-600 dark:text-slate-300">Dieser Entwurf ist {STAND_TXT[aktiv.stand].toLowerCase()} und damit fest{aktiv.auftrag_id ? ` (Auftrag #${aktiv.auftrag_id})` : ""}. Für Änderungen eine Kopie anlegen.</p>}
 
-      {(
+      {modus === "seiten" ? <Suspense fallback={<p className="text-sm text-slate-500 p-4">Lädt …</p>}><SeitenModus projekt={projekt} d={d} ich={ich} werte={werte} dunkel={dunkel} darf={darf} toast={toast} /></Suspense> : (
         <div className="grid gap-3 grid-cols-[minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_280px] lg:grid-cols-[300px_minmax(0,1fr)]">
           {modus === "bausteine" ? <BausteineModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} projekt={projekt} d={d} ich={ich} toast={toast} dunkel={dunkel} Testseite={Testseite} breite={GERAETE[geraet][0]} onChat={(t) => { setRechts("chat"); setChatText(t); }} />
             : modus === "marke" ? <MarkeModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} projekt={projekt} ich={ich} toast={toast} />

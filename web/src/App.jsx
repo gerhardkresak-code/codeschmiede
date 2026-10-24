@@ -1029,6 +1029,16 @@ function LiveVorschau({ projekt, a, f, darfMerken, toast, onBaustein, baustein }
   useEffect(() => { setGemerkt(f?.vorschau_pfad || null); }, [f?.id, f?.vorschau_pfad]);
   const startSeite = seiteOk(gemerkt) ? gemerkt : seiteOk(projekt?.vorschau_pfad) ? projekt.vorschau_pfad : "/";
   const [jetztSeite, setJetztSeite] = useState(null);
+  // Design in der Vorschau (Entwurf 1.0, 24.10.2026): aktuelle App, Seiten-Entwurf des Designers oder ein Grunddesign-Entwurf –
+  // wirkt nur in dieser Vorschau (Vorschau-Helfer der App), nichts wird gespeichert
+  const [designWahl, setDesignWahl] = useState("app");
+  const [entwuerfe, setEntwuerfe] = useState([]);
+  useEffect(() => {
+    if (!projekt?.id) return undefined; let aus = false;
+    supabase.from("ws_design_entwuerfe").select("id, name, stand, werte").eq("projekt_id", projekt.id).neq("stand", "verworfen").order("geaendert", { ascending: false }).limit(30)
+      .then(({ data }) => { if (!aus) setEntwuerfe(data || []); });
+    return () => { aus = true; };
+  }, [projekt?.id]);
   const merken = async () => {
     if (!f || !seiteOk(jetztSeite)) return;
     const { error } = await supabase.rpc("ws_feature_vorschau_setzen", { p_feature: f.id, p_pfad: jetztSeite });
@@ -1058,7 +1068,13 @@ function LiveVorschau({ projekt, a, f, darfMerken, toast, onBaustein, baustein }
   useEffect(() => {
     const an = (e) => {
       if (e.origin !== herkunft || e.source !== frame.current?.contentWindow || typeof e.data !== "object" || !e.data) return;
-      if (e.data.cs === "bereit") setHelfer(true);
+      if (e.data.cs === "bereit") {
+        setHelfer(true);
+        const w = frame.current?.contentWindow;
+        if (w && designWahl === "seiten") w.postMessage({ cs: "seiten-entwurf", an: true }, herkunft);
+        const ent = designWahl.startsWith("e:") ? entwuerfe.find((x) => `e:${x.id}` === designWahl) : null;
+        if (w && ent?.werte && typeof ent.werte === "object") w.postMessage({ cs: "design", werte: ent.werte }, herkunft);
+      }
       if (e.data.cs === "seite" && seiteOk(e.data.pfad)) setJetztSeite(e.data.pfad);
       if (e.data.cs === "baustein") {
         const b = { name: String(e.data.name || "").slice(0, 200), seite: String(e.data.seite || "").slice(0, 200), pfad: String(e.data.pfad || "").slice(0, 300), text: String(e.data.text || "").slice(0, 200) };
@@ -1066,7 +1082,7 @@ function LiveVorschau({ projekt, a, f, darfMerken, toast, onBaustein, baustein }
       }
     };
     window.addEventListener("message", an); return () => window.removeEventListener("message", an);
-  }, [herkunft, onBaustein, toast]);
+  }, [herkunft, onBaustein, toast, designWahl, entwuerfe]);
   useEffect(() => { if (herkunft && frame.current?.contentWindow) frame.current.contentWindow.postMessage({ cs: "zeigen", an: zeigen }, herkunft); }, [zeigen, herkunft]);
   const neuLaden = () => { setNeu(false); setStand(null); setSchluessel((k) => k + 1); };
   if (!url) return <div className={`${card} grid place-items-center p-8 text-sm text-slate-500`}>Für dieses Projekt ist noch keine Vorschau-Adresse hinterlegt.</div>;
@@ -1075,6 +1091,13 @@ function LiveVorschau({ projekt, a, f, darfMerken, toast, onBaustein, baustein }
       <div className="flex flex-wrap items-center gap-2 p-2 border-b border-slate-200 dark:border-slate-800">
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-slate-500 bg-slate-50 dark:bg-slate-950 rounded-lg px-2.5 py-1.5" title={url}>{url.replace("https://", "")}{a ? ` · Auftrag #${a.id}` : " · aktuelle App"}</span>
         {[["390px", Smartphone, "Handy"], ["820px", Tablet, "Tablet"], ["100%", Monitor, "Desktop"]].map(([w, I, t]) => <button key={w} type="button" title={t} aria-pressed={breite === w} onClick={() => setBreite(w)} className={`p-2 rounded-lg border ${breite === w ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950" : "border-slate-200 dark:border-slate-800"}`}><I className="w-4 h-4" /></button>)}
+        <label className="sr-only" htmlFor="lv-design">Design in der Vorschau</label>
+        <select id="lv-design" value={designWahl} onChange={(e) => { setDesignWahl(e.target.value); neuLaden(); }} title="Wirkt nur in dieser Vorschau – nichts wird gespeichert"
+          className="h-9 max-w-[220px] rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2 text-sm">
+          <option value="app">Design: aktuelle App</option>
+          <option value="seiten">Design: Seiten-Entwurf (Designer)</option>
+          {entwuerfe.map((x) => <option key={x.id} value={`e:${x.id}`}>Grunddesign: {x.name}</option>)}
+        </select>
         <button type="button" title="Neu laden" onClick={neuLaden} className="p-2 rounded-lg border border-slate-200 dark:border-slate-800"><RefreshCw className="w-4 h-4" /></button>
         <button type="button" aria-pressed={zeigen} disabled={!helfer} title={helfer ? "Auf ein Element in der Vorschau klicken und kommentieren" : "Die Testseite hat den Vorschau-Helfer noch nicht (kommt mit dem nächsten Stand der App)"} onClick={() => setZeigen(!zeigen)}
           className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-semibold disabled:opacity-50 ${zeigen ? "border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300" : "border-slate-200 dark:border-slate-800"}`}><MousePointerClick className="w-4 h-4" />Zeigen & kommentieren</button>
@@ -1085,6 +1108,8 @@ function LiveVorschau({ projekt, a, f, darfMerken, toast, onBaustein, baustein }
         {darfMerken && helfer && jetztSeite && jetztSeite !== gemerkt && <button type="button" className={`${ghost} h-8 text-xs`} onClick={merken} title={`Ab jetzt öffnet „${f.name}“ hier: ${jetztSeite}`}><Pin className="w-3.5 h-3.5" />Diese Seite merken ({jetztSeite})</button>}
         {jetztSeite && jetztSeite !== startSeite && <button type="button" className={`${ghost} h-8 text-xs`} onClick={() => { setJetztSeite(null); setSchluessel((k) => k + 1); }}><Undo2 className="w-3.5 h-3.5" />Zurück zur Feature-Seite</button>}
       </div>}
+      {designWahl !== "app" && <p className="mx-2 mt-2 text-xs rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-900 text-amber-800 dark:text-amber-300 px-2.5 py-1.5">
+        {designWahl === "seiten" ? "Vorschau mit dem gespeicherten Seiten-Entwurf (Plattform-Standard) – nur hier sichtbar, nichts wird geändert. Voraussetzung: Der Seiten-Designer (App-Designer › Seiten) war in dieser Sitzung offen und freigegeben – sonst zeigt die Vorschau die aktuelle App." : "Vorschau mit dem Grunddesign-Entwurf – nur hier sichtbar. In der App wirkt er erst, wenn du ihn im App-Designer als Auftrag sendest."}</p>}
       {neu && <button type="button" onClick={neuLaden} className="m-2 self-end inline-flex items-center gap-2 rounded-full bg-emerald-700 text-white px-3 py-1.5 text-sm font-semibold"><RefreshCw className="w-4 h-4" />Neuer Stand da · neu laden</button>}
       {baustein && <div className="mx-2 mt-2 text-xs rounded-lg border border-orange-400 bg-orange-50 dark:bg-orange-950/40 px-2.5 py-1.5 flex items-center gap-2">Gewählt: <b>{baustein.name}</b>{baustein.seite && <span className="text-slate-500">· {baustein.seite}</span>}<button type="button" className="ml-auto" onClick={() => onBaustein(null)} title="Auswahl aufheben"><X className="w-3.5 h-3.5" /></button></div>}
       <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-2 overflow-auto grid justify-items-center">
