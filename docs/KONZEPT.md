@@ -37,6 +37,15 @@ Jedes Projekt hat eigene Bereiche, Gruppen, Features, Mitglieder (Rolle je Proje
 Anmeldung & Rechte), Betrieb (Handbuch & Texte, Einstellungen & Datenschutz). Für jedes Projekt gilt das AI-Dev-OS-Regelwerk; die Werkstatt
 stellt beim ersten Auftrag eines neuen Projekts zuerst ihre Fragen (Pflicht-Start).
 
+### Projekt-Arten (seit 0.9.0, Entwurf 1.0 vom 2026-10-24)
+| Art | Grundgerüst | Vorschau | Veröffentlichen |
+|---|---|---|---|
+| Web-App | React + Vite + Tailwind, Supabase optional, Prüfung (Test + Build) | Live-Vorschau (Cloudflare-Testseite je Zweig) | Test & Live (Zweig „live“) |
+| Programm | Tauri 2, Build Windows/Mac je Zweig in GitHub | Windows-Sandbox (Build aus GitHub, nur darin gestartet) | GitHub-Release, Updates optional |
+| Handy-App | wie Web-App + PWA (Manifest, Offline) | Live-Vorschau in Handy-Größe | wie Web-App; Stores später |
+| Werkzeug | Node mit Tests, Ablauf „Lauf“ (per Knopf / Zeitplan) | Testlauf in GitHub mit Ergebnis-Datei | Zeitplan im Ablauf |
+Die Ampel („Anbindungen“) prüft die Werkstatt des Admins nur lesend über GitHub; kein Projekt-Code läuft auf dem Admin-PC.
+
 ## Rollen und Rechte
 | Rolle | Aufträge | Freigeben / Erlauben | Löschen | Claude | GitHub |
 |---|---|---|---|---|---|
