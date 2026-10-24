@@ -130,3 +130,27 @@ test("Einrichten: Änderungsprotokoll mit vermeintlichem Geheimnis wird weggelas
   assert.deepEqual(auftrag.dateien.map((d) => d.pfad), [ABLAUF_PFAD]);
   assert.match(t, /Änderungsprotokoll/);
 });
+
+test("Vorlage: melde() läuft in bash und gibt keine Werte aus", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const yml = await readFile(new URL("../vorlagen/_datenbank/datenbank.yml", import.meta.url), "utf8");
+  const zeile = yml.split("\n").find((z) => z.trim().startsWith("melde() {")).trim();
+  const probe = async (eingabe) => {
+    const { spawn } = await import("node:child_process");
+    return new Promise((ok, nein) => {
+      const k = spawn("bash", ["-c", `set -euo pipefail\n${zeile}\nx=$(melde); printf '%s' "$x"`]);
+      let out = "", err = "";
+      k.stdout.on("data", (d) => (out += d)); k.stderr.on("data", (d) => (err += d));
+      k.on("close", (c) => (c === 0 && !err ? ok(out) : nein(new Error(`Exit ${c}: ${err}`))));
+      k.stdin.end(eingabe);
+    });
+  };
+  const a = await probe('psql:e.sql:3: ERROR:  duplicate key value violates unique constraint "kinder_email"\nDETAIL:  Key (email)=(max@x.de) already exists.\nLINE 3: values (\'Max\')\n        ^\n');
+  assert.match(a, /duplicate key value/); assert.doesNotMatch(a, /max@x\.de|kinder_email|Max/);
+  const b = await probe("psql: error: connection to server at \"db.example\" (3.120.12.4), port 5432 failed: value too long: 'max@x.de'\n");
+  assert.match(b, /connection to server/); assert.doesNotMatch(b, /3\.120|max@x|db\.example/);
+  const c = await probe('ERROR:  syntax error at or near "\'secret\n');
+  assert.match(c, /syntax error/); assert.doesNotMatch(c, /secret/);
+  assert.equal(await probe("DETAIL: nur das\n"), "");
+  assert.ok((await probe("ERROR: " + "x".repeat(5000) + "\n")).length <= 600);
+});
