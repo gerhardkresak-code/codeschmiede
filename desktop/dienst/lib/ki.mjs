@@ -281,7 +281,7 @@ function regNeu(env) {
     // ungelöste %VAR% → ganzer Eintrag verworfen; nur Laufwerkspfade (kein UNC/Netzlaufwerk, Prüfung B4)
     const ordner = teile.join(";").split(";").map((o) => o.replace(/%([A-Za-z0-9_()]+)%/g, (x, n) => env[n] ?? env[n.toUpperCase()] ?? x)).filter((o) => o && !o.includes("%") && !o.includes('"') && laufwerk(o));
     regPfad = { zeit: Date.now(), ordner, laeuft: false };
-  }, () => { regPfad = { ...regPfad, zeit: Date.now(), laeuft: false }; }).finally(() => { regLauf = null; });
+  }).catch(() => { regPfad = { ...regPfad, zeit: Date.now(), laeuft: false }; }).finally(() => { regLauf = null; });
   return regLauf;
 }
 export function registryPfad({ env = process.env, plattform = process.platform } = {}) {
@@ -292,6 +292,7 @@ export function registryPfad({ env = process.env, plattform = process.platform }
 /** Nach einer Installation: Suchpfad aus der Registry sofort frisch lesen (Gerhard 24.10. 09:46 – „installiert, aber nicht gefunden“). */
 export async function registryNeuLaden({ env = process.env, plattform = process.platform } = {}) {
   if (plattform !== "win32") return;
+  if (regLauf) await regLauf;   // ein Lauf, der vor der Installation begann, zählt nicht (Prüfung 0.8.8)
   await regNeu(env);
 }
 /** Suchordner: PATH, Registry-PATH (Windows), allgemeine Installer-Ordner, Hersteller-Ordner des Namens – nur absolute, keine Netzpfade. */

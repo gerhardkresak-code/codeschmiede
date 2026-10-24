@@ -42,7 +42,7 @@ export const KATALOG = {
   vibe: { name: "Mistral Vibe", programme: ["vibe"], art: "fenster", login: ["--setup"],
     // Windows: immer mit x64-Python (auf Windows-ARM fehlen fertige Pakete → „Build failure“, Gerhard 24.10. 09:37; x64 läuft dort emuliert,
     // auf x64-PCs ohnehin nativ). uv nur installieren, wenn es fehlt; Rückgabewert von uv weitergeben.
-    install: { skript: { win: "$uv = Join-Path $env:USERPROFILE '.local\\bin\\uv.exe'; if (-not (Test-Path $uv)) { irm https://astral.sh/uv/install.ps1 | iex }; & $uv tool install --force --python cpython-3.12-windows-x86_64-none mistral-vibe; exit $LASTEXITCODE",
+    install: { skript: { win: "$ErrorActionPreference='Stop'; $uv = Join-Path $env:USERPROFILE '.local\\bin\\uv.exe'; if (-not (Test-Path $uv)) { irm https://astral.sh/uv/install.ps1 | iex }; if (-not (Test-Path $uv)) { exit 1 }; & $uv tool install --force --python cpython-3.12-windows-x86_64-none mistral-vibe; exit $LASTEXITCODE",
       unix: "curl -LsSf https://mistral.ai/vibe/install.sh | bash" } } },
 };
 
