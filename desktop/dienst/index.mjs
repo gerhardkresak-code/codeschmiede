@@ -1200,6 +1200,7 @@ async function ampelMelden(p) {
         const { count } = await db.from("ws_fehler").select("id", { count: "exact", head: true }).eq("projekt_id", p.id).eq("stand", "offen");
         werte.fehler = !fk || !fk.aktiv ? { stand: "gelb", text: "Melde-Schlüssel anlegen (unten) und in der App eintragen" }
           : !fk.letzte_meldung ? { stand: "gelb", text: "Schlüssel da – noch keine Meldung angekommen (Melder in der App eingebaut, Werte bei Cloudflare eingetragen?)" }
+          : count >= 500 ? { stand: "rot", text: "500 offene Fehler – neue Fehlerarten werden verworfen. Bitte im Menü „Fehler“ aufräumen (Schlüssel ggf. erneuern)" }
           : { stand: count ? "gelb" : "gruen", text: count ? `Melder aktiv · ${count} offene Fehler (Menü „Fehler“)` : "Melder aktiv · keine offenen Fehler" };
       }
     }
