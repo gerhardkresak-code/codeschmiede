@@ -37,14 +37,14 @@ test("Grundgerüst je Technik-Art: Code, Abläufe, Platzhalter sicher gefüllt",
     const pkg = JSON.parse(await readFile(path.join(ziel, "package.json"), "utf8"));
     assert.equal(pkg.name, "haushaltsbuch");
     for (const f of d.filter((x) => /\.(json|webmanifest)$/.test(x))) JSON.parse(await readFile(path.join(ziel, f), "utf8"));   // gültiges JSON trotz Anführungszeichen im Namen
-    for (const f of d) { if (!/\.(png)$/.test(f)) assert.doesNotMatch(await readFile(path.join(ziel, f), "utf8"), /\[(PROJEKTNAME|KENNUNG)\]/, `${art}: ${f}`); }
+    for (const f of d) { if (!/\.(png)$/.test(f)) assert.doesNotMatch(await readFile(path.join(ziel, f), "utf8"), /\[(PROJEKTNAME|KENNUNG|PROGRAMMNAME)\]/, `${art}: ${f}`); }
     if (art === "web" || art === "handy") {
       const app = await readFile(path.join(ziel, "src/App.jsx"), "utf8");
       assert.match(app, /Haus&quot;buch &lt;&#123;x&#125;&gt;/); assert.doesNotMatch(app, /<\{x\}>/);
     }
     if (art === "programm") {
       const conf = JSON.parse(await readFile(path.join(ziel, "src-tauri/tauri.conf.json"), "utf8"));
-      assert.equal(conf.productName, 'Haus"buch <{x}>'); assert.equal(conf.identifier, "at.kresak.haushaltsbuch");
+      assert.equal(conf.productName, "Hausbuch x"); assert.equal(conf.identifier, "at.kresak.haushaltsbuch");
       assert.match(await readFile(path.join(ziel, "src-tauri/Cargo.toml"), "utf8"), /name = "haushaltsbuch"/);
       assert.ok(d.includes("app-icon.png"));
     }

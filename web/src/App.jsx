@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useStat
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
   Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power,
-  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale, ListChecks, Rocket, Undo2, Pin, FlaskConical, ScanSearch,
+  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale, ListChecks, Rocket, Undo2, Pin, FlaskConical, ScanSearch, Plug,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { Markdown } from "./Markdown";
@@ -10,12 +10,12 @@ import { WS_ICON, STAND, ROLLEN, BEREICH_RECHTE } from "./config";
 import { isDesktop, tauri } from "./desktop";
 import Designer from "./Designer";
 import KonzeptArbeitsplatz, { KonzeptAuto } from "./Konzept";
-import { APP_ARTEN } from "./DesignerArten";
 import { ZweigeVersionen, Pruefstand, Wissensdatenbank, Aenderungsprotokoll, Dokumentation } from "./Ablauf";
 import KiAnbieter from "./KiAnbieter";
 import Einrichtung, { EinrichtungChip, useEinrichtung } from "./Einrichtung";
 import { MitErwaehnung, erwaehnte, FeatureBezuege } from "./Bezuege";
 import Regelwerk from "./Regelwerk";
+import Anbindungen, { NeuesProjektAssistent } from "./ProjektArten";
 import { LogoZeichen } from "./Logo";
 import CodeschmiedeZeichen from "./Zeichen";
 const AboLimits = lazy(() => import("./AboLimits"));
@@ -181,7 +181,7 @@ export default function App() {
   if (!sitzung) return <Anmelden />;
   if (!ich) return <EinladungAnnehmen sitzung={sitzung} onFertig={ladeIch} />;
 
-  const nav = [["zentrale", "Auftrags-Zentrale", Inbox], ["erledigen", "Zu erledigen", ListChecks], ["vorschau", "Live-Vorschau", Eye], ["designer", "App-Designer", Palette], ["global", "Globale Einstellungen", Globe], ["_", "Ablauf"], ["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen], ["_", "Dokumentation"], ["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["regelwerk", "Regelwerk", Scale], ["_", "Verwaltung"], ["benutzer", "Benutzer & Rechte", KeyRound], ["ki", "KI-Anbieter", Cpu], ["einrichtung", "Einrichtung", Wrench], ["verbrauch", "Verbrauch & Limits", Gauge]];
+  const nav = [["zentrale", "Auftrags-Zentrale", Inbox], ["erledigen", "Zu erledigen", ListChecks], ["vorschau", "Live-Vorschau", Eye], ["anbindungen", "Anbindungen", Plug], ["designer", "App-Designer", Palette], ["global", "Globale Einstellungen", Globe], ["_", "Ablauf"], ["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen], ["_", "Dokumentation"], ["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["regelwerk", "Regelwerk", Scale], ["_", "Verwaltung"], ["benutzer", "Benutzer & Rechte", KeyRound], ["ki", "KI-Anbieter", Cpu], ["einrichtung", "Einrichtung", Wrench], ["verbrauch", "Verbrauch & Limits", Gauge]];
   const offen = daten.auftraege.filter((a) => a.offeneFrage).length;
   const zuTun = daten.projektId ? aufgabenListe(daten, rechteVon(daten, ich)).length : 0;
   const aktuell = daten.projekte.find((p) => p.id === daten.projektId);
@@ -242,6 +242,7 @@ export default function App() {
           : ansicht === "wissen" ? <Wissensdatenbank key={daten.projektId} d={daten} />
           : ansicht === "log" ? <Aenderungsprotokoll key={daten.projektId} d={daten} />
           : ansicht === "doku" ? <Dokumentation key={daten.projektId} d={daten} />
+          : ansicht === "anbindungen" ? <Anbindungen key={daten.projektId} d={daten} ich={ich} toast={setToast} onVorschau={() => setAnsicht("vorschau")} />
           : ansicht === "vorschau" ? <LiveVorschauSeite key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "designer" ? <Designer key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "benutzer" ? <BenutzerRechte d={daten} ich={ich} toast={setToast} />
@@ -253,7 +254,7 @@ export default function App() {
       {!daten.laden && daten.projektId && <EinrichtungAuto ich={ich} d={daten} onOeffnen={() => setEinrichtung(true)} />}
       {!daten.laden && daten.projektId && <KonzeptAuto d={daten} ich={ich} />}
       {projekteVerwalten && <ProjekteVerwalten toast={setToast} aktiv={daten.projektId} onClose={() => setProjekteVerwalten(false)} onWeg={(id) => { if (id === daten.projektId) { const n = daten.projekte.find((p) => p.id !== id); if (n) waehle(n.id); } }} />}
-      {neuesProjekt && <NeuesProjekt toast={setToast} onClose={() => setNeuesProjekt(false)} onFertig={(id) => waehle(id)} />}
+      {neuesProjekt && <NeuesProjektAssistent toast={setToast} onClose={() => setNeuesProjekt(false)} onFertig={(id) => { waehle(id); setAnsicht("anbindungen"); }} />}
       <Toast text={toast} onDone={() => setToast("")} />
     </div>
   );
@@ -1555,45 +1556,4 @@ function ProjekteVerwalten({ toast, aktiv, onClose, onWeg }) {
     </Dialog>);
 }
 
-// ---------------- Neues Projekt ----------------
-function NeuesProjekt({ toast, onClose, onFertig }) {
-  const [name, setName] = useState(""); const [kennung, setKennung] = useState(""); const [besch, setBesch] = useState(""); const [repo, setRepo] = useState(""); const [symbol, setSymbol] = useState("layers"); const [busy, setBusy] = useState(false);
-  // GitHub-Repository gleich anlegen (Gerhard 2026-10-23 18:38): Konto gerhardkresak-code, öffentlich, per Klick privat
-  const [anlegen, setAnlegen] = useState(true); const [privat, setPrivat] = useState(false);
-  const [art, setArt] = useState("verwaltung");   // App-Art für den Designer (Datenbank 0022)
-  const autoKennung = name.trim().toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
-  const id = kennung || autoKennung;
-  const gueltig = /^[a-z0-9][a-z0-9-]{1,39}$/.test(id) && name.trim() && (!repo || /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(repo.trim()));
-  const los = async () => {
-    setBusy(true);
-    const { error } = await supabase.rpc("ws_projekt_anlegen", { p_id: id, p_name: name.trim(), p_beschreibung: besch.trim(), p_repo: repo.trim(), p_symbol: symbol });
-    setBusy(false);
-    if (error) { toast(fehler(error)); return; }
-    if (art !== "verwaltung") { const ra = await supabase.rpc("ws_projekt_app_art", { p_projekt: id, p_art: art }); if (ra.error) toast(fehler(ra.error)); }
-    let gh = "";
-    if (!repo.trim() && anlegen) {
-      const r = await supabase.rpc("ws_repo_anfordern", { p_projekt: id, p_privat: privat });
-      gh = r.error ? ` – GitHub: ${fehler(r.error)}` : " – deine Werkstatt legt das GitHub-Repository an";
-    }
-    toast(`Projekt „${name.trim()}“ angelegt${gh}. Startet im Konzept.`); onFertig(id); onClose();
-  };
-  return (
-    <Dialog title="Neues Projekt" onClose={onClose}>
-      <label className="flex flex-col gap-1 text-sm text-slate-500">Name der App<input id="cs-pname" className={input} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></label>
-      <label className="flex flex-col gap-1 text-sm text-slate-500">Kennung (klein, ohne Leerzeichen)<input id="cs-pid" className={input} value={id} onChange={(e) => setKennung(e.target.value)} /></label>
-      <label className="flex flex-col gap-1 text-sm text-slate-500">Art der App (bestimmt die Beispiele und Bausteine im App-Designer)
-        <select id="cs-part" className={input} value={art} onChange={(e) => setArt(e.target.value)}>{APP_ARTEN.map(([k, t, b]) => <option key={k} value={k}>{t} – {b}</option>)}</select></label>
-      <label className="flex flex-col gap-1 text-sm text-slate-500">Worum geht es?<textarea id="cs-pdesc" className={`${input} min-h-[70px]`} value={besch} onChange={(e) => setBesch(e.target.value)} /></label>
-      <fieldset className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex flex-col gap-2 text-sm">
-        <legend className="px-1 text-slate-500">GitHub</legend>
-        <label className="flex items-start gap-2"><input id="cs-prepo-neu" type="checkbox" className="mt-1 accent-emerald-700" checked={anlegen && !repo.trim()} disabled={!!repo.trim()} onChange={(e) => setAnlegen(e.target.checked)} />
-          <span>Repository gleich anlegen: <span className="font-mono text-xs">gerhardkresak-code/{id || "…"}</span> mit Grundgerüst nach deinem Regelwerk<span className="block text-xs text-slate-500">Macht deine Werkstatt mit deiner GitHub-Anmeldung. Geht auch später unter „Projekte verwalten“ – Konzept, App-Designer und Chat funktionieren schon vorher.</span></span></label>
-        {anlegen && !repo.trim() && <label className="flex items-center gap-2 pl-6"><input id="cs-prepo-privat" type="checkbox" className="accent-emerald-700" checked={privat} onChange={(e) => setPrivat(e.target.checked)} />Privat <span className="text-xs text-slate-500">(sonst öffentlich: jeder kann Code, Dokumentation und das Konzept sehen; privat verbraucht GitHub-Freiminuten für Prüfungen)</span></label>}
-        <label className="flex flex-col gap-1 text-slate-500">Oder vorhandenes Repository eintragen (Besitzer/Name)<input id="cs-prepo" className={input} value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="gerhardkresak-code/neue-app" /></label>
-      </fieldset>
-      <label className="flex flex-col gap-1 text-sm text-slate-500">Symbol<select id="cs-psym" className={input} value={symbol} onChange={(e) => setSymbol(e.target.value)}>{Object.keys(WS_ICON).map((k) => <option key={k} value={k}>{k}</option>)}</select></label>
-      <p className="text-xs text-slate-500">Vorlage: App (Oberfläche & Design, Funktionen), Daten & Rechte (Datenbank, Anmeldung & Rechte), Betrieb (Handbuch & Texte, Einstellungen & Datenschutz). Es gilt dein Regelwerk AI-Dev-OS.</p>
-      <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={onClose}>Abbrechen</button><button type="button" className={btn} disabled={busy || !gueltig} onClick={los}>Projekt anlegen</button></div>
-    </Dialog>
-  );
-}
+// Neues Projekt: Assistent mit Technik-Art in ProjektArten.jsx (Entwurf 1.0, 2026-10-24)

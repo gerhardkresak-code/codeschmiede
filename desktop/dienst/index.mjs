@@ -30,6 +30,7 @@ import { katalogFuer, einrichten, einrichtUmgebung, findeKatalogProgramm, angeme
 import { bildAusDataUrl, markePrompt, markeAntwort } from "./lib/marke.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen, codexBauen, codexLimits } from "./lib/ki.mjs";
 import { uebernehmen, prText } from "./lib/ersatz.mjs";
+import { ampelPruefen, sandboxStarten, testlaufStarten } from "./lib/anbindungen.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -1010,6 +1011,7 @@ async function projektAbgleich() {
   abgleichLaeuft = true; abgleichZuletzt = Date.now();
   try {
     const { data: projekte } = await db.from("ws_projekte").select("*");
+    if (cfg.admin) for (const p of projekte || []) if (!p.archiviert) await ampelMelden(p);
     for (const p of projekte || []) {
       if (!p.repo || p.archiviert) continue;
       // Sichtbarkeit bei GitHub (öffentlich/privat) für die Anzeige in „Projekte verwalten“ – nur die Werkstatt des Admins meldet sie
@@ -1076,6 +1078,44 @@ async function repoArbeit() {
     await db.rpc("ws_repo_ergebnis", { p_pc: pcId, p_projekt: p.projekt_id, p_repo: null, p_fehler: `Hat nicht geklappt: ${t}` }).catch(() => {});
     melde("fehler", `GitHub (${p.name}): ${t}`);
   } finally { await rm(arbeit, { recursive: true, force: true }).catch(() => {}); }
+  melde("status", "Werkstatt bereit");
+  return true;
+}
+
+// ---------- Anbindungen je Projekt (Datenbank 0030, Entwurf 1.0 „Neues Projekt“) – nur die Werkstatt des Admins ----------
+async function ampelMelden(p) {
+  try {
+    const werte = await ampelPruefen({ sh: ghGrenze, projekt: p });
+    const { error } = await db.rpc("ws_anbindungen_melden", { p_pc: pcId, p_projekt: p.id, p_werte: werte });
+    if (error && !/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", `Ampel ${p.name}: ${ohneGeheimnisse(error.message)}`);
+  } catch (e) { melde("fehler", `Ampel ${p.name}: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 200)}`); }
+}
+// Startet nur WindowsSandbox.exe mit der Konfiguration – nie die Installation selbst auf diesem PC
+const sandboxProgramm = (exe, args) => new Promise((ok, fehl) => {
+  const k = spawn(exe, args, { detached: true, stdio: "ignore", windowsHide: false, shell: false });
+  k.once("error", fehl); k.once("spawn", () => { k.unref(); ok(); });
+});
+async function aktionArbeit() {
+  if (!cfg.admin) return false;
+  const { data, error } = await db.rpc("ws_projekt_aktion_nehmen", { p_pc: pcId });
+  if (error) { if (!/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", ohneGeheimnisse(error.message)); return false; }
+  const a = data?.[0]; if (!a) return false;
+  const fertig = (hinweis, link = null, fehler = false) => db.rpc("ws_projekt_aktion_ergebnis", { p_pc: pcId, p_id: a.id, p_hinweis: hinweis, p_link: link, p_fehler: fehler });
+  try {
+    if (a.art === "pruefen") {
+      const { data: p } = await db.from("ws_projekte").select("*").eq("id", a.projekt_id).single();
+      await ampelMelden(p); await fertig("Ampel geprüft");
+    } else if (a.art === "sandbox") {
+      melde("status", "Programm wird für die Windows-Sandbox geholt");
+      const r = await sandboxStarten({ sh: ghGrenze, repo: a.repo, zweig: a.zweig || "main", basis: path.join(cfg.daten_ordner, "sandbox"), projektId: a.projekt_id, starten: sandboxProgramm });
+      await fertig(`Windows-Sandbox gestartet mit ${r.datei} – Schließen der Sandbox löscht alles`, r.link);
+    } else if (a.art === "testlauf") {
+      const r = await testlaufStarten({ sh: ghGrenze, repo: a.repo, zweig: a.zweig || "main" });
+      await fertig("Testlauf in GitHub gestartet – Ergebnis in ein paar Minuten in der Ampel", r.link);
+    }
+  } catch (e) {
+    await fertig(`Hat nicht geklappt: ${kuerzen(ohneGeheimnisse(e?.stderr || e?.message || String(e)), 400)}`, null, true).catch(() => {});
+  }
   melde("status", "Werkstatt bereit");
   return true;
 }
@@ -1182,6 +1222,7 @@ async function naechsterAuftrag() {
   if (laeuft || stopp) return;
   if (await repoArbeit()) return;
   if (await liveArbeit()) return;
+  if (await aktionArbeit()) return;
   // 0. Designer-Chat: kurz, eigene Fragen zuerst (nicht während der Abo-Pause)
   if ((await aboLage()) !== "pause" && ((await designChat()) || (await claudeChat()) || (await markeArbeit()))) return;
   // 1. Fortsetzen: eigene Rückfragen, auf die geantwortet wurde

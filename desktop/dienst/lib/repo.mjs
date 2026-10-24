@@ -24,6 +24,8 @@ export function vorlageFuellen(text, { name, repo, inhaber, kennung = "" }, art 
   // Ersetzungsfunktionen: Sonderzeichen wie $' im Namen werden nicht als Muster gelesen (Prüfung N4)
   return String(text)
     .replaceAll("[KENNUNG]", () => kennung)
+    // Programmname (Fenster, Installation, Windows-Ressourcen): nur Buchstaben, Ziffern, Leerzeichen, Punkt, Bindestrich, Unterstrich
+    .replaceAll("[PROGRAMMNAME]", () => roh.replace(/[^\p{L}\p{N} ._-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 60) || "Programm")
     .replaceAll("[PROJEKTNAME]", () => sicher)
     .replaceAll("[OWNER/REPO]", () => repo)
     .replaceAll("[NAME]", () => inhaber || "Inhaber")
