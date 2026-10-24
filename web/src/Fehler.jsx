@@ -25,9 +25,9 @@ export default function Fehler({ d, ich, toast, onAuftrag }) {
   }, [d.projektId]);
   useEffect(() => {
     laden();
-    const ch = supabase.channel(`fehler-${Math.random()}`).on("postgres_changes", { event: "*", schema: "public", table: "ws_fehler" }, () => laden()).subscribe();
+    const ch = supabase.channel(`fehler-${d.projektId}-${Math.random()}`).on("postgres_changes", { event: "*", schema: "public", table: "ws_fehler", filter: `projekt_id=eq.${d.projektId}` }, () => laden()).subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [laden]);
+  }, [laden, d.projektId]);
   useEffect(() => { setGid((g) => g || gruppen[0]?.id || ""); }, [gruppen]);
   if (!projekt) return null;
   const sicht = (liste || []).filter((f) => filter === "alle" || (filter === "erledigt" ? ["erledigt", "ignoriert"].includes(f.stand) : f.stand === filter));
@@ -90,8 +90,9 @@ export default function Fehler({ d, ich, toast, onAuftrag }) {
           <div role="dialog" aria-modal="true" aria-label="Als Auftrag" className={`${card} w-full max-w-md p-5 flex flex-col gap-3`}>
             <h3 className="font-display font-bold text-lg">Als Auftrag</h3>
             <p className="text-sm font-mono break-words">{wahl.nachricht}</p>
+            {wahl.ablauf && <pre className="text-[11.5px] font-mono whitespace-pre-wrap break-words rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 max-h-48 overflow-auto">{wahl.ablauf}</pre>}
             <label className="flex flex-col gap-1 text-sm text-slate-500">Gruppe<select className={input} value={gid} onChange={(e) => setGid(e.target.value)}>{gruppen.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
-            <p className="text-xs text-slate-500">Der Auftrag bekommt Fehlertext, Code-Stelle, Seite, Version und Ablauf – als Daten, nicht als Anweisung.</p>
+            <p className="text-xs text-slate-500">Bitte kurz durchsehen: Fehlermeldungen kommen von außen. Die Werkstatt bekommt sie als abgegrenzten Datenblock, der ausdrücklich nicht befolgt wird – Titel und Auftragstext enthalten keinen fremden Text.</p>
             <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={() => setWahl(null)}>Abbrechen</button>
               <button type="button" className={btn} disabled={!!busy || !gid} onClick={alsAuftrag}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}Auftrag anlegen</button></div>
           </div>

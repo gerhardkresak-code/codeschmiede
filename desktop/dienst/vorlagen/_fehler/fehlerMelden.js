@@ -13,6 +13,12 @@ const MAX_JE_SEITE = 20;
 export function bereinigen(t, n) {
   return String(t ?? "")
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    // Inhalte in Anführungszeichen (Werte, Namen) – kurze technische Bezeichner wie 'map' bleiben
+    .replace(/(["“„«`])[^"“”„«»`\n]{0,250}(["”“»`])/g, '"…"')
+    .replace(/'(?![a-z_$][A-Za-z0-9_$.]{0,40}')[^'\n]{0,250}'/g, "'…'")
+    .replace(/(Failing row contains|DETAIL:|Key \([^)]*\)=)[^\n]*/g, "$1 …")
+    .replace(/\b[A-ZÄÖÜ][a-zäöüß]+[ -][A-ZÄÖÜ][a-zäöüß]+\b/g, "[name]")
+    .replace(/(für|bei|von) [A-ZÄÖÜ][^\s:,.]{1,40}/g, "$1 [name]")
     .replace(/-----BEGIN[^-]*-----[\s\S]*?-----END[^-]*-----/g, "[schlüssel]")
     .replace(/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, "[token]")
     .replace(/(sk-ant-|sk-|gh[pousr]_|github_pat_|sbp_|sb_secret_|xox[bpas]-|AIza|AKIA)[A-Za-z0-9_-]{6,}/g, "[schlüssel]")
@@ -53,8 +59,8 @@ export function fehlerMelden(fehler, extra = {}) {
     const host = window.location.hostname;
     const daten = {
       nachricht, stelle: bereinigen(extra.stelle || stelleAus(stack), 300), seite: seiteOhneKennungen(window.location.pathname),
-      ablauf: bereinigen(stack.split("\n").slice(0, 15).join("\n"), 4000), version: String(VERSION).slice(0, 40),
-      umgebung: /^main\.|^test\.|^staging\./.test(host) ? "test" : "live", geraet: geraet(), browser: browser(),
+      ablauf: bereinigen(stack.split("\n").slice(0, 15).join("\n"), 2000), version: String(VERSION).slice(0, 40),
+      umgebung: /\.pages\.dev$|^main\.|^test\.|^staging\.|^localhost$/.test(host) ? "test" : "live", geraet: geraet(), browser: browser(),
     };
     fetch(`${URL_.replace(/\/$/, "")}/rest/v1/rpc/ws_fehler_melden`, {
       method: "POST", keepalive: true, credentials: "omit",
