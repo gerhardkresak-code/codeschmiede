@@ -40,6 +40,9 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-24 – Eigene Design-Freigabe für den Seiten-Designer:** Die Plattform-Rechte von Trainer to go bleiben am Plattform-Programm
+  (app.me() nicht lockern). Die Codeschmiede hat einen eigenen Design-Schlüssel, signiert NUR „ttg-design|register/verify/code|…“, der Inhaber
+  gibt den PC einmal frei; die Design-Sitzung öffnet nur die Design-Pakete. Ein Design-Schlüssel öffnet nie die Plattform-Verwaltung.
 - **2026-10-24 13:49 – Seiten-Designer in der Codeschmiede (Entwurf 1.0 frei):** Seiten/Startseiten gestaltet man im App-Designer › Seiten
   (eingebetteter Designer der App, Rechteprüfung in der App-Datenbank), nicht mehr in der Plattform-Verwaltung; Individualdesign je Verein bleibt;
   Freigeben wirkt sofort in der App; Live-Vorschau kann Entwürfe zeigen (nur dort).

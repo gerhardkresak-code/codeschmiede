@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutGrid, Send, Loader2, RefreshCw, ExternalLink } from "lucide-react";
 import { supabase } from "./supabase";
+import { isDesktop, tauri } from "./desktop";
 
 const card = "rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900";
 const ghost = "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-semibold disabled:opacity-50";
@@ -33,6 +34,21 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
     const h = (e) => {
       if (e.origin !== ziel || e.source !== rahmen.current?.contentWindow || !e.data || typeof e.data !== "object") return;
       if (e.data.cs === "bereit" || e.data.cs === "design-ok") setBereit(true);
+      // Eigene Design-Freigabe (Entscheidung Gerhard 2026-10-24): Der Seiten-Designer fragt nach dem Design-Geräteschlüssel
+      // der Codeschmiede bzw. lässt eine Nachricht „ttg-design|…“ signieren. Nur für die eingebettete Testfassung (*.pages.dev),
+      // nur im Programm; was signiert werden darf, prüft zusätzlich das Programm selbst (Rust, design.rs).
+      if (e.data.cs === "design-frage") {
+        const id = Number(e.data.id);
+        const antwort = (x) => { try { rahmen.current?.contentWindow?.postMessage({ cs: "design-antwort", id, ...x }, ziel); } catch { /* egal */ } };
+        if (!Number.isSafeInteger(id)) return;
+        if (!/^https:\/\/[a-z0-9.-]+\.pages\.dev$/i.test(ziel || "")) { antwort({ fehler: "Design-Freigabe gibt es nur für Testfassungen." }); return; }
+        if (!isDesktop()) { antwort({ fehler: "Die Design-Freigabe gibt es nur im Programm Codeschmiede (nicht im Browser)." }); return; }
+        const n = typeof e.data.nachricht === "string" ? e.data.nachricht : "";
+        const auftrag = e.data.art === "geraet" ? tauri("ws_design_geraet")
+          : e.data.art === "signieren" && n.length <= 512 && /^ttg-design\|(register|verify|code)\|/.test(n) ? tauri("ws_design_signieren", { nachricht: n })
+          : Promise.reject(new Error("Diese Anfrage ist nicht erlaubt."));
+        auftrag.then((ergebnis) => antwort({ ergebnis }), (f) => antwort({ fehler: String(f?.message || f || "Fehler").slice(0, 200) }));
+      }
     };
     window.addEventListener("message", h); return () => window.removeEventListener("message", h);
   }, [ziel]);
@@ -65,7 +81,7 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
       </div>
       <p className={`text-xs rounded-lg px-2.5 py-1.5 border ${bereit ? "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-900 text-green-800 dark:text-green-300" : "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300"}`}>
         {bereit ? "Seiten-Designer der App – mit dem oben gewählten Grunddesign. Speichern und Freigeben laufen in der App (Testfassung) mit deinen Design-Rechten."
-          : "Der Seiten-Designer lädt aus der Testfassung der App. Beim ersten Mal dort mit deinem Betreiber-Konto anmelden."}
+          : "Der Seiten-Designer lädt aus der Testfassung der App. Beim ersten Mal dort mit deinem Betreiber-Konto anmelden; der Inhaber gibt diesen PC einmal für das Design frei."}
       </p>
       <iframe key={schluessel} ref={rahmen} title="Seiten-Designer der App" src={url} onLoad={() => setTimeout(senden, 400)}
         className="w-full h-[calc(100vh-260px)] min-h-[620px] rounded-xl bg-white ring-1 ring-black/10" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" />

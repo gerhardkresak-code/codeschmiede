@@ -1,13 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "codeschmiede-web",
-  "description": "Die Oberfläche der Codeschmiede darf im Programm genau diese Befehle nutzen: Werkstatt starten/stoppen, Status lesen, Voraussetzungen prüfen, Statuszeile für Abo-Limits einrichten, Links öffnen.",
+  "description": "Die Oberfläche der Codeschmiede darf im Programm genau diese Befehle nutzen: Werkstatt starten/stoppen, Status lesen, Voraussetzungen prüfen, Statuszeile für Abo-Limits einrichten, Links öffnen, Design-Freigabe für Trainer to go (nur „ttg-design|…“ signieren).",
   "windows": ["main"],
   "remote": { "urls": ["https://codeschmiede.pages.dev/*"] },
   "permissions": [
     "allow-ws-check", "allow-ws-statuszeile",
     "allow-ws-start", "allow-ws-token", "allow-ws-stop", "allow-ws-status",
     "allow-ws-update-status", "allow-ws-update-neustart",
+    "allow-ws-design-geraet", "allow-ws-design-signieren",
     { "identifier": "opener:allow-open-url", "allow": [{ "url": "https://*" }] }
   ]
 }

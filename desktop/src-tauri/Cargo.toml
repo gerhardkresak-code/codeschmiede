@@ -17,6 +17,18 @@ tauri-plugin-window-state = "2"
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Eigene Design-Freigabe für den Seiten-Designer von Trainer to go (Entscheidung Gerhard 2026-10-24)
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+base64 = "0.22"
+
+# Design-Schlüssel im Windows-Tresor (Anmeldeinformationsverwaltung, DPAPI je Windows-Benutzer)
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+# Mac: im Schlüsselbund (Keychain, nur dieser Mac-Benutzer)
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
 
 [profile.release]
 codegen-units = 1
