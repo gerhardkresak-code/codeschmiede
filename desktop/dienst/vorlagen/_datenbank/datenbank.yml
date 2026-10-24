@@ -43,6 +43,32 @@ jobs:
           set -euo pipefail
           if [ -z "${DB_URL:-}" ]; then echo "::notice::Für „$ZIEL“ ist keine Datenbank eingetragen (Geheimnis SUPABASE_DB_URL der Umgebung) – nichts zu tun"; exit 0; fi
           export PGCONNECT_TIMEOUT=20 PGAPPNAME=codeschmiede-datenbank
+          # Jede Datei erfährt, wohin sie läuft: current_setting('codeschmiede.ziel', true) = 'test' bzw. 'live'.
+          # Demo- und Testdaten prüfen das (bzw. die Tabelle codeschmiede.umgebung) und laufen in Live nicht.
+          export PGOPTIONS="-c codeschmiede.ziel=$ZIEL -c client_min_messages=warning"
+          # Projektkennung (20 Buchstaben) aus der Verbindungsadresse – nur sie wird gemerkt, nie die Adresse selbst.
+          # Damit zeigen Zeitpläne in Live auf das Live-Projekt statt auf das Test-Projekt (app.projekt_url() in der App).
+          REF=$(printf '%s' "$DB_URL" | sed -nE 's#^[a-z]+://postgres\.([a-z]{20})[:@].*#\1#p; s#^.*@db\.([a-z]{20})\.supabase\.co.*$#\1#p' | head -n1)
+          [[ "$REF" =~ ^[a-z]{20}$ ]] || REF=""
+          # Nach dem Einspielen in Live: Demo-Zeitpläne entfernen (auch solche, die von Hand oder aus neuen Dateien kamen)
+          # und Zeitpläne, die ein ANDERES Supabase-Projekt aufrufen (z. B. fest eingetragenes Test-Projekt), anhalten – sonst
+          # liefen sie ins Leere oder schickten Schlüssel der Live-Datenbank an das Test-Projekt.
+          aufraeumen() {
+            [ "$ZIEL" = "live" ] || return 0
+            # Kennung aus dem Lauf, sonst die gespeicherte; ohne Kennung werden fremde Zeitpläne nur ANGEHALTEN (nicht gelöscht) und gemeldet
+            erg=$(q -c "do \$\$ declare r text; n int := 0; begin
+                    if to_regnamespace('cron') is null then raise warning 'CS: kein pg_cron'; return; end if;
+                    r := coalesce(nullif('$REF', ''), (select projekt from codeschmiede.umgebung where ziel = 'live'));
+                    if r is null then raise warning 'CS: Projektkennung unbekannt – Zeitpläne mit fester Projektadresse werden angehalten'; end if;
+                    select count(*) into n from cron.job where active and (jobname like '%demo%'
+                      or (command ~ 'https://[a-z]{20}\.supabase\.co' and (r is null or command !~ ('https://' || r || '\.supabase\.co'))));
+                    perform cron.alter_job(jobid, active := false) from cron.job where active and (jobname like '%demo%'
+                      or (command ~ 'https://[a-z]{20}\.supabase\.co' and (r is null or command !~ ('https://' || r || '\.supabase\.co'))));
+                    if n > 0 then raise warning 'CS: % Zeitpläne in Live angehalten (Demo oder anderes Projekt)', n; end if;
+                  end \$\$;" 2>&1 >/dev/null) || { echo "::warning::Zeitpläne in Live nicht geprüft: $(printf '%s' "$erg" | melde)"; return 0; }
+            printf '%s\n' "$erg" | sed -nE 's/^.*WARNING: +CS: (.*)$/::warning::\1/p'
+          }
+          trap aufraeumen EXIT
           # Fehler ohne Datenwerte ausgeben (z. B. „Key (email)=(…)“), ohne SQL-Ausschnitte (LINE/CONTEXT/QUERY) und ohne IP-Adressen
           melde() { { grep -vE '^[[:space:]]*(DETAIL|LINE [0-9]+|CONTEXT|QUERY|HINT|WHERE):|^[[:space:]]*\^' || true; } | sed -E 's/\(([^)]{0,200})\)=\([^)]*\)/(\1)=(…)/g; s/"[^"]*"/«…»/g; s/\x27[^\x27]*\x27/«…»/g; s/["\x27].*$/«…»/; s/[0-9]{1,3}(\.[0-9]{1,3}){3}/…/g; s/\[[0-9a-fA-F:]{3,}\]|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{0,4}){3,7}/…/g' | head -c 600 || true; }
           q() { psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 -t -A "$@"; }
@@ -79,6 +105,14 @@ jobs:
               echo "::notice::$ZIEL-Datenbank übernommen (vorhandene Dateien als eingespielt vermerkt)"
             fi
           fi
+          # Die Datenbank merkt sich, ob sie Test oder Live ist – steht das Geheimnis versehentlich auf der falschen Datenbank, bricht der Lauf ab
+          q --single-transaction -c "create table if not exists codeschmiede.umgebung (ziel text primary key check (ziel in ('test','live')), seit timestamptz not null default now()); alter table codeschmiede.umgebung add column if not exists projekt text check (projekt ~ '^[a-z]{20}\$'); revoke all on codeschmiede.umgebung from public;" > /dev/null 2>fehler.txt \
+            || { echo "::error::Umgebung der $ZIEL-Datenbank nicht lesbar: $(melde < fehler.txt)"; exit 1; }
+          andere=$(q -c "select string_agg(ziel, ',') from codeschmiede.umgebung where ziel <> '$ZIEL'" 2>fehler.txt) || { echo "::error::Umgebung der $ZIEL-Datenbank nicht lesbar: $(melde < fehler.txt)"; exit 1; }
+          if [ -n "$andere" ]; then echo "::error::Diese Datenbank ist als „$andere“ gekennzeichnet, der Lauf will nach „$ZIEL“ – Geheimnis SUPABASE_DB_URL der Umgebung „$ZIEL“ prüfen. Nichts eingespielt."; exit 1; fi
+          q -c "insert into codeschmiede.umgebung (ziel, projekt) values ('$ZIEL', nullif('$REF', '')) on conflict (ziel) do update set projekt = coalesce(excluded.projekt, codeschmiede.umgebung.projekt)" > /dev/null 2>fehler.txt \
+            || { echo "::error::Umgebung der $ZIEL-Datenbank nicht gespeichert: $(melde < fehler.txt)"; exit 1; }
+          aufraeumen
           declare -A FERTIG=()
           while IFS='|' read -r d s; do [ -n "$d" ] && FERTIG["$d"]="$s"; done < <(q -c "select datei, coalesce(pruefsumme, '') from codeschmiede.migrationen")
           OFFEN=()
@@ -106,7 +140,7 @@ jobs:
           for f in "${OFFEN[@]}"; do
             echo "Spiele ein: $f"
             summe=$(sha256sum "supabase/migrations/$f" | cut -c1-64)
-            { cat "supabase/migrations/$f"; echo; echo "insert into codeschmiede.migrationen (datei, commit, pruefsumme) values ('$f', '$COMMIT', '$summe') on conflict (datei) do update set eingespielt = now(), commit = excluded.commit, art = 'eingespielt', pruefsumme = excluded.pruefsumme;"; } > einspielen.sql
+            { echo "select set_config('codeschmiede.ziel', '$ZIEL', false);"; cat "supabase/migrations/$f"; echo; echo "insert into codeschmiede.migrationen (datei, commit, pruefsumme) values ('$f', '$COMMIT', '$summe') on conflict (datei) do update set eingespielt = now(), commit = excluded.commit, art = 'eingespielt', pruefsumme = excluded.pruefsumme;"; } > einspielen.sql
             q --single-transaction -f einspielen.sql > /dev/null 2>fehler.txt || { echo "::error::$f konnte nicht in die $ZIEL-Datenbank eingespielt werden (nichts davon übernommen, nichts Weiteres eingespielt): $(melde < fehler.txt)"; exit 1; }
             echo "::notice::$ZIEL: $f eingespielt"
           done
