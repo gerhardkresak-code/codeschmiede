@@ -1,6 +1,3 @@
 # Dateien, die beim nächsten Push in die Codeschmiede-Datenbank eingespielt werden (Reihenfolge!). Alle sind mehrfach ausführbar.
-# 2026-10-22: Erstbefüllung der Datenbank codeschmiede (EU)
-migrations/0001_grundlage.sql
-migrations/0002_projekte_verbrauch.sql
-migrations/0003_abo_limits.sql
-migrations/0004_ttg_funktionen.sql
+# 2026-10-24: Projekt-Arten und Anbindungen (Entwurf 1.0 „Neues Projekt“, 0.9.0)
+migrations/0030_projekt_arten.sql
