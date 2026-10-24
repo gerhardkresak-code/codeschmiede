@@ -5,6 +5,6 @@ self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((k) =>
 self.addEventListener("fetch", (e) => {
   const r = e.request;
   if (r.method !== "GET" || new URL(r.url).origin !== self.location.origin) return;
-  e.respondWith(fetch(r).then((antwort) => { const kopie = antwort.clone(); caches.open(SPEICHER).then((c) => c.put(r, kopie)); return antwort; })
+  e.respondWith(fetch(r).then((antwort) => { if (antwort.ok) { const kopie = antwort.clone(); caches.open(SPEICHER).then((c) => c.put(r, kopie)); } return antwort; })
     .catch(() => caches.match(r).then((m) => m || caches.match("/index.html"))));
 });

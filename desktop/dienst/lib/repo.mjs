@@ -24,6 +24,9 @@ export function vorlageFuellen(text, { name, repo, inhaber, kennung = "" }, art 
   // Ersetzungsfunktionen: Sonderzeichen wie $' im Namen werden nicht als Muster gelesen (Prüfung N4)
   return String(text)
     .replaceAll("[KENNUNG]", () => kennung)
+    // Rust-Paketname: a–z, 0–9, _ und -, Buchstabe vorn; Tauri-Kennung: a–z, 0–9 und -, Buchstabe vorn
+    .replaceAll("[CRATE]", () => { const c = kennung.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^[-_]+|[-_]+$/g, ""); return /^[a-z]/.test(c) ? c : `app-${c || "programm"}`; })
+    .replaceAll("[IDENTIFIER]", () => { const c = kennung.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, ""); return /^[a-z]/.test(c) ? c : `app-${c || "programm"}`; })
     // Programmname (Fenster, Installation, Windows-Ressourcen): nur Buchstaben, Ziffern, Leerzeichen, Punkt, Bindestrich, Unterstrich
     .replaceAll("[PROGRAMMNAME]", () => roh.replace(/[^\p{L}\p{N} ._-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 60) || "Programm")
     .replaceAll("[PROJEKTNAME]", () => sicher)

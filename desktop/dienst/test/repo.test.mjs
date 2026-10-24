@@ -37,7 +37,7 @@ test("Grundgerüst je Technik-Art: Code, Abläufe, Platzhalter sicher gefüllt",
     const pkg = JSON.parse(await readFile(path.join(ziel, "package.json"), "utf8"));
     assert.equal(pkg.name, "haushaltsbuch");
     for (const f of d.filter((x) => /\.(json|webmanifest)$/.test(x))) JSON.parse(await readFile(path.join(ziel, f), "utf8"));   // gültiges JSON trotz Anführungszeichen im Namen
-    for (const f of d) { if (!/\.(png)$/.test(f)) assert.doesNotMatch(await readFile(path.join(ziel, f), "utf8"), /\[(PROJEKTNAME|KENNUNG|PROGRAMMNAME)\]/, `${art}: ${f}`); }
+    for (const f of d) { if (!/\.(png)$/.test(f)) assert.doesNotMatch(await readFile(path.join(ziel, f), "utf8"), /\[(PROJEKTNAME|KENNUNG|PROGRAMMNAME|CRATE|IDENTIFIER)\]/, `${art}: ${f}`); }
     if (art === "web" || art === "handy") {
       const app = await readFile(path.join(ziel, "src/App.jsx"), "utf8");
       assert.match(app, /Haus&quot;buch &lt;&#123;x&#125;&gt;/); assert.doesNotMatch(app, /<\{x\}>/);
@@ -52,4 +52,14 @@ test("Grundgerüst je Technik-Art: Code, Abläufe, Platzhalter sicher gefüllt",
     await rm(ziel, { recursive: true, force: true });
   }
   await assert.rejects(geruestSchreiben(os.tmpdir(), null, { name: "x", repo: "o/x", art: "boese" }), /Unbekannte/);
+});
+
+test("Programm-Kennungen auch bei schwierigen Repository-Namen gültig", async () => {
+  const ziel = await mkdtemp(path.join(os.tmpdir(), "cs-art-kennung-"));
+  await geruestSchreiben(ziel, null, { name: "9 App", repo: "gerhardkresak-code/9a_b.c", art: "programm" });
+  const conf = JSON.parse(await readFile(path.join(ziel, "src-tauri/tauri.conf.json"), "utf8"));
+  assert.equal(conf.identifier, "at.kresak.app-9a-b-c");
+  assert.match(await readFile(path.join(ziel, "src-tauri/Cargo.toml"), "utf8"), /name = "app-9a_b-c"/);
+  assert.doesNotMatch(conf.app.security.csp, /unsafe-inline'; *$|script-src 'self' 'unsafe-inline'/);
+  await rm(ziel, { recursive: true, force: true });
 });

@@ -141,7 +141,7 @@ export default function Anbindungen({ d, ich, toast, onVorschau }) {
   const projekt = d.projekte.find((p) => p.id === d.projektId);
   const admin = ich.rolle === "admin";
   const [aktionen, setAktionen] = useState([]); const [busy, setBusy] = useState("");
-  const [zweig, setZweig] = useState("main");
+  const [zweig, setZweig] = useState("main"); const [netz, setNetz] = useState(false);
   const laden = useCallback(async () => {
     if (!admin || !projekt) return;
     const { data } = await supabase.from("ws_projekt_aktionen").select("*").eq("projekt_id", projekt.id).order("id", { ascending: false }).limit(5);
@@ -162,7 +162,7 @@ export default function Anbindungen({ d, ich, toast, onVorschau }) {
     try {
       const pc = art === "sandbox" ? meinePcs[0]?.id : null;
       if (art === "sandbox" && !pc) throw new Error("Auf diesem PC läuft keine Werkstatt – oben „Werkstatt an“ einschalten");
-      const { error } = await supabase.rpc("ws_projekt_aktion_anfordern", { p_projekt: projekt.id, p_art: art, p_zweig: art === "pruefen" ? null : zweig.trim() || "main", p_pc: pc });
+      const { error } = await supabase.rpc("ws_projekt_aktion_anfordern", { p_projekt: projekt.id, p_art: art, p_zweig: art === "pruefen" ? null : zweig.trim() || "main", p_pc: pc, p_netz: art === "sandbox" && netz });
       if (error) throw error;
       toast(art === "pruefen" ? "Ampel wird neu geprüft" : art === "sandbox" ? "Die Werkstatt holt den Build und startet die Windows-Sandbox" : "Testlauf wird gestartet");
     } catch (e) { toast(fehler(e)); } finally { setBusy(""); }
@@ -204,6 +204,8 @@ export default function Anbindungen({ d, ich, toast, onVorschau }) {
             <button type="button" className={btn} disabled={!admin || !!busy || !projekt.repo} onClick={() => aktion("sandbox")}>{busy === "sandbox" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Box className="w-4 h-4" />}In Windows-Sandbox starten</button>
             {projekt.repo && <a className={ghost} href={`https://github.com/${projekt.repo}/actions/workflows/programm.yml`} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-4 h-4" />Builds bei GitHub (Installationsdateien)</a>}
           </div>
+          <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 accent-emerald-700" checked={netz} onChange={(e) => setNetz(e.target.checked)} />
+            <span>Netzwerk in der Sandbox erlauben<span className="block text-xs text-slate-500">Nur einschalten, wenn das Programm Internet braucht (z. B. Datenbank). Dann erreicht es auch dein Heimnetz.</span></span></label>
           <p className="text-xs text-slate-500">Die Sandbox ist eine Wegwerf-Umgebung von Windows: Die Installation startet nur darin, Schließen löscht alles, dein PC bleibt unberührt. Mac-Dateien (.dmg) lädst du bei GitHub.</p>
           <Ergebnis a={letzte("sandbox")} />
           {!admin && <p className="text-xs text-slate-500">Die Sandbox startet der Admin auf seinem PC.</p>}</>)}

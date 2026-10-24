@@ -82,7 +82,7 @@ jobs:
       - name: Grundgerüst erzeugen
         run: |
           mkdir -p "$RUNNER_TEMP/neu"
-          node --input-type=module -e "import { geruestSchreiben } from './desktop/dienst/lib/repo.mjs'; await geruestSchreiben(process.argv[1], null, { name: 'Prüf-App \"Ä\"', repo: 'gerhardkresak-code/pruef-app', art: '${{ matrix.art }}' });" "$RUNNER_TEMP/neu"
+          node --input-type=module -e "import { geruestSchreiben } from './desktop/dienst/lib/repo.mjs'; await geruestSchreiben(process.argv[1], null, { name: 'Prüf-App \"Ä\"', repo: 'gerhardkresak-code/9pruef_app.x', art: '${{ matrix.art }}' });" "$RUNNER_TEMP/neu"
       - name: Web/Handy/Werkzeug prüfen
         if: ${{ matrix.art != 'programm' }}
         working-directory: ${{ runner.temp }}/neu

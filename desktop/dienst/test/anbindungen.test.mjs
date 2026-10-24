@@ -24,7 +24,7 @@ test("Sandbox-Pfad nur unter Windows", () => {
 });
 
 test("Ampel Web-App: Repository, Prüfung, Testseite, Datenbank", async () => {
-  const sh = ghFake({ "repo view": "PUBLIC", "run list": JSON.stringify([{ status: "completed", conclusion: "success" }]) });
+  const sh = ghFake({ "repo view": "PUBLIC", "run list pruefung.yml": JSON.stringify([{ status: "completed", conclusion: "success" }]) });
   const a = await ampelPruefen({ sh, projekt: { repo: "o/app", technik_art: "web", datenbank: "spielwiese", vorschau_domain: "app.pages.dev" }, holen: async () => ({ ok: true, status: 200 }) });
   assert.equal(a.github.stand, "gruen"); assert.equal(a.pruefung.stand, "gruen"); assert.equal(a.testseite.stand, "gruen");
   assert.equal(a.datenbank.stand, "gelb"); assert.match(a.datenbank.text, /Bestätigung/);
@@ -47,7 +47,8 @@ test("Ampel ohne Repository und mit ungültiger Testseite", async () => {
 
 test("Sandbox-Konfiguration: nur lesbar, Datei geprüft, XML sicher", () => {
   const k = sandboxKonfig("C:\\Daten\\a&b", "Prog_0.1.0_x64-setup.exe");
-  assert.match(k, /<ReadOnly>true<\/ReadOnly>/); assert.match(k, /a&amp;b/); assert.match(k, /<ClipboardRedirection>Disable/);
+  assert.match(k, /<ReadOnly>true<\/ReadOnly>/); assert.match(k, /<Networking>Disable/); assert.match(k, /<VGpu>Disable/); assert.match(k, /<ProtectedClient>Enable/);
+  assert.match(sandboxKonfig("C:\\x", "a.exe", { netz: true }), /<Networking>Default/); assert.match(k, /a&amp;b/); assert.match(k, /<ClipboardRedirection>Disable/);
   assert.throws(() => sandboxKonfig("C:\\x", "boese\".exe"), /Dateiname/);
   assert.throws(() => sandboxKonfig("C:\\x", "skript.bat"), /Dateiname/);
 });
@@ -58,6 +59,7 @@ test("Sandbox starten: lädt genau eine .exe und startet nur die Sandbox", async
   const sh = async (b, args) => {
     aufrufe.push(args.join(" "));
     if (args[0] === "run" && args[1] === "list") return { stdout: JSON.stringify([{ databaseId: 77, url: "https://github.com/o/prog/actions/runs/77" }]) };
+    if (args[0] === "api") return { stdout: "1234\n" };
     if (args[0] === "run" && args[1] === "download") { const dir = args[args.indexOf("--dir") + 1]; await writeFile(path.join(dir, "Prog_0.1.0_x64-setup.exe"), "MZ"); return { stdout: "" }; }
     throw new Error("unerwartet");
   };
@@ -70,6 +72,7 @@ test("Sandbox starten: lädt genau eine .exe und startet nur die Sandbox", async
   // zwei Dateien im Build -> Fehler
   const sh2 = async (b, args) => {
     if (args[1] === "list") return { stdout: JSON.stringify([{ databaseId: 78 }]) };
+    if (args[0] === "api") return { stdout: "99" };
     const dir = args[args.indexOf("--dir") + 1]; await writeFile(path.join(dir, "a.exe"), "MZ"); await writeFile(path.join(dir, "b.dll"), "x"); return { stdout: "" };
   };
   await assert.rejects(sandboxStarten({ sh: sh2, repo: "o/prog", basis, projektId: "prog", plattform: "win32", sandbox: () => "x", starten: async () => assert.fail("darf nicht starten") }), /genau eine/);
@@ -85,4 +88,10 @@ test("Testlauf startet den Ablauf „Lauf“", async () => {
   const r = await testlaufStarten({ sh: async (b, a) => { aufrufe.push(a.join(" ")); return { stdout: "" }; }, repo: "o/tool", zweig: "main" });
   assert.equal(aufrufe[0], "workflow run lauf.yml --repo o/tool --ref main"); assert.match(r.link, /lauf\.yml$/);
   await assert.rejects(testlaufStarten({ sh: async () => ({}), repo: "o/../x" }), /Repository/);
+});
+
+test("Sandbox: zu großes Artefakt und leere Projekt-Kennung werden abgelehnt", async () => {
+  const sh = async (b, args) => args[1] === "list" ? { stdout: JSON.stringify([{ databaseId: 5 }]) } : args[0] === "api" ? { stdout: String(500 * 1024 * 1024) } : assert.fail("kein Download");
+  await assert.rejects(sandboxStarten({ sh, repo: "o/p", basis: os.tmpdir(), projektId: "p", plattform: "win32", sandbox: () => "x", starten: async () => {} }), /400 MB/);
+  await assert.rejects(sandboxStarten({ sh, repo: "o/p", basis: os.tmpdir(), projektId: "../", plattform: "win32", sandbox: () => "x", starten: async () => {} }), /Projekt-Kennung/);
 });

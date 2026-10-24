@@ -70,6 +70,7 @@ create table if not exists public.ws_projekt_aktionen (
   art text not null check (art in ('sandbox','testlauf','pruefen')),
   zweig text check (zweig is null or (zweig ~ '^[A-Za-z0-9._/-]{1,100}$' and zweig !~ '\.\.' and zweig !~ '^[/.-]')),
   ziel_pc uuid references public.ws_werkstatt_pcs(id) on delete cascade,   -- Sandbox: auf genau diesem PC
+  netz boolean not null default false,   -- Sandbox: Netzwerk nur auf ausdrücklichen Wunsch
   stand text not null default 'angefragt' check (stand in ('angefragt','laeuft','fertig','fehler')),
   hinweis text check (char_length(hinweis) <= 500),
   link text check (link is null or link ~ '^https://github\.com/[A-Za-z0-9._/-]{1,200}$'),
@@ -86,11 +87,12 @@ drop policy if exists ws_projekt_aktionen_lesen on public.ws_projekt_aktionen;
 create policy ws_projekt_aktionen_lesen on public.ws_projekt_aktionen for select to authenticated using (public.ws_ist_admin());
 do $$ begin alter publication supabase_realtime add table public.ws_projekt_aktionen; exception when others then null; end $$;
 
-create or replace function public.ws_projekt_aktion_anfordern(p_projekt text, p_art text, p_zweig text default null, p_pc uuid default null) returns bigint
+create or replace function public.ws_projekt_aktion_anfordern(p_projekt text, p_art text, p_zweig text default null, p_pc uuid default null, p_netz boolean default false) returns bigint
 language plpgsql security definer set search_path = public as $$
 declare p public.ws_projekte; n bigint;
 begin
   if not public.ws_ist_admin() then raise exception 'Nur der Admin'; end if;
+  if p_art not in ('sandbox','testlauf','pruefen') then raise exception 'Unbekannte Aktion'; end if;
   select * into p from public.ws_projekte where id = p_projekt and not coalesce(archiviert, false);
   if p.id is null then raise exception 'Projekt nicht gefunden'; end if;
   if p_art = 'sandbox' and p.technik_art <> 'programm' then raise exception 'Die Sandbox gibt es nur für Programme'; end if;
@@ -101,14 +103,14 @@ begin
   end if;
   if exists (select 1 from public.ws_projekt_aktionen a where a.projekt_id = p_projekt and a.art = p_art and a.stand in ('angefragt','laeuft')
               and a.geaendert > now() - interval '15 minutes') then raise exception 'Läuft schon – bitte kurz warten'; end if;
-  insert into public.ws_projekt_aktionen (projekt_id, art, zweig, ziel_pc) values (p_projekt, p_art, nullif(p_zweig, ''), case when p_art = 'sandbox' then p_pc end)
+  insert into public.ws_projekt_aktionen (projekt_id, art, zweig, ziel_pc, netz) values (p_projekt, p_art, nullif(p_zweig, ''), case when p_art = 'sandbox' then p_pc end, p_art = 'sandbox' and coalesce(p_netz, false))
   returning id into n;
-  insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'projekt_aktion', jsonb_build_object('projekt', p_projekt, 'art', p_art, 'zweig', p_zweig));
+  insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'projekt_aktion', jsonb_build_object('projekt', p_projekt, 'art', p_art, 'zweig', p_zweig, 'netz', coalesce(p_netz, false)));
   return n;
 end $$;
 
 create or replace function public.ws_projekt_aktion_nehmen(p_pc uuid)
-returns table (id bigint, projekt_id text, art text, zweig text, repo text, technik_art text)
+returns table (id bigint, projekt_id text, art text, zweig text, repo text, technik_art text, netz boolean)
 language plpgsql security definer set search_path = public as $$
 declare a public.ws_projekt_aktionen;
 begin
@@ -121,7 +123,7 @@ begin
    order by x.erstellt limit 1 for update skip locked;
   if a.id is null then return; end if;
   update public.ws_projekt_aktionen set stand = 'laeuft', pc = p_pc, geaendert = now(), hinweis = 'Werkstatt arbeitet' where ws_projekt_aktionen.id = a.id;
-  return query select a.id, a.projekt_id, a.art, a.zweig, p.repo, p.technik_art from public.ws_projekte p where p.id = a.projekt_id;
+  return query select a.id, a.projekt_id, a.art, a.zweig, p.repo, p.technik_art, a.netz from public.ws_projekte p where p.id = a.projekt_id;
 end $$;
 
 create or replace function public.ws_projekt_aktion_ergebnis(p_pc uuid, p_id bigint, p_hinweis text, p_link text default null, p_fehler boolean default false) returns void
@@ -130,13 +132,14 @@ begin
   if not public.ws_ist_admin() then raise exception 'Nur die Werkstatt des Admins'; end if;
   update public.ws_projekt_aktionen set stand = case when p_fehler then 'fehler' else 'fertig' end, hinweis = left(p_hinweis, 500),
          link = case when p_link ~ '^https://github\.com/[A-Za-z0-9._/-]{1,200}$' then p_link end, geaendert = now()
-   where id = p_id and pc = p_pc and stand = 'laeuft';
+   where id = p_id and pc = p_pc and stand = 'laeuft'
+     and exists (select 1 from public.ws_werkstatt_pcs w where w.id = p_pc and w.benutzer_id = auth.uid());
   if not found then raise exception 'Keine laufende Aktion dieser Werkstatt'; end if;
 end $$;
 
-revoke execute on function public.ws_projekt_aktion_anfordern(text, text, text, uuid), public.ws_projekt_aktion_nehmen(uuid),
+revoke execute on function public.ws_projekt_aktion_anfordern(text, text, text, uuid, boolean), public.ws_projekt_aktion_nehmen(uuid),
   public.ws_projekt_aktion_ergebnis(uuid, bigint, text, text, boolean) from public, anon;
-grant execute on function public.ws_projekt_aktion_anfordern(text, text, text, uuid), public.ws_projekt_aktion_nehmen(uuid),
+grant execute on function public.ws_projekt_aktion_anfordern(text, text, text, uuid, boolean), public.ws_projekt_aktion_nehmen(uuid),
   public.ws_projekt_aktion_ergebnis(uuid, bigint, text, text, boolean) to authenticated;
 
 -- Aufräumen: erledigte Aktionen nach 30 Tagen (läuft im Abgleich der Werkstatt mit)

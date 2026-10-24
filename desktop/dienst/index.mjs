@@ -1107,8 +1107,8 @@ async function aktionArbeit() {
       await ampelMelden(p); await fertig("Ampel geprüft");
     } else if (a.art === "sandbox") {
       melde("status", "Programm wird für die Windows-Sandbox geholt");
-      const r = await sandboxStarten({ sh: ghGrenze, repo: a.repo, zweig: a.zweig || "main", basis: path.join(cfg.daten_ordner, "sandbox"), projektId: a.projekt_id, starten: sandboxProgramm });
-      await fertig(`Windows-Sandbox gestartet mit ${r.datei} – Schließen der Sandbox löscht alles`, r.link);
+      const r = await sandboxStarten({ sh: ghGrenze, repo: a.repo, zweig: a.zweig || "main", basis: path.join(cfg.daten_ordner, "sandbox"), projektId: a.projekt_id, starten: sandboxProgramm, netz: !!a.netz });
+      await fertig(`Windows-Sandbox gestartet mit ${r.datei}${a.netz ? " (mit Netzwerk)" : " (ohne Netzwerk)"} – Schließen der Sandbox löscht alles`, r.link);
     } else if (a.art === "testlauf") {
       const r = await testlaufStarten({ sh: ghGrenze, repo: a.repo, zweig: a.zweig || "main" });
       await fertig("Testlauf in GitHub gestartet – Ergebnis in ein paar Minuten in der Ampel", r.link);
