@@ -21,6 +21,8 @@ test("Geheimnisse werden entfernt", () => {
     assert.notEqual(ohneGeheimnisse(t), t, t);
   assert.equal(ohneGeheimnisse('{"password": "Geheim123"}'), '{"password": [entfernt]}');
   assert.equal(ohneGeheimnisse("{'secret': 'Geheim123'}"), "{'secret': [entfernt]}");
+  assert.equal(ohneGeheimnisse("DB_PASSWORD_" + "x".repeat(60) + "=Geheim123"), "DB_PASSWORD_" + "x".repeat(60) + "=[entfernt]");
+  assert.equal(ohneGeheimnisse('{\\"password\\":\\"Geheim123\\"}').includes("Geheim123"), false);
   assert.equal(ohneGeheimnisse("persist-credentials: false,"), "persist-credentials: false,");
   assert.equal(ohneGeheimnisse('{"enabled": true, "token": null}'), '{"enabled": true, "token": null}');
   const t0 = Date.now(); ohneGeheimnisse("password".repeat(1000)); ohneGeheimnisse("token".repeat(2000));
