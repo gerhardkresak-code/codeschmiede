@@ -35,13 +35,13 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
       if (e.origin !== ziel || e.source !== rahmen.current?.contentWindow || !e.data || typeof e.data !== "object") return;
       if (e.data.cs === "bereit" || e.data.cs === "design-ok") setBereit(true);
       // Eigene Design-Freigabe (Entscheidung Gerhard 2026-10-24): Der Seiten-Designer fragt nach dem Design-Geräteschlüssel
-      // der Codeschmiede bzw. lässt eine Nachricht „ttg-design|…“ signieren. Nur für die eingebettete Testfassung (*.pages.dev),
+      // der Codeschmiede bzw. lässt eine Nachricht „ttg-design|…“ signieren. Nur für die eingebettete Testfassung von Trainer to go (trainer-to-go.pages.dev und deren Zweige),
       // nur im Programm; was signiert werden darf, prüft zusätzlich das Programm selbst (Rust, design.rs).
       if (e.data.cs === "design-frage") {
         const id = Number(e.data.id);
         const antwort = (x) => { try { rahmen.current?.contentWindow?.postMessage({ cs: "design-antwort", id, ...x }, ziel); } catch { /* egal */ } };
         if (!Number.isSafeInteger(id)) return;
-        if (!/^https:\/\/[a-z0-9.-]+\.pages\.dev$/i.test(ziel || "")) { antwort({ fehler: "Design-Freigabe gibt es nur für Testfassungen." }); return; }
+        if (!/^https:\/\/([a-z0-9-]+\.)?trainer-to-go\.pages\.dev$/i.test(ziel || "")) { antwort({ fehler: "Design-Freigabe gibt es nur für die Testfassungen von Trainer to go." }); return; }
         if (!isDesktop()) { antwort({ fehler: "Die Design-Freigabe gibt es nur im Programm Codeschmiede (nicht im Browser)." }); return; }
         const n = typeof e.data.nachricht === "string" ? e.data.nachricht : "";
         const auftrag = e.data.art === "geraet" ? tauri("ws_design_geraet")
