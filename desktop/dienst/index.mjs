@@ -32,7 +32,7 @@ import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopp
 import { uebernehmen, prText } from "./lib/ersatz.mjs";
 import { ampelPruefen, sandboxStarten, testlaufStarten } from "./lib/anbindungen.mjs";
 import { zweigStand, codeBaum, codeDatei, handSchreiben } from "./lib/code.mjs";
-import { dbEinrichten, dbAmpel, dbOffen } from "./lib/datenbank.mjs";
+import { dbEinrichten, dbAmpel, dbOffen, dbLiveEinspielen } from "./lib/datenbank.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -1241,8 +1241,14 @@ async function liveArbeit() {
   const a = data?.[0]; if (!a) return false;
   melde("status", a.art === "einrichten" ? "Test & Live wird eingerichtet" : a.art === "live" ? "Live schalten" : "Live zurücksetzen");
   try {
-    const { data: projekt } = await db.from("ws_projekte").select("id, vorschau_domain").eq("id", a.projekt_id).single();
+    const { data: projekt } = await db.from("ws_projekte").select("id, repo, vorschau_domain, db_live_ref").eq("id", a.projekt_id).single();
     const r = await liveAusfuehren({ sh: ghGrenze, auftrag: a, mussLaufen: !!projekt?.vorschau_domain, melde: (t) => melde("status", t) });
+    // Datenbank-Station: Live-Datenbank nach dem Live-Schalten aktualisieren und das Ergebnis melden
+    if (a.art === "live" && projekt?.db_live_ref) {
+      melde("status", "Live-Datenbank wird aktualisiert");
+      const h = await dbLiveEinspielen({ sh: ghGrenze, projekt }).catch((e) => `Live-Datenbank: ${kuerzen(ohneGeheimnisse(e?.stderr || e?.message || String(e)), 200)}`);
+      if (h) r.hinweis = [r.hinweis, h].filter(Boolean).join(" · ");
+    }
     // Feature-Stände: live ist ein Feature, wenn der Stand seines letzten live gegangenen Auftrags im neuen Live-Stand enthalten ist (Prüfung R1/Hinweis 2)
     const liveF = []; const testF = [];
     if (a.art !== "einrichten") {

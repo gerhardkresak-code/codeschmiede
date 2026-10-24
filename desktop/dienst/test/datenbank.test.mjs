@@ -5,45 +5,65 @@ import { promisify } from "node:util";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { dbEinrichten, dbAmpel, dbOffen, ABLAUF_PFAD } from "../lib/datenbank.mjs";
+import { dbEinrichten, dbAmpel, dbOffen, dbLiveEinspielen, ABLAUF_PFAD } from "../lib/datenbank.mjs";
 
 const run = promisify(execFile);
 const git = async (cwd, ...a) => (await run("git", a, { cwd })).stdout.trim();
 
-test("Einrichten: Variablen, Auftrag nur wenn Ablauf fehlt oder anders, Hinweis auf fehlendes Geheimnis", async () => {
+test("Einrichten: Umgebungen nur für ihren Zweig, Auftrag nur wenn Ablauf fehlt oder anders, Hinweis auf fehlende Zugänge", async () => {
   const aufrufe = []; let auftrag = null;
-  const sh = (inhaltMain, geheim) => async (b, a) => {
+  const sh = (inhaltMain, geheim, policies = "") => async (b, a) => {
     aufrufe.push(a.join(" "));
-    if (a[0] === "api" && a[1].includes("/contents/")) { if (inhaltMain == null) { const e = new Error("HTTP 404"); throw e; } return { stdout: `${"b".repeat(40)}\t${Buffer.from(inhaltMain).toString("base64")}\n` }; }
+    if (a[0] === "api" && a[1].includes("/contents/")) { if (inhaltMain == null) throw new Error("HTTP 404"); return { stdout: `${"b".repeat(40)}\t${Buffer.from(inhaltMain).toString("base64")}\n` }; }
     if (a[0] === "api" && a[1].endsWith("git/ref/heads/main")) return { stdout: "c".repeat(40) };
-    if (a[0] === "secret") return { stdout: geheim ? "SUPABASE_ACCESS_TOKEN\n" : "ANDERES\n" };
+    if (a[0] === "api" && a[1].endsWith("deployment-branch-policies") && a.length === 4) return { stdout: typeof policies === "function" ? policies(a[1]) : policies };
+    if (a[0] === "secret") return { stdout: geheim ? "SUPABASE_DB_URL\n" : "ANDERES\n" };
     return { stdout: "" };
   };
   const projekt = { repo: "o/app", db_test_ref: "abcdefghijabcdefghij", db_live_ref: null, db_test_bestehend: true, db_live_bestehend: false };
-  let t = await dbEinrichten({ sh: sh(null, false), projekt, vorlage: "ABLAUF", auftragAnlegen: async (d) => { auftrag = d; return 42; } });
-  assert.match(t, /Auftrag #42/); assert.match(t, /SUPABASE_ACCESS_TOKEN/);
+  let t = await dbEinrichten({ sh: sh(null, false, "7\tfeature/*\tbranch\n"), projekt, vorlage: "ABLAUF", auftragAnlegen: async (d) => { auftrag = d; return 42; } });
+  assert.match(t, /Auftrag #42/); assert.match(t, /SUPABASE_DB_URL in „test“/);
   assert.deepEqual(auftrag, { pfad: ABLAUF_PFAD, inhalt: "ABLAUF", basis_blob: "", basis_sha: "c".repeat(40) });
-  assert.ok(aufrufe.includes("variable set SUPABASE_TEST_REF --repo o/app --body abcdefghijabcdefghij"));
-  assert.ok(aufrufe.includes("variable set SUPABASE_TEST_BESTEHEND --repo o/app --body ja"));
-  assert.ok(aufrufe.includes("variable delete SUPABASE_LIVE_REF --repo o/app"));
-  auftrag = null;
-  t = await dbEinrichten({ sh: sh("ABLAUF", true), projekt, vorlage: "ABLAUF", auftragAnlegen: async () => assert.fail("kein Auftrag nötig") });
+  assert.ok(aufrufe.some((x) => x.startsWith("api -X PUT repos/o/app/environments/test")));
+  assert.ok(aufrufe.includes("api -X DELETE repos/o/app/environments/test/deployment-branch-policies/7"), "fremde Zweig-Regel entfernt");
+  assert.ok(aufrufe.includes("api -X POST repos/o/app/environments/test/deployment-branch-policies -f name=main -f type=branch"));
+  assert.ok(aufrufe.includes("variable set BESTEHEND --repo o/app --env test --body ja"));
+  assert.ok(!aufrufe.some((x) => x.includes("environments/live")), "ohne Live-Datenbank keine Live-Umgebung");
+  aufrufe.length = 0;
+  t = await dbEinrichten({ sh: sh("ABLAUF", true, (pfad) => (pfad.includes("/live/") ? "4\tlive\tbranch\n" : "3\tmain\tbranch\n")), projekt: { ...projekt, db_live_ref: "bbcdefghijabcdefghij" }, vorlage: "ABLAUF", auftragAnlegen: async () => assert.fail("kein Auftrag nötig") });
   assert.match(t, /schon auf main/); assert.doesNotMatch(t, /fehlt/);
-  t = await dbEinrichten({ sh: sh("ALT", true), projekt, vorlage: "ABLAUF", auftragAnlegen: async (d) => { auftrag = d; return 7; } });
-  assert.equal(auftrag.basis_blob, "b".repeat(40));
+  assert.ok(!aufrufe.some((x) => x.includes("DELETE")));
   await assert.rejects(dbEinrichten({ sh: sh(null, true), projekt: { ...projekt, db_test_ref: "BÖSE" }, auftragAnlegen: async () => 1 }), /Kennung/);
 });
 
 test("Ampel der Datenbank-Station", async () => {
   assert.equal(await dbAmpel({ sh: async () => ({ stdout: "" }), projekt: { repo: "o/a" } }), null);
-  const sh = async (b, a) => {
+  const sh = (geheimLive) => async (b, a) => {
     if (a[0] === "api") return { stdout: `${"b".repeat(40)}\t${Buffer.from("x").toString("base64")}` };
-    if (a[0] === "secret") return { stdout: "SUPABASE_ACCESS_TOKEN" };
+    if (a[0] === "secret") return { stdout: a.includes("live") && !geheimLive ? "" : "SUPABASE_DB_URL" };
     if (a[0] === "run") return { stdout: JSON.stringify([{ status: "completed", conclusion: a.includes("live") ? "failure" : "success" }]) };
     return { stdout: "" };
   };
-  const a = await dbAmpel({ sh, projekt: { repo: "o/a", db_test_ref: "abcdefghijabcdefghij", db_live_ref: "bbcdefghijabcdefghij" } });
+  const projekt = { repo: "o/a", db_test_ref: "abcdefghijabcdefghij", db_live_ref: "bbcdefghijabcdefghij" };
+  let a = await dbAmpel({ sh: sh(true), projekt });
   assert.equal(a.datenbank.stand, "gruen"); assert.equal(a.datenbank_live.stand, "rot");
+  a = await dbAmpel({ sh: sh(false), projekt });
+  assert.equal(a.datenbank_live.stand, "gelb"); assert.match(a.datenbank_live.text, /„live“/);
+});
+
+test("Live-Datenbank nach dem Live-Schalten: startet Ablauf auf live und meldet Fehler deutlich", async () => {
+  const aufrufe = [];
+  const sh = (ergebnis) => async (b, a) => {
+    aufrufe.push(a.join(" "));
+    if (a[0] === "api") return { stdout: `${"b".repeat(40)}\t${Buffer.from("x").toString("base64")}` };
+    if (a[0] === "run") return { stdout: JSON.stringify([{ databaseId: 1, status: "completed", conclusion: ergebnis, createdAt: new Date().toISOString() }]) };
+    return { stdout: "" };
+  };
+  const projekt = { repo: "o/a", db_live_ref: "bbcdefghijabcdefghij" };
+  assert.equal(await dbLiveEinspielen({ sh: sh("success"), projekt, pause: async () => {} }), "Live-Datenbank aktuell");
+  assert.ok(aufrufe.includes("workflow run datenbank.yml --repo o/a --ref live"));
+  assert.match(await dbLiveEinspielen({ sh: sh("failure"), projekt, pause: async () => {} }), /ACHTUNG/);
+  assert.equal(await dbLiveEinspielen({ sh: sh("success"), projekt: { repo: "o/a" } }), null);
 });
 
 test("Offene Datenbank-Dateien: main ohne live", async () => {

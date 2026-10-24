@@ -72,6 +72,7 @@ begin
   if not exists (select 1 from public.ws_werkstatt_pcs w where w.id = p_pc and w.benutzer_id = auth.uid()) then raise exception 'Unbekannter Werkstatt-PC'; end if;
   if not public.ws_db_offen_ok(p_offen) then raise exception 'Ungültige Liste'; end if;
   update public.ws_projekte set db_offen = p_offen, db_offen_zeit = now() where id = p_projekt;
+  if not found then raise exception 'Projekt nicht gefunden'; end if;
 end $$;
 revoke execute on function public.ws_db_offen_melden(uuid, text, jsonb) from public, anon;
 grant execute on function public.ws_db_offen_melden(uuid, text, jsonb) to authenticated;

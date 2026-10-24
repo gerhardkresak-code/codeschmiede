@@ -246,10 +246,11 @@ function ArtAendern({ projekt, toast, onGeaendert }) {
 
 // ---------------- Datenbank-Station (Datenbank 0034) ----------------
 // main → Test-Datenbank automatisch, live → Live-Datenbank nach Freigabe (Live-Weg), vorher Sicherung des Aufbaus.
-// Eingetragen werden nur die Projekt-Kennungen von Supabase; der Zugang liegt als GitHub-Geheimnis im Repository.
+// Eingetragen werden nur die Projekt-Kennungen von Supabase. Der Zugang (Verbindungsadresse NUR dieser Datenbank) liegt als Geheimnis
+// in der GitHub-Umgebung „test“ (nur Zweig main) bzw. „live“ (nur Zweig live) – trägt Gerhard selbst ein.
 function DatenbankStation({ projekt, d, admin, toast, letzte, Ergebnis }) {
   const [test, setTest] = useState(projekt.db_test_ref || ""); const [live, setLive] = useState(projekt.db_live_ref || "");
-  const [testB, setTestB] = useState(projekt.db_test_bestehend ?? true); const [liveB, setLiveB] = useState(projekt.db_live_bestehend ?? false);
+  const [testB, setTestB] = useState(projekt.db_test_bestehend ?? true); const [liveB, setLiveB] = useState(projekt.db_live_ref ? (projekt.db_live_bestehend ? "ja" : "nein") : "");
   const gruppen = d.gruppen.filter((g) => d.bereiche.some((b) => b.id === g.bereich_id));
   const [gid, setGid] = useState(projekt.db_gruppe_id || gruppen.find((g) => /daten|datenbank/i.test(g.name))?.id || gruppen[0]?.id || "");
   const [busy, setBusy] = useState(false);
@@ -257,18 +258,18 @@ function DatenbankStation({ projekt, d, admin, toast, letzte, Ergebnis }) {
   const einrichten = async () => {
     setBusy(true);
     try {
-      const r1 = await supabase.rpc("ws_projekt_datenbank", { p_projekt: projekt.id, p_test: test.trim(), p_live: live.trim(), p_test_bestehend: testB, p_live_bestehend: liveB, p_gruppe: gid || null });
+      const r1 = await supabase.rpc("ws_projekt_datenbank", { p_projekt: projekt.id, p_test: test.trim(), p_live: live.trim(), p_test_bestehend: testB, p_live_bestehend: liveB === "ja", p_gruppe: gid || null });
       if (r1.error) throw r1.error;
       const r2 = await supabase.rpc("ws_projekt_aktion_anfordern", { p_projekt: projekt.id, p_art: "db_einrichten" });
       if (r2.error) throw r2.error;
       toast("Gespeichert – die Werkstatt richtet die Datenbank-Station ein"); d.holen?.();
     } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
   };
-  const geheimLink = projekt.repo ? `https://github.com/${projekt.repo}/settings/secrets/actions/new` : null;
+  const geheimLink = projekt.repo ? `https://github.com/${projekt.repo}/settings/environments` : null;
   return (
     <section className={`${card} p-4 flex flex-col gap-3`} aria-label="Datenbank-Station">
       <h3 className="font-display font-bold text-lg">Datenbank-Station</h3>
-      <p className="text-sm text-slate-600 dark:text-slate-300">Neue Datenbank-Dateien (<span className="font-mono">supabase/migrations/</span>) gehen nach dem Zusammenführen <b>automatisch in die Test-Datenbank</b> und erst mit „Live schalten“ (nach deiner Freigabe) in die <b>Live-Datenbank</b> – vorher wird deren Aufbau gesichert. Was noch nicht live ist, siehst du im „Weg bis live“.</p>
+      <p className="text-sm text-slate-600 dark:text-slate-300">Neue Datenbank-Dateien (<span className="font-mono">supabase/migrations/</span>) gehen nach dem Zusammenführen <b>automatisch in die Test-Datenbank</b> und erst mit „Live schalten“ (nach deiner Freigabe) in die <b>Live-Datenbank</b> – vorher wird deren Aufbau (ohne Daten) in der Datenbank selbst gesichert. Die eigentliche Datensicherung sind die Sicherungen von Supabase. Was noch nicht live ist, siehst du im „Weg bis live“.</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-xs text-slate-500">Test-Datenbank (Supabase-Projektkennung, 20 Buchstaben)
           <input className={`${input} font-mono`} value={test} disabled={!admin} onChange={(e) => setTest(e.target.value.trim().toLowerCase())} placeholder="z. B. lhdoyjdothombwslfeco" /></label>
@@ -276,17 +277,19 @@ function DatenbankStation({ projekt, d, admin, toast, letzte, Ergebnis }) {
           <input className={`${input} font-mono`} value={live} disabled={!admin} onChange={(e) => setLive(e.target.value.trim().toLowerCase())} /></label>
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 accent-emerald-700" checked={testB} disabled={!admin} onChange={(e) => setTestB(e.target.checked)} />
           <span>Test-Datenbank enthält die vorhandenen Dateien schon<span className="block text-xs text-slate-500">Dann werden nur neue eingespielt (bei bestehenden Datenbanken richtig).</span></span></label>
-        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 accent-emerald-700" checked={liveB} disabled={!admin || !live} onChange={(e) => setLiveB(e.target.checked)} />
-          <span>Live-Datenbank enthält die vorhandenen Dateien schon<span className="block text-xs text-slate-500">Bei einer neuen, leeren Live-Datenbank aus lassen – dann wird alles eingespielt.</span></span></label>
+        <label className="flex flex-col gap-1 text-xs text-slate-500">Live-Datenbank: enthält sie die vorhandenen Dateien schon? (Pflicht)
+          <select className={input} value={liveB} disabled={!admin || !live} onChange={(e) => setLiveB(e.target.value)}>
+            <option value="">– bitte wählen –</option><option value="nein">Nein – neue, leere Datenbank: alles einspielen</option><option value="ja">Ja – bestehende Datenbank: nur Neues einspielen</option></select>
+          <span>Steht eine nicht leere Datenbank auf „Nein“, bricht der Ablauf zur Sicherheit ab.</span></label>
         <label className="flex flex-col gap-1 text-xs text-slate-500 sm:col-span-2">Gruppe für den Einrichtungs-Auftrag
           <select className={input} value={gid} disabled={!admin} onChange={(e) => setGid(e.target.value)}>{gruppen.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
       </div>
       <ol className="text-sm list-decimal pl-5 flex flex-col gap-1 text-slate-600 dark:text-slate-300">
-        <li>Einmal selbst: Zugang anlegen unter <a className="underline" href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener noreferrer">Supabase › Account › Access Tokens</a> und im Repository als Geheimnis <span className="font-mono">SUPABASE_ACCESS_TOKEN</span> eintragen{geheimLink && <> (<a className="underline" href={geheimLink} target="_blank" rel="noopener noreferrer">hier</a>)</>}. Den Zugang gibst du nur dort ein – nie in der Codeschmiede oder im Chat.</li>
-        <li>„Einrichten“: Die Werkstatt setzt die Einstellungen und legt einen Auftrag für den Ablauf „Datenbank“ an – Freigeben und Zusammenführen wie immer.</li>
+        <li>„Einrichten“: Die Werkstatt legt bei GitHub die Umgebungen „test“ (nur Zweig main) und „live“ (nur Zweig live) an und einen Auftrag für den Ablauf „Datenbank“ – Freigeben und Zusammenführen wie immer.</li>
+        <li>Einmal selbst je Datenbank: in Supabase <b>Connect</b> › <b>Session pooler</b> die Verbindungsadresse kopieren (Passwort einsetzen) und bei GitHub unter{geheimLink ? <> <a className="underline" href={geheimLink} target="_blank" rel="noopener noreferrer">Settings › Environments</a></> : " Settings › Environments"} › „test“ bzw. „live“ › <b>Add environment secret</b> als <span className="font-mono">SUPABASE_DB_URL</span> eintragen. Diese Adresse gilt nur für diese eine Datenbank – du gibst sie nur bei GitHub ein, nie in der Codeschmiede oder im Chat.</li>
         <li>Danach zeigt die Ampel oben, ob Test und Live eingespielt sind.</li>
       </ol>
-      {admin && <button type="button" className={`${btn} self-start`} disabled={busy || !ok(test) || !ok(live) || (!test && !live) || (test && test === live)} onClick={einrichten}>{busy && <Loader2 className="w-4 h-4 animate-spin" />}Einrichten</button>}
+      {admin && <button type="button" className={`${btn} self-start`} disabled={busy || !ok(test) || !ok(live) || (!test && !live) || (test && test === live) || (live && !liveB)} onClick={einrichten}>{busy && <Loader2 className="w-4 h-4 animate-spin" />}Einrichten</button>}
       <Ergebnis a={letzte} />
     </section>);
 }

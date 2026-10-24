@@ -2,7 +2,8 @@
 // Der Ablauf „Datenbank“ (.github/workflows/datenbank.yml) im Projekt-Repository spielt neue Dateien aus supabase/migrations/ ein:
 // main → Test-Datenbank, live → Live-Datenbank. Die Werkstatt des Admins richtet ihn ein (Variablen per gh, Ablauf-Datei als Auftrag –
 // die Werkstatt führt nie selbst zusammen), prüft ihn für die Ampel und meldet, welche Datenbank-Dateien noch nicht live sind.
-// Keine Zugangsdaten: der Supabase-Zugang liegt nur als GitHub-Geheimnis im Repository (trägt Gerhard selbst ein).
+// Keine Zugangsdaten: je Datenbank liegt nur deren Verbindungsadresse als Geheimnis einer GitHub-Umgebung („test“ nur für main,
+// „live“ nur für live – nach der Prüfung vom 2026-10-24: kein kontoweiter Zugang, andere Zweige kommen nicht heran). Trägt Gerhard selbst ein.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,11 +31,28 @@ export async function ablaufAufMain(sh, repo) {
   }
 }
 
-/** Ist das Geheimnis SUPABASE_ACCESS_TOKEN im Repository hinterlegt? (nur der Name wird gelesen) */
-export async function zugangDa(sh, repo) {
+/** Ist das Geheimnis SUPABASE_DB_URL in der Umgebung hinterlegt? (nur der Name wird gelesen) */
+export async function zugangDa(sh, repo, umgebung) {
   repoPruefen(repo);
-  const { stdout } = await sh("gh", ["secret", "list", "--repo", repo, "--json", "name", "--jq", ".[].name"]);
-  return stdout.split(/\s+/).includes("SUPABASE_ACCESS_TOKEN");
+  if (!["test", "live"].includes(umgebung)) throw new Error("Unbekannte Umgebung");
+  const { stdout } = await sh("gh", ["secret", "list", "--repo", repo, "--env", umgebung, "--json", "name", "--jq", ".[].name"]);
+  return stdout.split(/\s+/).includes("SUPABASE_DB_URL");
+}
+
+/** GitHub-Umgebung anlegen, die nur genau einen Zweig zulässt (main bzw. live). */
+export async function umgebungAnlegen(sh, repo, umgebung, zweig) {
+  repoPruefen(repo);
+  if (!["test", "live"].includes(umgebung) || !["main", "live"].includes(zweig)) throw new Error("Unbekannte Umgebung");
+  await sh("gh", ["api", "-X", "PUT", `repos/${repo}/environments/${umgebung}`,
+    "-F", "deployment_branch_policy[protected_branches]=false", "-F", "deployment_branch_policy[custom_branch_policies]=true"]);
+  const { stdout } = await sh("gh", ["api", `repos/${repo}/environments/${umgebung}/deployment-branch-policies`, "--jq", ".branch_policies[] | [.id, .name, (.type // \"branch\")] | @tsv"]);
+  let passt = false;
+  for (const z of stdout.split("\n").filter(Boolean)) {
+    const [id, name, typ] = z.split("\t");
+    if (name === zweig && typ === "branch") { passt = true; continue; }
+    if (/^\d+$/.test(id)) await sh("gh", ["api", "-X", "DELETE", `repos/${repo}/environments/${umgebung}/deployment-branch-policies/${id}`]);   // nur genau dieser Zweig
+  }
+  if (!passt) await sh("gh", ["api", "-X", "POST", `repos/${repo}/environments/${umgebung}/deployment-branch-policies`, "-f", `name=${zweig}`, "-f", "type=branch"]);
 }
 
 /**
@@ -44,15 +62,15 @@ export async function zugangDa(sh, repo) {
 export async function dbEinrichten({ sh, projekt, auftragAnlegen, vorlage = null }) {
   const repo = projekt.repo; repoPruefen(repo);
   for (const r of [projekt.db_test_ref, projekt.db_live_ref]) if (r != null && !REF.test(r)) throw new Error("Ungültige Datenbank-Kennung");
-  const variablen = {
-    SUPABASE_TEST_REF: projekt.db_test_ref || null, SUPABASE_LIVE_REF: projekt.db_live_ref || null,
-    SUPABASE_TEST_BESTEHEND: projekt.db_test_bestehend ? "ja" : "nein", SUPABASE_LIVE_BESTEHEND: projekt.db_live_bestehend ? "ja" : "nein",
-  };
-  for (const [name, wert] of Object.entries(variablen)) {
-    if (wert) await sh("gh", ["variable", "set", name, "--repo", repo, "--body", wert]);
-    else await sh("gh", ["variable", "delete", name, "--repo", repo]).catch(() => {});
+  const teile = [];
+  const fehlt = [];
+  for (const [umgebung, zweig, ref, bestehend] of [["test", "main", projekt.db_test_ref, projekt.db_test_bestehend], ["live", "live", projekt.db_live_ref, projekt.db_live_bestehend]]) {
+    if (!ref) continue;
+    await umgebungAnlegen(sh, repo, umgebung, zweig);
+    await sh("gh", ["variable", "set", "BESTEHEND", "--repo", repo, "--env", umgebung, "--body", bestehend ? "ja" : "nein"]);
+    teile.push(`Umgebung „${umgebung}“ (nur Zweig ${zweig}) eingerichtet`);
+    if (!(await zugangDa(sh, repo, umgebung).catch(() => false))) fehlt.push(umgebung);
   }
-  const teile = ["Variablen gesetzt"];
   const inhalt = vorlage ?? (await readFile(ABLAUF_VORLAGE, "utf8"));
   const jetzt = await ablaufAufMain(sh, repo);
   if (jetzt && jetzt.inhalt === inhalt) teile.push("Ablauf „Datenbank“ ist schon auf main");
@@ -63,7 +81,7 @@ export async function dbEinrichten({ sh, projekt, auftragAnlegen, vorlage = null
     const nr = await auftragAnlegen({ pfad: ABLAUF_PFAD, inhalt, basis_blob: jetzt?.blob || "", basis_sha: basis });
     teile.push(`Auftrag #${nr} für den Ablauf „Datenbank“ angelegt – nach Freigabe und Zusammenführen läuft er`);
   }
-  if (!(await zugangDa(sh, repo).catch(() => false))) teile.push("Es fehlt noch das Geheimnis SUPABASE_ACCESS_TOKEN im Repository (trägst du selbst ein)");
+  if (fehlt.length) teile.push(`Es fehlt noch das Geheimnis SUPABASE_DB_URL in ${fehlt.map((u) => `„${u}“`).join(" und ")} (trägst du selbst ein)`);
   return teile.join(" · ");
 }
 
@@ -85,9 +103,12 @@ export async function dbAmpel({ sh, projekt }) {
   try {
     const ablauf = await ablaufAufMain(sh, repo);
     if (!ablauf) return { datenbank: { stand: "gelb", text: "Datenbank-Station noch nicht eingerichtet – unter „Anbindungen“ auf „Einrichten“" } };
-    if (!(await zugangDa(sh, repo))) return { datenbank: { stand: "gelb", text: "Geheimnis SUPABASE_ACCESS_TOKEN fehlt im Repository (Settings › Secrets › Actions)" } };
-    a.datenbank = projekt.db_test_ref ? lauf(await letzterLauf(sh, repo, "main"), "Test-Datenbank") : { stand: "grau", text: "Keine Test-Datenbank eingetragen" };
-    if (projekt.db_live_ref) a.datenbank_live = lauf(await letzterLauf(sh, repo, "live"), "Live-Datenbank");
+    const zugang = (u) => zugangDa(sh, repo, u).catch(() => false);
+    a.datenbank = !projekt.db_test_ref ? { stand: "grau", text: "Keine Test-Datenbank eingetragen" }
+      : !(await zugang("test")) ? { stand: "gelb", text: "Geheimnis SUPABASE_DB_URL in der Umgebung „test“ fehlt (Settings › Environments)" }
+      : lauf(await letzterLauf(sh, repo, "main"), "Test-Datenbank");
+    if (projekt.db_live_ref) a.datenbank_live = !(await zugang("live")) ? { stand: "gelb", text: "Geheimnis SUPABASE_DB_URL in der Umgebung „live“ fehlt (Settings › Environments)" }
+      : lauf(await letzterLauf(sh, repo, "live"), "Live-Datenbank");
   } catch (e) {
     a.datenbank = { stand: "grau", text: `Nicht prüfbar: ${kurz(ohneGeheimnisse(String(e?.stderr || e?.message || "")), 120)}` };
   }
@@ -114,4 +135,27 @@ export async function dbOffen(git, repo) {
     r.push({ datei: p.slice("supabase/migrations/".length), sql: sql.length > 20000 ? `${sql.slice(0, 19980)}\n… (gekürzt)` : sql });
   }
   return r;
+}
+
+/**
+ * Nach dem Live-Schalten: Ablauf „Datenbank“ auf live starten und auf das Ergebnis warten (höchstens warteMs).
+ * Rückgabe: Hinweistext oder null (keine Live-Datenbank / kein Ablauf).
+ */
+export async function dbLiveEinspielen({ sh, projekt, warteMs = 10 * 60 * 1000, pause = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+  if (!projekt.repo || !projekt.db_live_ref) return null;
+  const repo = projekt.repo; repoPruefen(repo);
+  if (!(await ablaufAufMain(sh, repo))) return "Datenbank-Station noch nicht eingerichtet – Live-Datenbank nicht aktualisiert";
+  const start = Date.now();
+  await sh("gh", ["workflow", "run", "datenbank.yml", "--repo", repo, "--ref", "live"]);
+  let lauf = null;
+  while (Date.now() - start < warteMs) {
+    await pause(15000);
+    const { stdout } = await sh("gh", ["run", "list", "--repo", repo, "--workflow", "datenbank.yml", "--branch", "live", "--event", "workflow_dispatch", "--limit", "3", "--json", "databaseId,status,conclusion,createdAt"]);
+    lauf = JSON.parse(stdout || "[]").find((l) => Date.parse(l.createdAt) >= start - 60000) || null;
+    if (lauf?.status === "completed") break;
+  }
+  if (!lauf) return "Live-Datenbank: Ablauf nicht gestartet – bitte bei GitHub prüfen";
+  if (lauf.status !== "completed") return "Live-Datenbank: Einspielen läuft noch – Ergebnis in der Ampel";
+  return lauf.conclusion === "success" ? "Live-Datenbank aktuell"
+    : "ACHTUNG: Live-Datenbank konnte nicht aktualisiert werden – der Code ist schon live. Ablauf „Datenbank“ bei GitHub ansehen, ggf. „Zurück“";
 }

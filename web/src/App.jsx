@@ -902,7 +902,7 @@ function DbOffen({ projekt }) {
       {offen.map((o) => (
         <details key={o.datei} className="text-xs"><summary className="cursor-pointer font-mono">{o.datei}</summary>
           <pre className="mt-1 max-h-64 overflow-auto rounded bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 font-mono text-[11.5px] whitespace-pre">{o.sql}</pre></details>))}
-      {projekt.db_live_ref && <span className="text-xs text-amber-800 dark:text-amber-300">Vor dem Einspielen sichert der Ablauf „Datenbank“ den Aufbau der Live-Datenbank (90 Tage bei GitHub). Daten werden nicht gelöscht, solange die Dateien es nicht tun – bitte vor dem Live-Schalten durchsehen.</span>}
+      {projekt.db_live_ref && <span className="text-xs text-amber-800 dark:text-amber-300">Vor dem Einspielen sichert der Ablauf „Datenbank“ den Aufbau der Live-Datenbank (in ihr selbst, ohne Daten). Jede Datei läuft für sich – bei einem Fehler bleibt nichts von ihr. Bitte vor dem Live-Schalten durchsehen; zurückgerollt wird die Datenbank nicht.</span>}
     </div>);
 }
 
