@@ -6,8 +6,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutGrid, Send, Loader2, RefreshCw, ExternalLink } from "lucide-react";
 import { supabase } from "./supabase";
-import { isDesktop, tauri } from "./desktop";
 import GeraeteRahmen from "./GeraeteRahmen";
+import { designFrageBeantworten } from "./designFrage";
 
 const card = "rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900";
 const ghost = "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-semibold disabled:opacity-50";
@@ -19,9 +19,10 @@ export function seitenBasis(projekt) {
   return /^https:\/\/[^/\s]+$/i.test(String(b || "").replace(/\/$/, "")) ? String(b).replace(/\/$/, "") : null;
 }
 
-export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toast }) {
+export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toast, tab = null }) {
   const basis = seitenBasis(projekt);
-  const url = basis ? `${basis}/designer?cs=1` : null;
+  // tab: Reiter des Seiten-Designers beim Öffnen (z. B. „freigabe“ aus dem Baustein-Inspektor) – nur feste Namen
+  const url = basis ? `${basis}/designer?cs=1${tab && /^(designer|seiten|freigabe)$/.test(tab) ? `&tab=${tab}` : ""}` : null;
   const ziel = (() => { try { return url ? new URL(url).origin : null; } catch { return null; } })();
   const rahmen = useRef(null);
   const [schluessel, setSchluessel] = useState(0);
@@ -35,21 +36,8 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
     const h = (e) => {
       if (e.origin !== ziel || e.source !== rahmen.current?.contentWindow || !e.data || typeof e.data !== "object") return;
       if (e.data.cs === "bereit" || e.data.cs === "design-ok") setBereit(true);
-      // Eigene Design-Freigabe (Entscheidung Gerhard 2026-10-24): Der Seiten-Designer fragt nach dem Design-Geräteschlüssel
-      // der Codeschmiede bzw. lässt eine Nachricht „ttg-design|…“ signieren. Nur für die eingebettete Testfassung von Trainer to go (trainer-to-go.pages.dev und deren Zweige),
-      // nur im Programm; was signiert werden darf, prüft zusätzlich das Programm selbst (Rust, design.rs).
-      if (e.data.cs === "design-frage") {
-        const id = Number(e.data.id);
-        const antwort = (x) => { try { rahmen.current?.contentWindow?.postMessage({ cs: "design-antwort", id, ...x }, ziel); } catch { /* egal */ } };
-        if (!Number.isSafeInteger(id)) return;
-        if (!/^https:\/\/([a-z0-9-]+\.)?trainer-to-go\.pages\.dev$/i.test(ziel || "")) { antwort({ fehler: "Design-Freigabe gibt es nur für die Testfassungen von Trainer to go." }); return; }
-        if (!isDesktop()) { antwort({ fehler: "Die Design-Freigabe gibt es nur im Programm Codeschmiede (nicht im Browser)." }); return; }
-        const n = typeof e.data.nachricht === "string" ? e.data.nachricht : "";
-        const auftrag = e.data.art === "geraet" ? tauri("ws_design_geraet")
-          : e.data.art === "signieren" && n.length <= 512 && /^ttg-design\|(register|verify|code)\|/.test(n) ? tauri("ws_design_signieren", { nachricht: n })
-          : Promise.reject(new Error("Diese Anfrage ist nicht erlaubt."));
-        auftrag.then((ergebnis) => antwort({ ergebnis }), (f) => antwort({ fehler: String(f?.message || f || "Fehler").slice(0, 200) }));
-      }
+      // Eigene Design-Freigabe (Entscheidung Gerhard 2026-10-24): Regeln gemeinsam mit der Baustein-Galerie in designFrage.js
+      if (e.data.cs === "design-frage") designFrageBeantworten(e.data, ziel, (x) => rahmen.current?.contentWindow?.postMessage(x, ziel));
     };
     window.addEventListener("message", h); return () => window.removeEventListener("message", h);
   }, [ziel]);

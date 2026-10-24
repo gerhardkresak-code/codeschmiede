@@ -22,7 +22,7 @@ import { waehleModell } from "./lib/modell.mjs";
 import { werteAus, zweigName } from "./lib/ergebnis.mjs";
 import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
 import { pruefErgebnis } from "./lib/pruefung.mjs";
-import { designPrompt, designAntwort } from "./lib/design.mjs";
+import { designPrompt, designAntwort, bausteinAusFrage, bausteinVorschlag } from "./lib/design.mjs";
 import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
 import { repoAnlegen, repoSichtbarkeit, repoIstPrivat } from "./lib/repo.mjs";
 import { liveAusfuehren, pruefPrompt, enthalten } from "./lib/live.mjs";
@@ -1036,12 +1036,17 @@ async function designChat() {
     let q = db.from("ws_design_chat").select("id, von, text, frage_id").eq("projekt_id", f.projekt_id).lt("id", f.id).order("id", { ascending: false }).limit(40);
     q = f.entwurf_id ? q.eq("entwurf_id", f.entwurf_id) : q.is("entwurf_id", null);
     const { data: alle } = await q;
-    const eigene = new Set((alle || []).filter((m) => !m.frage_id && m.von === cfg.user_id).map((m) => m.id));
+    // Baustein-Fragen (App-Designer 2.0): nur das Gespräch zu genau diesem Baustein als Verlauf; sonst ohne Baustein-Gespräche
+    const bsVorher = bausteinAusFrage(f.text);
+    const eigene = new Set((alle || []).filter((m) => !m.frage_id && m.von === cfg.user_id
+      && (bsVorher ? String(m.text).startsWith(`[Baustein ${bsVorher}]`) : !String(m.text).startsWith("[Baustein "))).map((m) => m.id));
     const verlauf = (alle || []).filter((m) => eigene.has(m.id) || eigene.has(m.frage_id)).slice(0, 8);
     const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, /^\[Marke\]/.test(f.text) ? "bilder" : "design", designPrompt({ projektName: pj?.name || f.projekt_id, projektId: f.projekt_id, appArt: pj?.app_art || "verwaltung", wissen: wissenText((await holeWissen(f.projekt_id)).filter((w) => ["ziel", "design", "funktionen"].includes(w.kapitel))), beschreibung: pj?.beschreibung || "", anfang: !eD && !designs, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
     const { text, vorschlag: v0 } = designAntwort(ohneGeheimnisse(roh));
     const vorschlag = /^\[Umdesign (Symbol|Baustein) /.test(f.text) ? null : v0;   // Umdesign-Gespräche: Vorschlag nur als UMDESIGN-Zeile (Prüfung 0.8.7)
-    const { error: e2 } = await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
+    // App-Designer 2.0: Bei einer Baustein-Frage gilt nur ein Vorschlag für genau diesen Baustein (Rest wird verworfen)
+    const bsId = bausteinAusFrage(f.text);
+    const { error: e2 } = await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: bsId ? bausteinVorschlag(vorschlag, bsId) : vorschlag });
     if (e2) throw e2;
     await kiVermerken("design", f.id, ki);
   } catch (e) {

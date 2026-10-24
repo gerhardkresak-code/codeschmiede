@@ -66,6 +66,12 @@ App → `ws_fehler_melden(schluessel, daten)` (auch ohne Anmeldung, nur mit Meld
 aus Text ohne Zahlen, Stelle ohne Zeile, Umgebung). Grenze 300/Stunde je App (`ws_fehler_grenze`), Löschung 30 Tage nach der letzten Meldung.
 Lesen: Projektmitglieder; Stand ändern und „Als Auftrag“: Admin und Entwickler (Auftrag nur mit Auftrags-Recht in der Gruppe).
 
+### App-Designer 2.0 (seit 0.9.7, Entwurf frei 2026-10-24 22:08)
+Ein Designer, der sofort wirkt: Aussehen geht über die Design-Pakete der App (Trainer to go: `DesignPackage`), nur neue Bausteine laufen als
+Auftrag, Farben frei mit Kontrast-Wächter (`web/src/kontrast.js`). Etappe 1 „Bausteine“: Galerie in der Mitte, Linksklick wählt,
+Inspektor rechts (Bearbeiten | Chat), Sofort-Vorschau und Entwurf im Design-Paket; Freigabe über App-Designer › Seiten. Einzelheiten:
+`docs/KONZEPT-BAUSTEINE.md` (Abschnitt „App-Designer 2.0“).
+
 ## Rollen und Rechte
 | Rolle | Aufträge | Freigeben / Erlauben | Löschen | Claude | GitHub |
 |---|---|---|---|---|---|
