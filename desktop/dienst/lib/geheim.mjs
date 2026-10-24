@@ -14,16 +14,27 @@ const MUSTER = [
 ];
 // Zugangsdaten in Adressen (postgres://name:passwort@…) – Name bleibt, Passwort fällt weg
 const URL_PASSWORT = /\b([a-z][a-z0-9+.-]*:\/\/[^\s:@\/]+:)[^\s@\/]+@/gi;
-// Schalter wie persist-credentials: false sind keine Geheimnisse (Datenbank-Station 2026-10-24).
-// NAME = wert, auch mit Unterstrich davor/danach (GITHUB_TOKEN=…, SUPABASE_SERVICE_ROLE_KEY: "…", password = "a b c")
-const ZUWEISUNG = /([A-Za-z0-9_]*(?:pass(?:wort|word)?|pwd|secret|token|api[_-]?key|apikey|private[_-]?key|service[_-]?role[_-]?key|credential)[A-Za-z0-9_]*)(\s*[:=]\s*)(?!["']?(?:true|false|null|none|omit|include|same-origin)["']?(?=[\s,;})\]]|$))(?:"[^"\n]{4,}"|'[^'\n]{4,}'|[^\s"'&]{4,})/gi;
+// NAME = wert, auch mit Unterstrich/Bindestrich davor/danach und mit Namen in Anführungszeichen
+// (GITHUB_TOKEN=…, SUPABASE_SERVICE_ROLE_KEY: "…", password = "a b c", {"password": "…"}).
+// Namensteile sind begrenzt, damit lange Buchstabenketten den Dienst nicht ausbremsen (Prüfung 2026-10-24).
+const ZUWEISUNG = /(["']?)([A-Za-z0-9_-]{0,40}(?:pass(?:wort|word)?|pwd|secret|token|api[_-]?key|apikey|private[_-]?key|service[_-]?role[_-]?key|credential)[A-Za-z0-9_-]{0,40})\1(\s*[:=]\s*)("[^"\n]{4,}"|'[^'\n]{4,}'|[^\s"'&]{4,})/gi;
+// Reine Schalterwerte sind keine Geheimnisse (persist-credentials: false; fetch credentials: "omit").
+// Der GANZE Wert muss das Schalterwort sein – höchstens ein Satzzeichen danach (false, / false;) –, sonst wird maskiert.
+const SCHALTER = /^(?:true|false|null)$/i;
+const ABRUF = /^(?:omit|include|same-origin)$/i;
+function nurSchalter(name, wert) {
+  let w = wert;
+  if (/^(["']).*\1$/.test(w)) w = w.slice(1, -1);
+  else w = w.replace(/[,;})\]]$/, "");
+  return SCHALTER.test(w) || (/credentials$/i.test(name) && ABRUF.test(w));
+}
 
 export function ohneGeheimnisse(text) {
   if (text == null) return text;
   let s = String(text);
   for (const m of MUSTER) s = s.replace(m, "[entfernt]");
   s = s.replace(URL_PASSWORT, "$1[entfernt]@");
-  s = s.replace(ZUWEISUNG, (_a, k, z) => `${k}${z}[entfernt]`);
+  s = s.replace(ZUWEISUNG, (alles, q, k, z, w) => (nurSchalter(k, w) ? alles : `${q}${k}${q}${z}[entfernt]`));
   return s;
 }
 

@@ -17,6 +17,14 @@ test("Geheimnisse werden entfernt", () => {
   assert.equal(ohneGeheimnisse("api_key: nullwert99"), "api_key: [entfernt]");
   assert.equal(ohneGeheimnisse("password: false-x9"), "password: [entfernt]");
   assert.equal(ohneGeheimnisse('fetch(u, { credentials: "omit" })'), 'fetch(u, { credentials: "omit" })');
+  for (const t of ['password: "false,Geheim123"', 'password: "none Geheim123"', "password='true;Geheim123'", "password=false)Geheim123", "password=null]Geheim123", 'password="true\u00a0Geheim123"', "password=false,Geheim123", "token: include", "SUPABASE_SERVICE_ROLE_KEY=same-origin"])
+    assert.notEqual(ohneGeheimnisse(t), t, t);
+  assert.equal(ohneGeheimnisse('{"password": "Geheim123"}'), '{"password": [entfernt]}');
+  assert.equal(ohneGeheimnisse("{'secret': 'Geheim123'}"), "{'secret': [entfernt]}");
+  assert.equal(ohneGeheimnisse("persist-credentials: false,"), "persist-credentials: false,");
+  assert.equal(ohneGeheimnisse('{"enabled": true, "token": null}'), '{"enabled": true, "token": null}');
+  const t0 = Date.now(); ohneGeheimnisse("password".repeat(1000)); ohneGeheimnisse("token".repeat(2000));
+  assert.ok(Date.now() - t0 < 1500, "lange Texte dürfen den Dienst nicht ausbremsen");
 });
 
 test("Modellwahl nach Aufwand", () => {
