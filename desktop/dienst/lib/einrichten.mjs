@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { minimaleUmgebung, findeIn } from "./ki.mjs";
+import { minimaleUmgebung, findeIn, registryNeuLaden } from "./ki.mjs";
 
 // art: "browser" = eigener Anmelde-Befehl öffnet den Browser (Ende mit Code 0 = angemeldet); "fenster" = Anmeldung beim ersten Start im Eingabefenster
 // install: { npm } = offizielles npm-Paket; { skript: { win, unix } } = offizielles Installationsskript; { seite } = Installer-Seite im Browser öffnen
@@ -40,7 +40,9 @@ export const KATALOG = {
   // Mistral Vibe: offizielles Skript (Mac/Linux); unter Windows über uv (offizieller Weg laut Mistral). Anmeldung im Einrichtungs-Assistenten
   // („Launch browser“); der Schlüssel liegt im Schlüsselbund – prüfbar ist nur die Einstellungsdatei, darum bestätigt die Person.
   vibe: { name: "Mistral Vibe", programme: ["vibe"], art: "fenster", login: ["--setup"],
-    install: { skript: { win: "irm https://astral.sh/uv/install.ps1 | iex; & (Join-Path $env:USERPROFILE '.local\\bin\\uv.exe') tool install mistral-vibe",
+    // Windows: immer mit x64-Python (auf Windows-ARM fehlen fertige Pakete → „Build failure“, Gerhard 24.10. 09:37; x64 läuft dort emuliert,
+    // auf x64-PCs ohnehin nativ). uv nur installieren, wenn es fehlt; Rückgabewert von uv weitergeben.
+    install: { skript: { win: "$uv = Join-Path $env:USERPROFILE '.local\\bin\\uv.exe'; if (-not (Test-Path $uv)) { irm https://astral.sh/uv/install.ps1 | iex }; & $uv tool install --force --python cpython-3.12-windows-x86_64-none mistral-vibe; exit $LASTEXITCODE",
       unix: "curl -LsSf https://mistral.ai/vibe/install.sh | bash" } } },
 };
 
@@ -150,6 +152,12 @@ export function imFenster(prog, args) {
   } catch { return false; }
 }
 
+/** Aussagekräftige Fehlerzeilen eines Installers (statt nur der letzten zwei „hint“-Zeilen). */
+export function fehlerZeilen(text) {
+  const z = String(text || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  const fehler = z.filter((x) => /(error|fehler|failed|cannot|not supported|denied)/i.test(x) && !/^hint:/i.test(x));
+  return (fehler.length ? fehler.slice(-3) : z.slice(-2)).join(" · ").slice(0, 300);
+}
 /** Ist die Person angemeldet? true / false / null (= lässt sich ohne Aufruf nicht feststellen). */
 export async function angemeldet(k, prog, { env, home = os.homedir() } = {}) {
   const s = k.status;
@@ -178,14 +186,14 @@ export async function einrichten(k, { melde, env, plattform = process.platform }
       const r = plattform === "win32"
         ? await starte(SYSTEM.ps, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", k.install.skript.win], { minuten: 10, env })
         : await starte(SYSTEM.bash, ["-c", k.install.skript.unix], { minuten: 10, env });
-      if (r.code !== 0) return melde({ schritt: "fehler", hinweis: `Installation fehlgeschlagen: ${r.text.trim().split("\n").slice(-2).join(" ").slice(0, 300)}` });
+      if (r.code !== 0) return melde({ schritt: "fehler", hinweis: `Installation fehlgeschlagen: ${fehlerZeilen(r.text)}` });
     } else if (k.install?.seite) {
       oeffneSeite(k.install.seite);
       await melde({ schritt: "installieren", hinweis: "Die Installer-Seite ist im Browser offen. Installiere das Programm – danach geht es von selbst weiter." });
-      for (let i = 0; i < 60 && !prog; i++) { await new Promise((w) => setTimeout(w, 10000)); prog = findeKatalogProgramm(k); }
+      for (let i = 0; i < 60 && !prog; i++) { await new Promise((w) => setTimeout(w, 10000)); await registryNeuLaden().catch(() => {}); prog = findeKatalogProgramm(k); }
       if (!prog) return melde({ schritt: "fehler", hinweis: "Nach 10 Minuten noch nicht installiert – nach der Installation einfach nochmal „Hinzufügen“ klicken." });
     }
-    prog = prog || findeKatalogProgramm(k);
+    if (!prog) { await registryNeuLaden().catch(() => {}); prog = findeKatalogProgramm(k); }
     if (!prog) return melde({ schritt: "fehler", hinweis: "Installiert, aber das Programm wird nicht gefunden – bitte das Codeschmiede-Programm neu starten und nochmal versuchen." });
   }
   // Schon angemeldet? Dann nichts öffnen.

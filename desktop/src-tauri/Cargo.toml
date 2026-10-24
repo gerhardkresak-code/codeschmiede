@@ -1,6 +1,6 @@
 [package]
 name = "codeschmiede"
-version = "0.8.7"
+version = "0.8.8"
 description = "Codeschmiede – Programmierumgebung für alle Apps (Auftrags-Zentrale und Werkstatt)"
 authors = ["Gerhard Kresak"]
 edition = "2021"
