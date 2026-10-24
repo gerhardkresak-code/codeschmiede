@@ -1239,7 +1239,7 @@ async function aktionArbeit() {
       const auftragAnlegen = async (dat) => {
         const { data: nr, error } = await db.rpc("ws_code_hand_auftrag", { p_gruppe: gruppe, p_titel: "Datenbank-Station einrichten",
           p_text: "Ablauf „Datenbank“: main → Test-Datenbank automatisch, live → Live-Datenbank nach Freigabe (vorher Sicherung des Aufbaus).",
-          p_basis_sha: dat.basis_sha, p_dateien: [{ pfad: dat.pfad, inhalt: dat.inhalt, basis_blob: dat.basis_blob }] });
+          p_basis_sha: dat.basis_sha, p_dateien: dat.dateien.map((x) => ({ pfad: x.pfad, inhalt: x.inhalt, basis_blob: x.basis_blob })) });
         if (error) throw error;
         return nr;
       };

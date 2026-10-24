@@ -19,10 +19,13 @@ const repoPruefen = (r) => { if (!REPO.test(r || "") || /\/\.\.?$/.test(r)) thro
 const kurz = (t, n = 200) => String(t || "").replace(/\s+/g, " ").trim().slice(0, n);
 
 /** Ablauf-Datei auf main: { inhalt, blob } oder null. */
-export async function ablaufAufMain(sh, repo) {
+export async function ablaufAufMain(sh, repo) { return dateiAufMain(sh, repo, ABLAUF_PFAD); }
+
+export const CHANGELOG_PFAD = "docs/CHANGELOG.md";
+export async function dateiAufMain(sh, repo, pfad) {
   repoPruefen(repo);
   try {
-    const { stdout } = await sh("gh", ["api", `repos/${repo}/contents/${ABLAUF_PFAD}?ref=main`, "--jq", "[.sha, .content] | @tsv"]);
+    const { stdout } = await sh("gh", ["api", `repos/${repo}/contents/${pfad}?ref=main`, "--jq", "[.sha, .content] | @tsv"]);
     const [blob, b64] = stdout.trim().split("\t");
     if (!SHA.test(blob || "")) return null;
     return { blob, inhalt: Buffer.from(String(b64 || "").replace(/\\n/g, ""), "base64").toString("utf8") };
@@ -30,6 +33,20 @@ export async function ablaufAufMain(sh, repo) {
     if (/HTTP 404|Not Found/i.test(`${e?.stderr || ""}${e?.message || ""}`)) return null;
     throw e;
   }
+}
+
+/** Neue Zeile oben in die Tabelle des Änderungsprotokolls (AGENTS.md: jede Änderung ins CHANGELOG) – null, wenn keine Tabelle da ist. */
+export function changelogZeile(text, datum = new Date().toISOString().slice(0, 10)) {
+  if (typeof text !== "string") return null;
+  const zeilen = text.split("\n");
+  const i = zeilen.findIndex((z) => /^\|\s*:?-{3,}/.test(z.trim()));
+  if (i < 0) return null;
+  const spalten = (zeilen[i].match(/\|/g) || []).length - 1;
+  const werte = ["– (Datenbank-Station)", datum, "Codeschmiede (Datenbank-Station „Einrichten“)",
+    "**Datenbank-Station:** Ablauf „Datenbank“ (`.github/workflows/datenbank.yml`) – neue Dateien in `supabase/migrations/` gehen nach dem Zusammenführen automatisch in die Test-Datenbank, in die Live-Datenbank erst beim Live-Schalten (vorher Sicherung des Aufbaus, ohne Daten). Zugang je Umgebung über das GitHub-Geheimnis `SUPABASE_DB_URL`."];
+  const zelle = spalten >= 4 ? werte.concat(Array(spalten - 4).fill("")) : [werte[1], werte[3]].slice(0, Math.max(1, spalten));
+  zeilen.splice(i + 1, 0, `| ${zelle.join(" | ")} |`);
+  return zeilen.join("\n");
 }
 
 /** Ist das Geheimnis SUPABASE_DB_URL in der Umgebung hinterlegt? (nur der Name wird gelesen) */
@@ -103,7 +120,12 @@ export async function dbEinrichten({ sh, projekt, auftragAnlegen, vorlage = null
     const { stdout } = await sh("gh", ["api", `repos/${repo}/git/ref/heads/main`, "--jq", ".object.sha"]);
     const basis = stdout.trim();
     if (!SHA.test(basis)) throw new Error("Stand von main nicht lesbar");
-    const nr = await auftragAnlegen({ pfad: ABLAUF_PFAD, inhalt, basis_blob: jetzt?.blob || "", basis_sha: basis });
+    const dateien = [{ pfad: ABLAUF_PFAD, inhalt, basis_blob: jetzt?.blob || "" }];
+    // Die Sicherheitsprüfung verlangt eine Zeile im Änderungsprotokoll – sonst bricht die Hand-Änderung ab (Auftrag #16, 2026-10-24)
+    const log = await dateiAufMain(sh, repo, CHANGELOG_PFAD).catch(() => null);
+    const neu = log && changelogZeile(log.inhalt);
+    if (neu) dateien.push({ pfad: CHANGELOG_PFAD, inhalt: neu, basis_blob: log.blob });
+    const nr = await auftragAnlegen({ dateien, basis_sha: basis });
     teile.push(`Auftrag #${nr} für den Ablauf „Datenbank“ angelegt – nach Freigabe und Zusammenführen läuft er`);
   }
   if (fehlt.length) teile.push(`Es fehlt noch das Geheimnis SUPABASE_DB_URL in ${fehlt.map((u) => `„${u}“`).join(" und ")} (trägst du selbst ein)`);
