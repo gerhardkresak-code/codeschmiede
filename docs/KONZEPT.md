@@ -61,6 +61,11 @@ Sicherungen in `codeschmiede.sicherungen` (Schema ohne Zugriff für anon/authent
 Geheimnis `SUPABASE_DB_URL` (Session pooler, nur diese Datenbank); Variable `BESTEHEND` je Umgebung. Live startet die Werkstatt nach dem Live-Schalten.
 Zurück auf eine ältere Version setzt nur den Code zurück; die Datenbank bleibt (Sperre, wenn die Version nicht zur Datenbank passt).
 
+### Fehler-Meldungen (seit 0.9.2)
+App → `ws_fehler_melden(schluessel, daten)` (auch ohne Anmeldung, nur mit Melde-Schlüssel) → Bereinigung → `ws_fehler` (zusammengefasst je Fingerabdruck
+aus Text ohne Zahlen, Stelle ohne Zeile, Umgebung). Grenze 300/Stunde je App (`ws_fehler_grenze`), Löschung 30 Tage nach der letzten Meldung.
+Lesen: Projektmitglieder; Stand ändern und „Als Auftrag“: Admin und Entwickler (Auftrag nur mit Auftrags-Recht in der Gruppe).
+
 ## Rollen und Rechte
 | Rolle | Aufträge | Freigeben / Erlauben | Löschen | Claude | GitHub |
 |---|---|---|---|---|---|

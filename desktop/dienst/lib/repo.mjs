@@ -88,6 +88,12 @@ export async function geruestSchreiben(ziel, vorlageOrdner, { name, repo, beschr
   if (art) {
     if (!ARTEN.includes(art)) throw new Error("Unbekannte Projekt-Art");
     await ordnerKopieren(ziel, path.join(artOrdner, art), werte, geschrieben);
+    // Fehler-Meldungen an die Codeschmiede (Web-App und Handy-App)
+    if (art === "web" || art === "handy") {
+      await mkdir(path.join(ziel, "src", "lib"), { recursive: true });
+      await copyFile(path.join(artOrdner, "_fehler", "fehlerMelden.js"), path.join(ziel, "src", "lib", "fehlerMelden.js"));
+      if (!geschrieben.includes("src/lib/fehlerMelden.js")) geschrieben.push("src/lib/fehlerMelden.js");
+    }
     // Datenbank-Station (main → Test-Datenbank, live → Live-Datenbank nach Freigabe) für alles außer Programmen
     if (art !== "programm") {
       await mkdir(path.join(ziel, ".github", "workflows"), { recursive: true });
