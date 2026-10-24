@@ -7,7 +7,8 @@ import { supabase } from "./supabase";
 import { useKiName } from "./kiName";
 import { useAutoHoehe } from "./autoHoehe";
 import { BausteineModus, MarkeModus, BAUSTEIN_BASIS, bausteinWerteBereinigen } from "./DesignerBausteine";
-import { MARKE_BASIS } from "./Logo";
+import { MARKE_BASIS, Logo as MarkeLogo, LogoZeichen } from "./Logo";
+import GeraeteRahmen, { geraetVonBreite } from "./GeraeteRahmen";
 import { Markdown } from "./Markdown";
 const SeitenModus = lazy(() => import("./SeitenModus"));
 import { APP_ARTEN, ART_BASIS, ArtEinstellungen, ArtMuster, beispieleBereinigen, beispieleFuer, menueSymbol } from "./DesignerArten";
@@ -152,6 +153,7 @@ export default function Designer({ d, ich, toast }) {
   const [rechts, setRechts] = useState("chat");
   const ki = useKiName(d.projektId, "design");   // eingestellter Anbieter für den Design-Chat
   const [chatText, setChatText] = useState("");
+  const [bausteinEntwurf, setBausteinEntwurf] = useState({ name: "", text: "", art: "zusammen" });   // Dialog „Neuer Baustein“ behält die Eingaben
 
   const darf = useMemo(() => {
     if (ich.rolle === "admin") return true;
@@ -165,14 +167,34 @@ export default function Designer({ d, ich, toast }) {
     const { data, error } = await supabase.from("ws_design_entwuerfe").select("*").eq("projekt_id", d.projektId).neq("stand", "verworfen").order("geaendert", { ascending: false });
     if (error) toast(fehler(error)); setEntwuerfe(data || []); setLaden(false);
   }, [d.projektId, toast]);
+  // Test & Live (Datenbank 0024): Live-Schaltungen, um „In der Testfassung“ von „Live“ zu trennen
+  const [versionen, setVersionen] = useState([]);
+  const testLive = !!projekt?.live_zweig;
+  const holeVersionen = useCallback(async () => {
+    if (!testLive) { setVersionen([]); return; }
+    const { data } = await supabase.from("ws_live_versionen").select("id, commit_sha, geschaltet").eq("projekt_id", d.projektId).order("id", { ascending: false }).limit(200);
+    setVersionen(data || []);
+  }, [d.projektId, testLive]);
   useEffect(() => {
-    holen();
-    const ch = supabase.channel("cs-designer-" + d.projektId).on("postgres_changes", { event: "*", schema: "public", table: "ws_design_entwuerfe" }, holen).subscribe();
+    holen(); holeVersionen();
+    const ch = supabase.channel("cs-designer-" + d.projektId).on("postgres_changes", { event: "*", schema: "public", table: "ws_design_entwuerfe" }, holen)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ws_live_versionen" }, holeVersionen).subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [holen, d.projektId]);
+  }, [holen, holeVersionen, d.projektId]);
 
   const live = entwuerfe.find((e) => e.stand === "live");
   const gueltig = useMemo(() => mische(BASIS, live?.werte), [live]);
+  // „live“ im Designer heißt: Auftrag fertig geprüft und in main (Testfassung). Mit Test & Live ist es erst wirklich live, wenn danach
+  // ein Stand live geschaltet wurde. Der aktuelle Live-Stand gilt seit seiner ersten Schaltung (auch nach „Zurück“ auf eine ältere Version).
+  const liveImLive = useMemo(() => {
+    if (!live || !testLive) return true;
+    const jetzt = versionen[0]; if (!jetzt) return false;
+    const seit = Math.min(...versionen.filter((v) => v.commit_sha === jetzt.commit_sha).map((v) => Date.parse(v.geschaltet)));
+    return seit >= Date.parse(live.geaendert);
+  }, [live, testLive, versionen]);
+  const liveText = liveImLive ? "Live" : "In der Testfassung";
+  // Ausgangslage: nach dem Laden das gültige Grunddesign übernehmen, solange nichts gewählt oder geändert ist (Fehlerkorrektur 0.9.5)
+  useEffect(() => { if (!laden && !aktivId && !geaendert) setWerte(gueltig); }, [laden, gueltig]); // eslint-disable-line react-hooks/exhaustive-deps
   const aktiv = entwuerfe.find((e) => e.id === aktivId) || null;
   const fest = !!aktiv && aktiv.stand !== "entwurf";
   const eigen = !aktiv || aktiv.erstellt_von === ich.id || ich.rolle === "admin";
@@ -238,10 +260,12 @@ export default function Designer({ d, ich, toast }) {
         <span className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1" />
         <label className="sr-only" htmlFor="ds-entwurf">Entwurf</label>
         <select id="ds-entwurf" value={aktivId || ""} onChange={(e) => oeffne(entwuerfe.find((x) => String(x.id) === e.target.value))} className={`${input} w-auto max-w-[260px]`}>
-          <option value="">{live ? `Gültiges Grunddesign (${live.name})` : "Gültiges Grunddesign (Ausgangswerte)"}</option>
+          <option value="">{live ? `Gültiges Grunddesign (${live.name} · ${liveText})` : laden ? "Gültiges Grunddesign …" : `Ausgangswerte – ${entwuerfe.some((e) => e.stand === "gesendet") ? "noch kein Grunddesign umgesetzt" : "noch kein Grunddesign gesendet"}`}</option>
           {entwuerfe.filter((e) => e.stand !== "live").map((e) => <option key={e.id} value={e.id}>{e.name} · {STAND_TXT[e.stand]} · v{e.version}</option>)}
         </select>
         {aktiv && <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${STAND_CLS[aktiv.stand]}`}>{STAND_TXT[aktiv.stand]}</span>}
+        {!aktiv && live && <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${liveImLive ? STAND_CLS.live : STAND_CLS.gesendet}`}
+          title={liveImLive ? "Das Grunddesign ist in der App live" : "Fertig geprüft und in der Testfassung – live wird es mit der nächsten Live-Schaltung"}>{liveText}</span>}
         {geaendert && <span className="text-xs text-amber-700 dark:text-amber-400 font-semibold">ungespeichert</span>}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <button type="button" className={ghost} title="Rückgängig" onClick={zurueck} disabled={!verlauf.zurueck.length}><Undo2 className="w-4 h-4" /></button>
@@ -255,12 +279,13 @@ export default function Designer({ d, ich, toast }) {
             onClick={() => setDialog({ art: "senden" })}><Send className="w-4 h-4" />Als Auftrag senden</button>}
         </div>
       </div>
+      {!laden && !aktiv && !live && <p className="text-sm text-slate-600 dark:text-slate-300">Noch kein Grunddesign {entwuerfe.some((e) => e.stand === "gesendet") ? "umgesetzt (ein Entwurf ist als Auftrag unterwegs)" : "gesendet"} – der Editor zeigt die Ausgangswerte der Codeschmiede, nicht unbedingt das, was die App heute zeigt.</p>}
       {!darf && <p className="text-sm text-slate-500">Nur ansehen: Gestalten dürfen Entwickler mit dem Recht „Aufträge geben“ im Bereich der Design-Gruppe.</p>}
       {fest && <p className="text-sm text-slate-600 dark:text-slate-300">Dieser Entwurf ist {STAND_TXT[aktiv.stand].toLowerCase()} und damit fest{aktiv.auftrag_id ? ` (Auftrag #${aktiv.auftrag_id})` : ""}. Für Änderungen eine Kopie anlegen.</p>}
 
       {modus === "seiten" ? <Suspense fallback={<p className="text-sm text-slate-500 p-4">Lädt …</p>}><SeitenModus projekt={projekt} d={d} ich={ich} werte={werte} dunkel={dunkel} darf={darf} toast={toast} /></Suspense> : (
         <div className="grid gap-3 grid-cols-[minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_280px] lg:grid-cols-[300px_minmax(0,1fr)]">
-          {modus === "bausteine" ? <BausteineModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} projekt={projekt} d={d} ich={ich} toast={toast} dunkel={dunkel} Testseite={Testseite} breite={GERAETE[geraet][0]} onChat={(t) => { setRechts("chat"); setChatText(t); }} />
+          {modus === "bausteine" ? <BausteineModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} darf={darf} projekt={projekt} d={d} ich={ich} toast={toast} dunkel={dunkel} Testseite={Testseite} breite={GERAETE[geraet][0]} onChat={(t) => { setRechts("chat"); setChatText(t); }} bausteinEntwurf={bausteinEntwurf} setBausteinEntwurf={setBausteinEntwurf} />
             : modus === "marke" ? <MarkeModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} projekt={projekt} ich={ich} toast={toast} />
             : <><Einstellungen w={werte} aendere={aendere} bearbeitbar={bearbeitbar} art={art}
               onBeispiele={() => { setRechts("chat"); setChatText(`[Beispiele] Passe die Beispiele der Vorschau (${APP_ARTEN.find(([k]) => k === art)?.[1]}) an unser Konzept an: Menüpunkte, Kennzahlen und Beispieltexte.`); }} />
@@ -277,9 +302,9 @@ export default function Designer({ d, ich, toast }) {
               </div>
             </div>
             <div className="p-3 bg-slate-100 dark:bg-slate-950 flex-1 overflow-auto min-h-[520px]">
-              {mitte === "geruest" && <Rahmen breite={GERAETE[geraet][0]}><Geruest w={werte} modus={dunkel ? "dunkel" : "hell"} geraet={geraet} name={projekt.name} art={art} bsp={beispieleFuer(projekt, art, werte)} /></Rahmen>}
+              {mitte === "geruest" && <Rahmen geraet={geraet}><Geruest w={werte} modus={dunkel ? "dunkel" : "hell"} geraet={geraet} name={projekt.name} art={art} bsp={beispieleFuer(projekt, art, werte)} /></Rahmen>}
               {mitte === "testseite" && <Testseite projekt={projekt} breite={GERAETE[geraet][0]} werte={werte} modus={dunkel ? "dunkel" : "hell"} />}
-              {mitte === "vergleich" && <Vergleich entwuerfe={entwuerfe} gueltig={gueltig} aktuell={{ name: aktiv ? `${aktiv.name}${geaendert ? " (ungespeichert)" : ""}` : "Im Editor", werte }} modus={dunkel ? "dunkel" : "hell"} name={projekt.name} art={art} projekt={projekt} />}
+              {mitte === "vergleich" && <Vergleich entwuerfe={entwuerfe} gueltig={gueltig} liveText={liveText} aktuell={{ name: aktiv ? `${aktiv.name}${geaendert ? " (ungespeichert)" : ""}` : "Im Editor", werte }} modus={dunkel ? "dunkel" : "hell"} name={projekt.name} art={art} projekt={projekt} />}
             </div>
           </section></>}
           <aside className={`${card} lg:col-span-2 xl:col-span-1 self-start flex flex-col min-h-[520px] max-h-[calc(100vh-140px)]`}>
@@ -367,8 +392,9 @@ function Einstellungen({ w, aendere, bearbeitbar, art = "verwaltung", onBeispiel
   );
 }
 
-function Rahmen({ breite, children }) {
-  return <div className="mx-auto transition-all" style={{ width: breite, maxWidth: "100%" }}><div className="rounded-xl overflow-hidden shadow-lg ring-1 ring-black/10">{children}</div><p className="text-center text-xs text-slate-500 mt-1.5">{breite} px · Vorschau des Grundgerüsts mit den Entwurfswerten</p></div>;
+// Echte Gerätebreite, eingepasst in die Spalte (GeraeteRahmen, Fehlerkorrektur 0.9.5)
+function Rahmen({ geraet, children }) {
+  return <GeraeteRahmen geraet={geraet} hoehe="inhalt" rahmenClass="rounded-xl shadow-lg ring-1 ring-black/10" text="Grundgerüst mit den Entwurfswerten">{children}</GeraeteRahmen>;
 }
 
 // Gerüst: Menü, Kopfzeile, Kacheln, Liste, Knöpfe – zeigt die Werte sofort (die echte App erst nach „live“)
@@ -379,13 +405,14 @@ function Geruest({ w, modus, geraet, name, art = "verwaltung", bsp = beispieleFu
   const seitlich = pos === "links" || pos === "offen" || pos === "eingeklappt";
   const schmal = pos === "eingeklappt";
   const fontH = `"${s.ueberschrift}", system-ui, sans-serif`; const fontT = `"${s.text}", system-ui, sans-serif`;
-  const Logo = () => <span style={{ width: w.logo.groesse, height: w.logo.groesse, borderRadius: fo.radius, background: f.primaer, color: f.primaer_text, fontFamily: fontH, fontWeight: 700, fontSize: w.logo.groesse * 0.5 }} className="grid place-items-center shrink-0">{name.slice(0, 1)}</span>;
+  // Logo aus der Marke (Logo.jsx, gleiche Zeichnung wie in der App) in der eingestellten Größe – „Bisheriges Bild“ ohne Bild zeigt das Monogramm
+  const Logo = () => <span className="shrink-0 inline-flex"><LogoZeichen werte={w.marke} groesse={w.logo.groesse} titel={w.marke?.name || name} /></span>;
   // Menüpunkte aus den Beispielen der App-Art (Trainer to go: bisherige Muster)
   const punkte = (bsp.menue || []).map((t, i, a) => [t, menueSymbol(i, a.length)]);
   if (art !== "verwaltung") return <ArtMuster art={art} w={w} f={f} fo={fo} s={s} fontH={fontH} fontT={fontT} bsp={bsp} geraet={geraet} schatten={schatten} />;
   const Menue = ({ quer }) => (
     <nav style={{ background: f.menue, color: f.menue_text, borderColor: f.rand, width: quer ? "auto" : schmal ? 64 : Math.min(w.menue.breite, 280), fontFamily: fontT }} className={quer ? "flex items-center gap-1 px-3 py-2 border-b" : "flex flex-col gap-1 p-2.5 border-r shrink-0"}>
-      {!quer && w.logo.platz === "menue-oben" && <div className="flex items-center gap-2 px-1.5 pb-2"><Logo />{!schmal && <b style={{ fontFamily: fontH }}>{name}</b>}</div>}
+      {!quer && w.logo.platz === "menue-oben" && <div className="flex items-center gap-2 px-1.5 pb-2 min-w-0">{schmal ? <Logo /> : <MarkeLogo werte={w.marke} groesse={w.logo.groesse} farbeText={f.menue_text} className="min-w-0" />}</div>}
       {punkte.map(([t, I], i) => <span key={i} style={i === 0 ? { background: f.primaer + "22", color: f.primaer, borderRadius: fo.radius } : { borderRadius: fo.radius }} className="flex items-center gap-2 px-2 py-1.5 text-[0.9em] font-semibold"><I size={17} />{!schmal && t}</span>)}
     </nav>);
   const kopfLogo = w.logo.platz !== "menue-oben" || !seitlich;
@@ -428,6 +455,7 @@ function Geruest({ w, modus, geraet, name, art = "verwaltung", bsp = beispieleFu
 }
 
 function Testseite({ projekt, breite, werte, modus, onUmdesign }) {
+  const geraet = geraetVonBreite(breite);
   // Etappe 3: Entwurf sofort in der echten Testseite zeigen – die App (vorschauHelfer.js) übernimmt die Werte nur dort, nichts wird gespeichert
   // Nur echte https-Adressen; eine ungültige Adresse darf den Designer nicht abstürzen lassen
   // Mit „Test & Live“ (Datenbank 0024) zeigt die Testseite die Testfassung (main), sonst die App-Adresse
@@ -449,15 +477,17 @@ function Testseite({ projekt, breite, werte, modus, onUmdesign }) {
   }, [ziel, onUmdesign]);
   if (!url) return <p className="text-sm text-slate-500 p-4">Die App gibt es noch nicht als Testseite – gestalte im „Gerüst“: dort siehst du das Design schon jetzt an einer Muster-App. Sobald die App eine Adresse hat, erscheint sie hier.</p>;
   return (
-    <div className="mx-auto" style={{ width: breite, maxWidth: "100%" }}>
+    <div className="min-w-0">
       <p className={`text-xs mb-1.5 rounded-lg px-2.5 py-1.5 border ${bereit ? "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-900 text-green-800 dark:text-green-300" : "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-slate-600 dark:text-slate-300"}`}>
         {bereit ? "Echte Testseite – zeigt deinen Entwurf sofort (nur hier, nichts wird gespeichert). Darüber liegt wie in der App die Vereinsfarbe." : "Echte Testseite der App. Sobald sie geladen ist, zeigt sie deinen Entwurf sofort (ab Trainer to go mit Grunddesign-Ebene)."}</p>
-      <iframe ref={rahmen} title="Testseite der App" src={url} onLoad={() => setTimeout(senden, 400)} className="w-full h-[640px] rounded-xl bg-white ring-1 ring-black/10" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" />
+      <GeraeteRahmen geraet={geraet}>
+        <iframe ref={rahmen} title="Testseite der App" src={url} onLoad={() => setTimeout(senden, 400)} className="block w-full h-full bg-white" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" />
+      </GeraeteRahmen>
     </div>);
 }
 
-function Vergleich({ entwuerfe, gueltig, aktuell, modus, name, art, projekt }) {
-  const optionen = [["gueltig", "Gültiges Grunddesign", gueltig], ["aktuell", aktuell.name, aktuell.werte], ...entwuerfe.map((e) => [String(e.id), `${e.name} (${STAND_TXT[e.stand]})`, mische(BASIS, e.werte)])];
+function Vergleich({ entwuerfe, gueltig, liveText = "Live", aktuell, modus, name, art, projekt }) {
+  const optionen = [["gueltig", "Gültiges Grunddesign", gueltig], ["aktuell", aktuell.name, aktuell.werte], ...entwuerfe.map((e) => [String(e.id), `${e.name} (${e.stand === "live" ? liveText : STAND_TXT[e.stand]})`, mische(BASIS, e.werte)])];
   const [a, setA] = useState("gueltig"); const [b, setB] = useState("aktuell");
   const wa = optionen.find((o) => o[0] === a)?.[2] || gueltig; const wb = optionen.find((o) => o[0] === b)?.[2] || aktuell.werte;
   const diff = aenderungen(wa, wb);
@@ -466,7 +496,7 @@ function Vergleich({ entwuerfe, gueltig, aktuell, modus, name, art, projekt }) {
     <div className="space-y-3">
       <div className="flex flex-wrap gap-3"><Wahl v={a} set={setA} l="A" /><Wahl v={b} set={setB} l="B" /></div>
       <div className="grid md:grid-cols-2 gap-3">
-        {[[a, wa], [b, wb]].map(([id, w], i) => <div key={i} className="min-w-0"><p className="text-xs font-bold text-slate-500 mb-1">{i ? "B" : "A"} · {optionen.find((o) => o[0] === id)?.[1]}</p><div className="rounded-xl overflow-hidden ring-1 ring-black/10 pointer-events-none" style={{ zoom: 0.62 }}><Geruest w={w} modus={modus} geraet="pc" name={name} art={art} bsp={beispieleFuer(projekt, art, w)} /></div></div>)}
+        {[[a, wa], [b, wb]].map(([id, w], i) => <div key={i} className="min-w-0"><p className="text-xs font-bold text-slate-500 mb-1">{i ? "B" : "A"} · {optionen.find((o) => o[0] === id)?.[1]}</p><div className="pointer-events-none"><GeraeteRahmen geraet="pc" hoehe="inhalt" rahmenClass="rounded-xl ring-1 ring-black/10"><Geruest w={w} modus={modus} geraet="pc" name={name} art={art} bsp={beispieleFuer(projekt, art, w)} /></GeraeteRahmen></div></div>)}
       </div>
       <div className={`${card} overflow-hidden`}>
         <div className="px-3 py-2 font-display font-bold border-b border-slate-200 dark:border-slate-800">{diff.length} Unterschied{diff.length === 1 ? "" : "e"}</div>

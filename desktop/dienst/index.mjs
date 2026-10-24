@@ -242,7 +242,9 @@ async function holeWissen(projektId) {
   try { const { data } = await db.from("ws_wissen").select("id, kapitel, text").eq("projekt_id", projektId).order("id", { ascending: false }).limit(300); return data || []; } catch { return []; }
 }
 function auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, neuesProjekt, vorlagen = [], wissen = [], fehlerDaten = "") {
-  const verlauf = nachrichten.map((n) => `${n.von ? "Gerhard/Team" : "Werkstatt"} (${n.art}): ${n.text}`).join("\n");
+  // Text aus dem Team kann keine Zeilen vortäuschen, die wie Werkstatt-Antworten aussehen (Prüfung 2026-10-24)
+  const entschaerft = (t) => String(t ?? "").replace(/^(\s*)(Werkstatt|Gerhard\/Team)(\s*\()/gim, "$1› $2$3");
+  const verlauf = nachrichten.map((n) => `${n.von ? "Gerhard/Team" : "Werkstatt"} (${n.art}): ${n.von ? entschaerft(n.text) : n.text}`).join("\n");
   return [
     `Du bist die Werkstatt der Codeschmiede für das Projekt „${projekt.name}“ (Repository ${projekt.repo}).`,
     `Auftrag #${auftrag.id} – Gruppe „${gruppe?.name || "?"}“${feature ? `, Feature „${feature.name}“ (${feature.id})` : ", ganze Gruppe"}. Art: ${auftrag.art}.`,
