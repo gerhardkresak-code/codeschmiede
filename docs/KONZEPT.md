@@ -60,6 +60,10 @@ Ablauf `.github/workflows/datenbank.yml` (Vorlage `desktop/dienst/vorlagen/_date
 Sicherungen in `codeschmiede.sicherungen` (Schema ohne Zugriff für anon/authenticated). Zugang: GitHub-Umgebungen „test“/„live“ mit Zweig-Regel und
 Geheimnis `SUPABASE_DB_URL` (Session pooler, nur diese Datenbank); Variable `BESTEHEND` je Umgebung. Live startet die Werkstatt nach dem Live-Schalten.
 Zurück auf eine ältere Version setzt nur den Code zurück; die Datenbank bleibt (Sperre, wenn die Version nicht zur Datenbank passt).
+Seit 0.9.6: Jede Datenbank ist in `codeschmiede.umgebung` als Test oder Live gekennzeichnet (mit Projektkennung, nie der Adresse) – zeigt ein Geheimnis
+auf die falsche Datenbank, bricht der Lauf vor dem Einspielen ab. Jede Datei bekommt `codeschmiede.ziel` (test/live) mit; das Projekt prüft damit Demo-
+und Testteile (z. B. `app.ist_live()` in Trainer to go). Nach jedem Live-Lauf hält die Station Demo-Zeitpläne und Zeitpläne an, die ein anderes
+Supabase-Projekt aufrufen.
 
 ### Fehler-Meldungen (seit 0.9.2)
 App → `ws_fehler_melden(schluessel, daten)` (auch ohne Anmeldung, nur mit Melde-Schlüssel) → Bereinigung → `ws_fehler` (zusammengefasst je Fingerabdruck
