@@ -118,7 +118,7 @@ export async function liveAusfuehren({ sh, auftrag, mussLaufen = false, melde = 
       await sh("gh", ["api", "-X", "PATCH", `repos/${repo}/git/refs/heads/${LIVE_ZWEIG}`, "-f", `sha=${ziel}`, "-F", `force=${art === "zurueck"}`]);
     }
   }
-  return { commit: ziel, bezeichnung: await bezeichnungAm(sh, repo, ziel), migrationen: await migrationenAm(sh, repo, ziel), hinweis };
+  return { commit: ziel, vorher: live || null, bezeichnung: await bezeichnungAm(sh, repo, ziel), migrationen: await migrationenAm(sh, repo, ziel), hinweis };
 }
 
 // Prüfauftrag (Knopf „Jetzt unabhängig prüfen“) als Text für die Prüfung – nur lesen, nichts ändern

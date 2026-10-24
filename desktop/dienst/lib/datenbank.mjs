@@ -4,7 +4,8 @@
 // die Werkstatt führt nie selbst zusammen), prüft ihn für die Ampel und meldet, welche Datenbank-Dateien noch nicht live sind.
 // Keine Zugangsdaten: je Datenbank liegt nur deren Verbindungsadresse als Geheimnis einer GitHub-Umgebung („test“ nur für main,
 // „live“ nur für live – nach der Prüfung vom 2026-10-24: kein kontoweiter Zugang, andere Zweige kommen nicht heran). Trägt Gerhard selbst ein.
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ohneGeheimnisse } from "./geheim.mjs";
@@ -39,6 +40,27 @@ export async function zugangDa(sh, repo, umgebung) {
   return stdout.split(/\s+/).includes("SUPABASE_DB_URL");
 }
 
+export const MAIN_SCHUTZ = "Codeschmiede: Zweig main";
+export async function mainSchuetzen(sh, repo) {
+  repoPruefen(repo);
+  const { stdout } = await sh("gh", ["api", `repos/${repo}/rulesets`, "--jq", ".[].name"]);
+  if (stdout.split("\n").map((x) => x.trim()).includes(MAIN_SCHUTZ)) return;
+  const regel = {
+    name: MAIN_SCHUTZ, target: "branch", enforcement: "active",
+    conditions: { ref_name: { include: ["refs/heads/main"], exclude: [] } },
+    rules: [{ type: "deletion" }, { type: "non_fast_forward" }, { type: "pull_request", parameters: {
+      required_approving_review_count: 0, dismiss_stale_reviews_on_push: false, require_code_owner_review: false,
+      require_last_push_approval: false, required_review_thread_resolution: false } }],
+    bypass_actors: [{ actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always" }],
+  };
+  const ordner = await mkdtemp(path.join(os.tmpdir(), "cs-regel-"));
+  try {
+    const datei = path.join(ordner, "regel.json");
+    await writeFile(datei, JSON.stringify(regel));
+    await sh("gh", ["api", "-X", "POST", `repos/${repo}/rulesets`, "--input", datei]);
+  } finally { await rm(ordner, { recursive: true, force: true }).catch(() => {}); }
+}
+
 /** GitHub-Umgebung anlegen, die nur genau einen Zweig zulässt (main bzw. live). */
 export async function umgebungAnlegen(sh, repo, umgebung, zweig) {
   repoPruefen(repo);
@@ -64,6 +86,9 @@ export async function dbEinrichten({ sh, projekt, auftragAnlegen, vorlage = null
   for (const r of [projekt.db_test_ref, projekt.db_live_ref]) if (r != null && !REF.test(r)) throw new Error("Ungültige Datenbank-Kennung");
   const teile = [];
   const fehlt = [];
+  // Zweig main schützen (Prüfung N3): Änderungen nur über Pull Request, nicht löschen/überschreiben; der Admin darf umgehen
+  try { await mainSchuetzen(sh, repo); teile.push("Zweig main geschützt (nur über Pull Request)"); }
+  catch (e) { teile.push(`Achtung: Zweig main konnte nicht geschützt werden (${kurz(ohneGeheimnisse(String(e?.stderr || e?.message || "")), 120)})`); }
   for (const [umgebung, zweig, ref, bestehend] of [["test", "main", projekt.db_test_ref, projekt.db_test_bestehend], ["live", "live", projekt.db_live_ref, projekt.db_live_bestehend]]) {
     if (!ref) continue;
     await umgebungAnlegen(sh, repo, umgebung, zweig);
@@ -120,6 +145,13 @@ export async function dbAmpel({ sh, projekt }) {
  * Datenbank-Dateien, die auf main liegen, aber noch nicht auf live (Bare-Klon mit refs/heads/main und refs/heads/live).
  * git(dir, ...args) → stdout. Rückgabe [{ datei, sql }] (höchstens 50, SQL gekürzt und ohne Geheimnisse) oder null ohne live.
  */
+/** Haben sich Abläufe (.github/workflows) zwischen live und main geändert? Sie laufen nach dem Live-Schalten mit den Live-Zugängen. */
+export async function ablaeufeGeaendert(git, repo) {
+  const a = await git(repo, "rev-parse", "--verify", "--quiet", "refs/heads/main:.github/workflows").catch(() => "");
+  const b = await git(repo, "rev-parse", "--verify", "--quiet", "refs/heads/live:.github/workflows").catch(() => "");
+  return !!(a || b) && a !== b;
+}
+
 export async function dbOffen(git, repo) {
   const hat = async (ref) => SHA.test(await git(repo, "rev-parse", "--verify", "--quiet", `refs/heads/${ref}^{commit}`).catch(() => ""));
   if (!(await hat("main")) || !(await hat("live"))) return null;
@@ -141,17 +173,20 @@ export async function dbOffen(git, repo) {
  * Nach dem Live-Schalten: Ablauf „Datenbank“ auf live starten und auf das Ergebnis warten (höchstens warteMs).
  * Rückgabe: Hinweistext oder null (keine Live-Datenbank / kein Ablauf).
  */
-export async function dbLiveEinspielen({ sh, projekt, warteMs = 10 * 60 * 1000, pause = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function dbLiveEinspielen({ sh, projekt, vorher = null, kennung = "", warteMs = 10 * 60 * 1000, pause = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   if (!projekt.repo || !projekt.db_live_ref) return null;
   const repo = projekt.repo; repoPruefen(repo);
   if (!(await ablaufAufMain(sh, repo))) return "Datenbank-Station noch nicht eingerichtet – Live-Datenbank nicht aktualisiert";
   const start = Date.now();
-  await sh("gh", ["workflow", "run", "datenbank.yml", "--repo", repo, "--ref", "live"]);
+  const k = `cs-${String(kennung).replace(/[^0-9a-z-]/gi, "").slice(0, 30)}-${start}`;
+  const args = ["workflow", "run", "datenbank.yml", "--repo", repo, "--ref", "live", "-f", `kennung=${k}`];
+  if (vorher && SHA.test(vorher)) args.push("-f", `vorher=${vorher}`);
+  await sh("gh", args);
   let lauf = null;
   while (Date.now() - start < warteMs) {
     await pause(15000);
-    const { stdout } = await sh("gh", ["run", "list", "--repo", repo, "--workflow", "datenbank.yml", "--branch", "live", "--event", "workflow_dispatch", "--limit", "3", "--json", "databaseId,status,conclusion,createdAt"]);
-    lauf = JSON.parse(stdout || "[]").find((l) => Date.parse(l.createdAt) >= start - 60000) || null;
+    const { stdout } = await sh("gh", ["run", "list", "--repo", repo, "--workflow", "datenbank.yml", "--branch", "live", "--event", "workflow_dispatch", "--limit", "10", "--json", "databaseId,status,conclusion,createdAt,displayTitle"]);
+    lauf = JSON.parse(stdout || "[]").find((l) => String(l.displayTitle || "").includes(k)) || null;
     if (lauf?.status === "completed") break;
   }
   if (!lauf) return "Live-Datenbank: Ablauf nicht gestartet – bitte bei GitHub prüfen";

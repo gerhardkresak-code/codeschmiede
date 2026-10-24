@@ -21,7 +21,7 @@ select ws_projekt_datenbank('trainer-to-go','lhdoyjdothombwslfeco','abcdefghijab
 select ws_projekt_datenbank('trainer-to-go','lhdoyjdothombwslfeco',null,true,false,'gibtsnicht');
 select db_test_ref, db_live_ref, db_test_bestehend, db_live_bestehend, datenbank from ws_projekte where id='trainer-to-go';
 \echo [2] Offen melden: gueltig -> OK; boeser Dateiname / zu lang -> FEHLER (2x); Entwickler -> FEHLER
-select ws_db_offen_melden(:'adm_pc','trainer-to-go','[{"datei":"20261025_x.sql","sql":"create table x();"}]');
+select ws_db_offen_melden(:'adm_pc','trainer-to-go','[{"datei":"20261025_x.sql","sql":"create table x();"}]', true);
 select ws_db_offen_melden(:'adm_pc','trainer-to-go','[{"datei":"../x.sql","sql":"x"}]');
 select ws_db_offen_melden(:'adm_pc','trainer-to-go',jsonb_build_array(jsonb_build_object('datei','a.sql','sql',repeat('x',20001))));
 :D1

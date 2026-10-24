@@ -32,7 +32,7 @@ import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopp
 import { uebernehmen, prText } from "./lib/ersatz.mjs";
 import { ampelPruefen, sandboxStarten, testlaufStarten } from "./lib/anbindungen.mjs";
 import { zweigStand, codeBaum, codeDatei, handSchreiben } from "./lib/code.mjs";
-import { dbEinrichten, dbAmpel, dbOffen, dbLiveEinspielen } from "./lib/datenbank.mjs";
+import { dbEinrichten, dbAmpel, dbOffen, dbLiveEinspielen, ablaeufeGeaendert } from "./lib/datenbank.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -1111,7 +1111,7 @@ async function projektAbgleich() {
         // Datenbank-Station: Dateien, die noch nicht live sind (Anzeige beim Live-Weg)
         if (cfg.admin && p.live_zweig) {
           const offen = await dbOffen(git, repo).catch(() => null);
-          if (offen) await db.rpc("ws_db_offen_melden", { p_pc: pcId, p_projekt: p.id, p_offen: offen }).then(() => {}, () => {});
+          if (offen) await db.rpc("ws_db_offen_melden", { p_pc: pcId, p_projekt: p.id, p_offen: offen, p_ablaeufe: await ablaeufeGeaendert(git, repo).catch(() => false) }).then(() => {}, () => {});
         }
         const main = await git(repo, "rev-parse", "refs/heads/main");
         const roh = await git(repo, "for-each-ref", "--format=%(refname:lstrip=2)%09%(objectname)%09%(committerdate:iso-strict)%09%(contents:subject)", "refs/heads");
@@ -1246,7 +1246,7 @@ async function liveArbeit() {
     // Datenbank-Station: Live-Datenbank nach dem Live-Schalten aktualisieren und das Ergebnis melden
     if (a.art === "live" && projekt?.db_live_ref) {
       melde("status", "Live-Datenbank wird aktualisiert");
-      const h = await dbLiveEinspielen({ sh: ghGrenze, projekt }).catch((e) => `Live-Datenbank: ${kuerzen(ohneGeheimnisse(e?.stderr || e?.message || String(e)), 200)}`);
+      const h = await dbLiveEinspielen({ sh: ghGrenze, projekt, vorher: r.vorher, kennung: `live-${a.id}` }).catch((e) => `Live-Datenbank: ${kuerzen(ohneGeheimnisse(e?.stderr || e?.message || String(e)), 200)}`);
       if (h) r.hinweis = [r.hinweis, h].filter(Boolean).join(" · ");
     }
     // Feature-Stände: live ist ein Feature, wenn der Stand seines letzten live gegangenen Auftrags im neuen Live-Stand enthalten ist (Prüfung R1/Hinweis 2)

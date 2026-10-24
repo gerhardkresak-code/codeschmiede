@@ -56,12 +56,14 @@ test("Live-Datenbank nach dem Live-Schalten: startet Ablauf auf live und meldet 
   const sh = (ergebnis) => async (b, a) => {
     aufrufe.push(a.join(" "));
     if (a[0] === "api") return { stdout: `${"b".repeat(40)}\t${Buffer.from("x").toString("base64")}` };
-    if (a[0] === "run") return { stdout: JSON.stringify([{ databaseId: 1, status: "completed", conclusion: ergebnis, createdAt: new Date().toISOString() }]) };
+    if (a[0] === "run") { const k = aufrufe.find((x) => x.startsWith("workflow run"))?.match(/kennung=(\S+)/)?.[1]; return { stdout: JSON.stringify([{ databaseId: 1, status: "completed", conclusion: ergebnis, createdAt: new Date().toISOString(), displayTitle: `Datenbank live ${k}` }]) }; }
     return { stdout: "" };
   };
   const projekt = { repo: "o/a", db_live_ref: "bbcdefghijabcdefghij" };
-  assert.equal(await dbLiveEinspielen({ sh: sh("success"), projekt, pause: async () => {} }), "Live-Datenbank aktuell");
-  assert.ok(aufrufe.includes("workflow run datenbank.yml --repo o/a --ref live"));
+  assert.equal(await dbLiveEinspielen({ sh: sh("success"), projekt, vorher: "d".repeat(40), kennung: "live-5", pause: async () => {} }), "Live-Datenbank aktuell");
+  const start = aufrufe.find((x) => x.startsWith("workflow run"));
+  assert.match(start, /^workflow run datenbank.yml --repo o\/a --ref live -f kennung=cs-live-5-\d+ -f vorher=d{40}$/);
+  aufrufe.length = 0;
   assert.match(await dbLiveEinspielen({ sh: sh("failure"), projekt, pause: async () => {} }), /ACHTUNG/);
   assert.equal(await dbLiveEinspielen({ sh: sh("success"), projekt: { repo: "o/a" } }), null);
 });
@@ -76,5 +78,17 @@ test("Offene Datenbank-Dateien: main ohne live", async () => {
   await writeFile(path.join(d, "supabase/migrations/002_b.sql"), 'create table b(); -- token = "abcdefghijklmnop"'); await git(d, "add", "-A"); await c("b");
   const o = await dbOffen(git, d);
   assert.deepEqual(o.map((x) => x.datei), ["002_b.sql"]); assert.doesNotMatch(o[0].sql, /abcdefghijklmnop/);
+  await rm(d, { recursive: true, force: true });
+});
+
+test("Abläufe zwischen live und main geändert", async () => {
+  const { ablaeufeGeaendert } = await import("../lib/datenbank.mjs");
+  const d = await mkdtemp(path.join(os.tmpdir(), "cs-abl-"));
+  const c = (m) => git(d, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", m);
+  await git(d, "init", "-q", "-b", "main"); await mkdir(path.join(d, ".github/workflows"), { recursive: true });
+  await writeFile(path.join(d, ".github/workflows/a.yml"), "a"); await git(d, "add", "-A"); await c("a"); await git(d, "branch", "live");
+  assert.equal(await ablaeufeGeaendert(git, d), false);
+  await writeFile(path.join(d, ".github/workflows/a.yml"), "b"); await git(d, "add", "-A"); await c("b");
+  assert.equal(await ablaeufeGeaendert(git, d), true);
   await rm(d, { recursive: true, force: true });
 });

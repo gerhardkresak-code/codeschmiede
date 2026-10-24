@@ -863,6 +863,7 @@ function LiveWeg({ d, ich, projekt, toast }) {
             {projekt.test_url && <a className="text-sm font-mono text-blue-700 dark:text-blue-300 break-all" href={projekt.test_url} target="_blank" rel="noreferrer">{projekt.test_url.replace(/^https:\/\//, "")}</a>}
             <span className="text-xs text-slate-500">{testStand ? <>Stand <span className="font-mono">{testStand.main_sha.slice(0, 7)}</span> · abgeglichen {fmt(testStand.zeit)}{jetzt?.commit_sha === testStand.main_sha ? " · gleich wie live" : ""}</> : "Stand noch unbekannt – der Abgleich der Werkstatt läuft alle 10 Minuten"}</span>
             <DbOffen projekt={projekt} />
+            {projekt.db_ablaeufe_geaendert && <p className="text-xs rounded-lg border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300 px-2.5 py-1.5">Achtung: Abläufe (<span className="font-mono">.github/workflows</span>) haben sich gegenüber live geändert. Sie laufen nach dem Live-Schalten mit den Live-Zugängen – bitte vorher im Code-Editor ansehen.</p>}
             <p className="text-sm text-slate-600 dark:text-slate-300">{imTest.length ? <>Neu gegenüber live: {imTest.slice(0, 5).map((f) => f.name).join(" · ")}{imTest.length > 5 ? " …" : ""}</> : "Gleich wie live oder nur kleine Änderungen ohne Feature."}</p>
             <div className="flex gap-2 flex-wrap mt-auto">
               {projekt.test_url && <a className={`${ghost} h-9`} href={projekt.test_url} target="_blank" rel="noreferrer"><ExternalLink className="w-4 h-4" />Testseite öffnen</a>}

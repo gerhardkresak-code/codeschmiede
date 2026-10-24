@@ -12,6 +12,7 @@ alter table public.ws_projekte add column if not exists db_live_bestehend boolea
 alter table public.ws_projekte add column if not exists db_gruppe_id text references public.ws_gruppen(id) on delete set null;
 alter table public.ws_projekte add column if not exists db_offen jsonb not null default '[]'::jsonb;
 alter table public.ws_projekte add column if not exists db_offen_zeit timestamptz;
+alter table public.ws_projekte add column if not exists db_ablaeufe_geaendert boolean not null default false;   -- .github/workflows zwischen live und main geändert
 alter table public.ws_projekte drop constraint if exists ws_projekte_db_ref_check;
 alter table public.ws_projekte add constraint ws_projekte_db_ref_check check ((db_test_ref is null or db_test_ref ~ '^[a-z]{20}$') and (db_live_ref is null or db_live_ref ~ '^[a-z]{20}$')
   and (db_test_ref is null or db_live_ref is null or db_test_ref <> db_live_ref));
@@ -65,17 +66,18 @@ revoke execute on function public.ws_projekt_datenbank(text, text, text, boolean
 grant execute on function public.ws_projekt_datenbank(text, text, text, boolean, boolean, text) to authenticated;
 
 -- Werkstatt des Admins: offene (noch nicht live) Datenbank-Dateien melden
-create or replace function public.ws_db_offen_melden(p_pc uuid, p_projekt text, p_offen jsonb) returns void
+drop function if exists public.ws_db_offen_melden(uuid, text, jsonb);
+create or replace function public.ws_db_offen_melden(p_pc uuid, p_projekt text, p_offen jsonb, p_ablaeufe boolean default false) returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not public.ws_ist_admin() then raise exception 'Nur die Werkstatt des Admins'; end if;
   if not exists (select 1 from public.ws_werkstatt_pcs w where w.id = p_pc and w.benutzer_id = auth.uid()) then raise exception 'Unbekannter Werkstatt-PC'; end if;
   if not public.ws_db_offen_ok(p_offen) then raise exception 'Ungültige Liste'; end if;
-  update public.ws_projekte set db_offen = p_offen, db_offen_zeit = now() where id = p_projekt;
+  update public.ws_projekte set db_offen = p_offen, db_offen_zeit = now(), db_ablaeufe_geaendert = coalesce(p_ablaeufe, false) where id = p_projekt;
   if not found then raise exception 'Projekt nicht gefunden'; end if;
 end $$;
-revoke execute on function public.ws_db_offen_melden(uuid, text, jsonb) from public, anon;
-grant execute on function public.ws_db_offen_melden(uuid, text, jsonb) to authenticated;
+revoke execute on function public.ws_db_offen_melden(uuid, text, jsonb, boolean) from public, anon;
+grant execute on function public.ws_db_offen_melden(uuid, text, jsonb, boolean) to authenticated;
 
 -- Aktion „Datenbank-Station einrichten“
 alter table public.ws_projekt_aktionen drop constraint if exists ws_projekt_aktionen_art_check;
