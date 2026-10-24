@@ -10,9 +10,11 @@ export const MAX_DATEI = 512 * 1024;
 export const MAX_BAUM = 20000;
 const SHA = /^[0-9a-f]{40}$/;
 export const zweigOk = (z) => /^[A-Za-z0-9._/-]{1,100}$/.test(z || "") && !/\.\./.test(z) && !/^[/.-]/.test(z);
-export const pfadOk = (p) => typeof p === "string" && p.length >= 1 && p.length <= 400 && !/(^|\/)\.\.(\/|$)/.test(p) && !p.startsWith("/")
-  && !/[\x00-\x1f\\]/.test(p) && !/(^|\/)\.git(\/|$)/.test(p) && !/^-/.test(p);
-const geheimPfad = (p) => heikleDatei(p) || /(^|\/)credentials|(^|\/)id_(rsa|ed25519|ecdsa)/i.test(p);
+// Wie public.ws_code_pfad_ok (Datenbank 0032): keine „.“/„..“-Abschnitte, kein / am Anfang/Ende, kein //, kein Doppelpunkt
+export const pfadOk = (p) => typeof p === "string" && p.length >= 1 && p.length <= 400 && !/(^|\/)\.\.?(\/|$)/.test(p) && !p.startsWith("/")
+  && !p.endsWith("/") && !p.includes("//") && !/[\x00-\x1f\\:]/.test(p) && !/(^|\/)\.git(\/|$)/.test(p) && !/^-/.test(p) && !/[ .]$/.test(p);
+// Wie public.ws_code_geheim (Datenbank 0032)
+export const geheimPfad = (p) => heikleDatei(p) || /(^|\/)\.env|\.(pem|key|p12|pfx|jks|keystore)$|(^|\/)credentials|(^|\/)id_(rsa|ed25519|ecdsa)|(^|\/)\.dev\.vars$|(^|\/)\.npmrc$|(^|\/)\.netrc$|(^|\/)serviceaccount[^/]*\.json$|(^|\/)secrets?\.[^/]*$/i.test(p);
 
 /** Stand eines Zweigs im Klon (nach Abruf). git(dir, ...args) gibt stdout (getrimmt) zurück. */
 export async function zweigStand(git, repo, zweig) {
@@ -46,10 +48,13 @@ export async function codeDatei(git, gitRoh, repo, sha, pfad) {
   if (!SHA.test(sha)) throw new Error("Ungültiger Stand");
   if (!pfadOk(pfad)) throw new Error("Ungültiger Pfad");
   if (geheimPfad(pfad)) return { inhalt: null, blob_sha: null, nur_lesen: true, hinweis: "Geheime Datei – wird nicht angezeigt" };
-  const zeile = await git(repo, "ls-tree", "-l", "--full-tree", "-z", sha, "--", pfad);
-  const z = zeile.split("\0")[0] || "";
-  const [modus, typ, blob, groesse] = z.split("\t")[0].trim().split(/\s+/);
+  // Genau ein Eintrag mit genau diesem Pfad (Prüfung H1: „.“ oder „ordner/“ listet sonst den Ordner-Inhalt)
+  const eintraege = (await git(repo, "--literal-pathspecs", "ls-tree", "-l", "--full-tree", "-z", sha, "--", pfad)).split("\0").filter(Boolean);
+  const treffer = eintraege.filter((z) => z.slice(z.indexOf("\t") + 1) === pfad);
+  if (eintraege.length !== 1 || treffer.length !== 1) throw new Error("Datei nicht gefunden");
+  const [modus, typ, blob, groesse] = treffer[0].split("\t")[0].trim().split(/\s+/);
   if (typ !== "blob" || !SHA.test(blob || "")) throw new Error("Datei nicht gefunden");
+  if (geheimPfad(treffer[0].slice(treffer[0].indexOf("\t") + 1))) return { inhalt: null, blob_sha: null, nur_lesen: true, hinweis: "Geheime Datei – wird nicht angezeigt" };
   if (modus === "120000") return { inhalt: null, blob_sha: blob, nur_lesen: true, hinweis: "Verknüpfung – wird nicht angezeigt" };
   if (Number(groesse) > MAX_DATEI) return { inhalt: null, blob_sha: blob, nur_lesen: true, hinweis: `Zu groß (${Math.round(Number(groesse) / 1024)} KB) – nur bis 512 KB` };
   const buf = await gitRoh(repo, "cat-file", "blob", blob);
@@ -70,7 +75,8 @@ export async function handSchreiben(git, ordner, basisRef, aenderungen) {
   for (const a of aenderungen) {
     if (!pfadOk(a.pfad) || geheimPfad(a.pfad)) throw new Error(`Ungültiger Pfad: ${a.pfad}`);
     if (typeof a.inhalt !== "string" || Buffer.byteLength(a.inhalt) > MAX_DATEI) throw new Error(`Inhalt ungültig: ${a.pfad}`);
-    const jetzt = await git(ordner, "rev-parse", "--verify", "--quiet", `${basisRef}:${a.pfad}`).catch(() => "");
+    if (ohneGeheimnisse(a.inhalt) !== a.inhalt) throw new Error(`In ${a.pfad} steht vermutlich ein Geheimnis (Schlüssel, Passwort, Token) – nicht übernommen. Geheimnisse gehören in die Umgebungsvariablen.`);
+    const jetzt = await git(ordner, "rev-parse", "--verify", "--quiet", `${basisRef}:./${a.pfad}`).catch(() => "");
     if ((a.basis_blob || "") !== (SHA.test(jetzt) ? jetzt : "")) konflikte.push(a.pfad);
   }
   if (konflikte.length) return { ok: false, konflikte, dateien: [] };

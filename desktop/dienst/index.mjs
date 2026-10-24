@@ -302,7 +302,13 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
       : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature), await holeWissen(projekt.id));
 
     let r;
-    if (auftrag.hand && !fortsetzen && !nacharbeit) r = await handBau({ auftrag, projekt, ordner, zweig });
+    if (auftrag.hand && (fortsetzen || nacharbeit)) {
+      // Hand-Änderungen baut nie Claude weiter (Prüfung H3): abbrechen, neu im Code-Editor machen
+      await nachricht(auftrag.id, "ergebnis", "Hand-Änderungen werden nicht automatisch nachgearbeitet. Bitte im Code-Editor neu öffnen, korrigieren und wieder als Auftrag speichern – dieser Auftrag ist damit abgebrochen.");
+      await db.from("ws_auftraege").update({ stand: "abgebrochen" }).eq("id", auftrag.id);
+      return;
+    }
+    if (auftrag.hand) r = await handBau({ auftrag, projekt, ordner, zweig });
     else if (ersatz) r = await ersatzBau({ auftrag, projekt, ordner, zweig, prompt, signal: abort.signal });
     else {
     // Erlaubnis-Brücke (MCP) für Werkzeuge außerhalb der freigegebenen Liste
@@ -358,6 +364,11 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
     if (r.feature && !auftrag.feature_id) {
       const { data: f } = await db.from("ws_features").select("id").eq("id", r.feature).maybeSingle();
       if (f) await db.from("ws_auftraege").update({ feature_id: f.id }).eq("id", auftrag.id);
+    }
+    if (r.art === "abbruch") {
+      await nachricht(auftrag.id, "ergebnis", r.text);
+      await db.from("ws_auftraege").update({ stand: "abgebrochen" }).eq("id", auftrag.id);
+      return;
     }
     if (r.art === "antwort") {
       await nachricht(auftrag.id, "ergebnis", r.text);
@@ -421,22 +432,33 @@ async function handBau({ auftrag, projekt, ordner, zweig }) {
   await log(auftrag.id, "info", `Hand-Änderung: ${aend.length} Datei(en) werden übernommen`);
   const { data: von } = await db.from("ws_benutzer").select("name").eq("id", auftrag.erstellt_von).maybeSingle();
   const w = await handSchreiben(gitSicher, ordner, "origin/main", aend);
-  if (!w.ok) return { art: "frage", text: `Seit dem Öffnen im Code-Editor hat sich in main geändert: ${w.konflikte.join(", ")}.\nBitte die Datei(en) im Code-Editor neu öffnen, die Änderung nochmal machen und speichern – diesen Auftrag dann abbrechen.` };
+  if (!w.ok) return { art: "abbruch", text: `Seit dem Öffnen im Code-Editor hat sich in main geändert: ${w.konflikte.join(", ")}.\nBitte die Datei(en) im Code-Editor neu öffnen, die Änderung nochmal machen und speichern – dieser Auftrag ist damit abgebrochen.` };
   await log(auftrag.id, "aendern", `Übernommen: ${w.dateien.join(", ")}`.slice(0, 480));
-  await gitSicher(ordner, "add", "--", ...w.dateien);
+  await gitSicher(ordner, "--literal-pathspecs", "add", "--", ...w.dateien);
   const st = await gitSicher(ordner, "status", "--porcelain");
-  if (!st.trim()) return { art: "antwort", text: "Die gespeicherte Änderung ist identisch mit main – nichts zu tun." };
+  const vorraus = Number(await gitSicher(ordner, "rev-list", "--count", "origin/main..HEAD").catch(() => "0")) || 0;
+  if (!st.trim() && !vorraus) return { art: "antwort", text: "Die gespeicherte Änderung ist identisch mit main – nichts zu tun." };
   const name = String(von?.name || "Codeschmiede").replace(/[^\p{L}\p{N} .-]/gu, "").slice(0, 60) || "Codeschmiede";
-  await gitSicher(ordner, "-c", `user.name=${name} (Code-Editor)`, "-c", "user.email=codeschmiede@trainer-to-go.at", "commit", "-m", `Auftrag #${auftrag.id}: ${String(auftrag.titel || "").replace(/[\r\n]+/g, " ").slice(0, 80)} (Hand-Änderung)`);
+  if (st.trim()) await gitSicher(ordner, "-c", `user.name=${name} (Code-Editor)`, "-c", "user.email=codeschmiede@trainer-to-go.at", "commit", "-m", `Auftrag #${auftrag.id}: ${String(auftrag.titel || "").replace(/[\r\n]+/g, " ").slice(0, 80)} (Hand-Änderung)`);
   await gitSicher(ordner, "push", "origin", `HEAD:refs/heads/${zweig}`);
-  const body = `Auftrag #${auftrag.id} – **Hand-Änderung** von ${name} im Code-Editor der Codeschmiede.\n\nDateien: ${w.dateien.map((d) => `\`${d}\``).join(", ")}\n\nPrüfungen und Sicherheitsprüfung wie bei jedem Auftrag.`;
+  const md = (t) => String(t).replace(/[`*_\[\]<>@#|\\]/g, (c) => `\\${c}`);
+  const body = `Auftrag #${auftrag.id} – **Hand-Änderung** von ${md(name)} im Code-Editor der Codeschmiede.\n\nDateien: ${w.dateien.map(md).join(", ")}\n\nPrüfungen und Sicherheitsprüfung wie bei jedem Auftrag.`;
   const { stdout } = await sh("gh", ["pr", "create", "--repo", projekt.repo, "--head", zweig, "--base", "main", "--title", `#${auftrag.id} ${String(auftrag.titel || "").replace(/[\r\n]+/g, " ").slice(0, 100)}`, "--body", body], { cwd: ordner, timeout: 120000 });
   const nummer = Number(/\/pull\/(\d+)/.exec(stdout)?.[1]) || null;
   if (!nummer) throw new Error("Pull Request konnte nicht angelegt werden");
+  await db.rpc("ws_code_aenderungen_erledigt", { p_auftrag: auftrag.id }).then(() => {}, () => {});   // Inhalte stehen jetzt im Zweig
   return { art: "pr", nummer, hand: true, text: `Hand-Änderung übernommen (${w.dateien.length} Datei(en)) – Pull Request #${nummer}. Prüfungen laufen in GitHub.` };
 }
 
 // Code ansehen: Anfragen beantworten (eigener Takt, auch während ein Auftrag läuft). Nur lesen aus dem Abgleich-Klon.
+// Ein Abruf je Klon zur selben Zeit (Abgleich und Code-Editor teilen sich den Klon – Prüfung F1)
+const sperren = new Map();
+function mitSperre(schluessel, f) {
+  const vorher = sperren.get(schluessel) || Promise.resolve();
+  const jetzt = vorher.catch(() => {}).then(f);
+  sperren.set(schluessel, jetzt.catch(() => {}));
+  return jetzt;
+}
 let codeLaeuft = false; const codeAbruf = new Map(); let codeAufgeraeumt = 0;
 const gitRoh = async (cwd, ...args) => (await sh("git", args, { cwd, maxBuffer: 2 * 1024 * 1024, encoding: "buffer" })).stdout;
 async function codeArbeit() {
@@ -447,20 +469,21 @@ async function codeArbeit() {
       const { data, error } = await db.rpc("ws_code_nehmen", { p_pc: pcId });
       if (error) { if (!/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", ohneGeheimnisse(error.message)); return; }
       const a = data?.[0]; if (!a) break;
-      const antwort = (w) => db.rpc("ws_code_antwort", { p_pc: pcId, p_id: a.id, p_stand_sha: w.stand_sha || null, p_baum: w.baum || null, p_inhalt: w.inhalt ?? null,
+      const antwortRoh = (w) => db.rpc("ws_code_antwort", { p_pc: pcId, p_id: a.id, p_stand_sha: w.stand_sha || null, p_baum: w.baum || null, p_inhalt: w.inhalt ?? null,
         p_blob_sha: w.blob_sha || null, p_hinweis: w.hinweis || null, p_nur_lesen: !!w.nur_lesen, p_fehler: !!w.fehler });
+      const antwort = async (w) => { const { error: e } = await antwortRoh(w); if (e) throw new Error(/check constraint|zu groß/i.test(e.message) ? "Datei zu groß für den Editor" : e.message); };
       try {
         const repo = await abgleichRepo({ id: a.projekt_id, repo: a.repo });
         const k = `${a.projekt_id}|${a.zweig}`;
         if (!codeAbruf.has(k) || Date.now() - codeAbruf.get(k) > 30000) {
-          await git(repo, "fetch", "-q", "origin", `+refs/heads/${a.zweig}:refs/heads/${a.zweig}`).catch(() => git(repo, "fetch", "-q", "origin", `+refs/heads/${a.zweig}:refs/heads/${a.zweig}`));
+          await mitSperre(repo, () => git(repo, "fetch", "-q", "origin", `+refs/heads/${a.zweig}:refs/heads/${a.zweig}`));
           codeAbruf.set(k, Date.now());
         }
         const stand = await zweigStand(git, repo, a.zweig);
         if (a.art === "baum") await antwort({ stand_sha: stand, baum: await codeBaum(git, repo, stand) });
         else await antwort({ stand_sha: stand, ...(await codeDatei(git, gitRoh, repo, stand, a.pfad)) });
       } catch (e) {
-        await antwort({ fehler: true, hinweis: kuerzen(ohneGeheimnisse(e?.stderr?.toString?.() || e?.message || String(e)), 280) }).catch(() => {});
+        await antwortRoh({ fehler: true, hinweis: kuerzen(ohneGeheimnisse(e?.stderr?.toString?.() || e?.message || String(e)), 280) }).catch(() => {});
       }
     }
     if (Date.now() - codeAufgeraeumt > 10 * 60 * 1000) { codeAufgeraeumt = Date.now(); await db.rpc("ws_code_aufraeumen").then(() => {}, () => {}); }
@@ -1078,7 +1101,7 @@ async function projektAbgleich() {
       if (!["admin", "entwickler"].includes(rolle)) continue;
       try {
         const repo = await abgleichRepo(p);
-        await git(repo, "fetch", "-q", "--prune", "origin", "+refs/heads/*:refs/heads/*");
+        await mitSperre(repo, () => git(repo, "fetch", "-q", "--prune", "origin", "+refs/heads/*:refs/heads/*"));
         const main = await git(repo, "rev-parse", "refs/heads/main");
         const roh = await git(repo, "for-each-ref", "--format=%(refname:lstrip=2)%09%(objectname)%09%(committerdate:iso-strict)%09%(contents:subject)", "refs/heads");
         const zweige = [];
@@ -1321,6 +1344,7 @@ async function naechsterAuftrag() {
   if (!offen?.length) return;
   const pause = (await aboLage()) === "pause";
   for (const a of offen) {
+    if (a.hand && !(a.erstellt_von === cfg.user_id || cfg.admin)) continue;   // Hand-Änderung nie auf fremden Entwickler-PCs
     const { count } = await db.from("ws_auftraege").select("id", { count: "exact", head: true }).eq("gruppe_id", a.gruppe_id).in("stand", ["laeuft", "frage", "nacharbeit"]);
     if (count) continue;
     const { data: darf } = await db.rpc("ws_ist_werkstatt_fuer", { p_gruppe: a.gruppe_id });

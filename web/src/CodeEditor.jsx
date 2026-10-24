@@ -17,18 +17,22 @@ const merk = {
   schreib: (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch { /* ohne Speicher */ } },
 };
 
-/** Anfrage an die Werkstatt stellen und auf die Antwort warten (Realtime + Abfrage als Rückfall). */
+/** Anfrage an die Werkstatt stellen und auf die Antwort warten (Abfrage alle 0,7 s). Eigener PC antwortet nicht → Werkstatt des Admins. */
 async function frage(projekt, zweig, art, pfad, pc) {
+  try { return await frageEinmal(projekt, zweig, art, pfad, pc, pc ? 15000 : 45000); }
+  catch (e) { if (pc && e?.zeit) return frageEinmal(projekt, zweig, art, pfad, null, 45000); throw e; }
+}
+async function frageEinmal(projekt, zweig, art, pfad, pc, dauer) {
   const { data: id, error } = await supabase.rpc("ws_code_anfragen", { p_projekt: projekt, p_zweig: zweig, p_art: art, p_pfad: pfad || null, p_pc: pc || null });
   if (error) throw error;
-  const ende = Date.now() + 45000;
+  const ende = Date.now() + dauer;
   while (Date.now() < ende) {
     await new Promise((r) => setTimeout(r, 700));
     const { data } = await supabase.from("ws_code_anfragen").select("*").eq("id", id).maybeSingle();
     if (data?.stand === "fertig") return data;
     if (data?.stand === "fehler") throw new Error(data.hinweis || "Die Werkstatt konnte die Datei nicht lesen");
   }
-  throw new Error("Keine Antwort – läuft eine Werkstatt? (Admin-PC oder dein eigener Werkstatt-PC muss an sein)");
+  const f = new Error("Keine Antwort – läuft eine Werkstatt? (Admin-PC oder dein eigener Werkstatt-PC muss an sein)"); f.zeit = true; throw f;
 }
 
 /** Einfache Zeilen-Gegenüberstellung: nur geänderte Zeilen mit je einer Zeile Umgebung. */
@@ -56,7 +60,7 @@ export default function CodeEditor({ d, ich, toast, onAuftrag }) {
   const [q, setQ] = useState("");
   const [offen, setOffen] = useState([]); const [aktiv, setAktiv] = useState(null);
   const [dateien, setDateien] = useState({});   // pfad -> { inhalt, blob_sha, nur_lesen, hinweis, laedt, fehler }
-  const kEntwurf = `cs-code-entwurf-${d.projektId}`;
+  const kEntwurf = `cs-code-entwurf-${ich.id}-${d.projektId}`;
   const [entwurf, setEntwurf] = useState(() => merk.lies(kEntwurf) || {});   // pfad -> { inhalt, basis_blob, basis_sha }
   const [dialog, setDialog] = useState(false);
   const textRef = useRef(null); const zeilenRef = useRef(null);
@@ -80,7 +84,7 @@ export default function CodeEditor({ d, ich, toast, onAuftrag }) {
     setOffen((o) => (o.includes(p) ? o : [...o, p])); setAktiv(p);
     if (dateien[p] && !dateien[p].fehler) return;
     setDateien((x) => ({ ...x, [p]: { laedt: true } }));
-    try { const r = await frage(projekt.id, zweig, "datei", p, meinPc); setDateien((x) => ({ ...x, [p]: r })); }
+    try { const r = await frage(projekt.id, zweig, "datei", p, meinPc); const crlf = typeof r.inhalt === "string" && r.inhalt.includes("\r\n"); setDateien((x) => ({ ...x, [p]: { ...r, crlf, inhalt: crlf ? r.inhalt.replace(/\r\n/g, "\n") : r.inhalt } })); }
     catch (e) { setDateien((x) => ({ ...x, [p]: { fehler: fehler(e) } })); }
   };
   const schliesse = (p) => { setOffen((o) => o.filter((x) => x !== p)); if (aktiv === p) setAktiv(offen.filter((x) => x !== p).slice(-1)[0] || null); };
@@ -92,7 +96,7 @@ export default function CodeEditor({ d, ich, toast, onAuftrag }) {
     if (!bearbeitbar) return;
     setEntwurf((e) => {
       const n = { ...e };
-      if (v === datei.inhalt && (!e[aktiv] || e[aktiv].basis_blob === datei.blob_sha)) delete n[aktiv]; else n[aktiv] = { inhalt: v, basis_blob: e[aktiv]?.basis_blob ?? datei.blob_sha, basis_sha: e[aktiv]?.basis_sha ?? stand };
+      if (v === datei.inhalt && (!e[aktiv] || e[aktiv].basis_blob === datei.blob_sha)) delete n[aktiv]; else n[aktiv] = { inhalt: v, crlf: !!datei.crlf, basis_blob: e[aktiv]?.basis_blob ?? datei.blob_sha, basis_sha: e[aktiv]?.basis_sha ?? stand };
       return n;
     });
   };
@@ -205,7 +209,7 @@ function Speichern({ gruppen, d, entwurf, toast, onClose, onFertig }) {
     try {
       if (basis.length !== 1) throw new Error("Die Dateien stammen aus verschiedenen Ständen von main – bitte neu laden und die älteren Änderungen erneut machen");
       const { data, error } = await supabase.rpc("ws_code_hand_auftrag", { p_gruppe: gid, p_titel: titel.trim(), p_text: text.trim(), p_basis_sha: basis[0],
-        p_dateien: pfade.map((p) => ({ pfad: p, inhalt: entwurf[p].inhalt, basis_blob: entwurf[p].basis_blob || "" })) });
+        p_dateien: pfade.map((p) => ({ pfad: p, inhalt: entwurf[p].crlf ? entwurf[p].inhalt.replace(/\r?\n/g, "\r\n") : entwurf[p].inhalt, basis_blob: entwurf[p].basis_blob || "" })) });
       if (error) throw error;
       onFertig(data);
     } catch (e) { toast(fehler(e)); } finally { setBusy(false); }

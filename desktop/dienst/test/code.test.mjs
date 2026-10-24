@@ -17,6 +17,7 @@ async function testRepo() {
   await mkdir(path.join(d, "src"));
   await writeFile(path.join(d, "src/a.js"), "export const a = 1;\n");
   await writeFile(path.join(d, ".env"), "GEHEIM=1\n");
+  await mkdir(path.join(d, "config")); await writeFile(path.join(d, "config/.env"), "X=geheimgeheim\n"); await writeFile(path.join(d, "config/z.js"), "z\n");
   await writeFile(path.join(d, "conf.js"), 'const api_key = "abcdefghijkl";\n');
   await writeFile(path.join(d, "bild.png"), Buffer.from([0x89, 0x50, 0x00, 0x01]));
   await git(d, "add", "-A");
@@ -26,7 +27,7 @@ async function testRepo() {
 
 test("Pfad-Prüfung", () => {
   assert.ok(pfadOk("src/a.js") && pfadOk("README.md"));
-  for (const p of ["../x", "a/../b", "/etc/x", ".git/config", "a\\b", "-x", ""]) assert.ok(!pfadOk(p), p);
+  for (const p of ["../x", "a/../b", "/etc/x", ".git/config", "a\\b", "-x", "", ".", "./a", "a/.", "a/", "a//b", "a:b", "a."]) assert.ok(!pfadOk(p), p);
 });
 
 test("Baum und Dateien: geheim gesperrt, Geheimnisse maskiert, Binär ohne Inhalt", async () => {
@@ -34,7 +35,7 @@ test("Baum und Dateien: geheim gesperrt, Geheimnisse maskiert, Binär ohne Inhal
   const sha = await zweigStand(git, d, "main");
   await assert.rejects(zweigStand(git, d, "gibtsnicht"), /gibt es nicht/);
   const baum = await codeBaum(git, d, sha);
-  assert.deepEqual(baum.map((x) => x.p).sort(), [".env", "bild.png", "conf.js", "src/a.js"]);
+  assert.deepEqual(baum.map((x) => x.p).sort(), [".env", "bild.png", "conf.js", "config/.env", "config/z.js", "src/a.js"]);
   assert.equal(baum.find((x) => x.p === ".env").x, 1);
   const a = await codeDatei(git, gitRoh, d, sha, "src/a.js");
   assert.equal(a.inhalt, "export const a = 1;\n"); assert.equal(a.nur_lesen, false); assert.match(a.blob_sha, /^[0-9a-f]{40}$/);
@@ -45,6 +46,8 @@ test("Baum und Dateien: geheim gesperrt, Geheimnisse maskiert, Binär ohne Inhal
   const b = await codeDatei(git, gitRoh, d, sha, "bild.png");
   assert.equal(b.inhalt, null); assert.match(b.hinweis, /Binär/);
   await assert.rejects(codeDatei(git, gitRoh, d, sha, "../x"), /Ungültiger Pfad/);
+  // Prüfung H1: Ordner-Pfade dürfen nie den Inhalt (z. B. .env) liefern
+  for (const p of [".", "./", "config/", "config/.", "config", "src"]) await assert.rejects(codeDatei(git, gitRoh, d, sha, p), /Ungültiger Pfad|nicht gefunden/, p);
   await assert.rejects(codeDatei(git, gitRoh, d, sha, "fehlt.js"), /nicht gefunden/);
   await rm(d, { recursive: true, force: true });
 });
@@ -68,5 +71,6 @@ test("Hand-Änderung schreiben: Konflikt, neue Datei, Verknüpfung abgelehnt", a
   await symlink(aussen, path.join(d, "link"));
   await assert.rejects(handSchreiben(git, d, "HEAD", [{ pfad: "link/x.js", inhalt: "x", basis_blob: null }]), /Ungültiger Ordner/);
   await assert.rejects(handSchreiben(git, d, "HEAD", [{ pfad: ".env", inhalt: "x" }]), /Ungültiger Pfad/);
+  await assert.rejects(handSchreiben(git, d, "HEAD", [{ pfad: "neu/c.js", inhalt: 'const token = "abcdefghijklmnop";', basis_blob: null }]), /Geheimnis/);
   await rm(d, { recursive: true, force: true }); await rm(aussen, { recursive: true, force: true });
 });

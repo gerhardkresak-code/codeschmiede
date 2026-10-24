@@ -68,4 +68,26 @@ update ws_auftraege set hand=false where hand;
 \echo [5] Leser sieht die Aenderung nicht (0)
 :LE
 select count(*) from ws_code_aenderungen;
+\echo [6] 0032: Ordner-Pfade ('.', 'config/') und geheime Datei -> FEHLER (3x); Texter mit Auftragsrecht in zweitem Projekt -> FEHLER
+:LE
+select ws_code_anfragen('trainer-to-go','main','datei','.');
+select ws_code_anfragen('trainer-to-go','main','datei','config/');
+select ws_code_anfragen('trainer-to-go','main','datei','config/.env');
+:ADM
+select ws_projekt_anlegen('zwei','Zwei','','owner/zwei','') \g /dev/null
+insert into ws_bereiche(id,projekt_id,name) values ('zwei-b','zwei','B') on conflict do nothing;
+insert into ws_gruppen(id,bereich_id,name) values ('zwei-g','zwei-b','G') on conflict do nothing;
+insert into ws_einladungen(email,rolle,eingeladen_von,projekt_id) values ('d1@x.at','texter',auth.uid(),'zwei');
+:D1
+select ws_einladung_annehmen('D1') \g /dev/null
+:ADM
+select ws_rechte_setzen('00000000-0000-0000-0000-0000000000d1','zwei-b',true,false,false) \g /dev/null
+:D1
+select ws_code_hand_auftrag('zwei-g','Als Texter','',repeat('a',40),'[{"pfad":"a.js","inhalt":"x"}]');
+\echo [7] Eigene Hand-Aenderung selbst freigeben -> FEHLER
+:ADM
+select ws_rechte_setzen('00000000-0000-0000-0000-0000000000d1','plattform',true,true,false) \g /dev/null
+update ws_auftraege set stand='freigabe', pr_nummer=1, zweig='auftrag-x' where hand and erstellt_von='00000000-0000-0000-0000-0000000000d1';
+:D1
+select ws_freigeben((select min(id) from ws_auftraege where hand));
 rollback;
