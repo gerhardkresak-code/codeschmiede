@@ -1,0 +1,240 @@
+<title>Neues Projekt Entwurf</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+:root {
+  --bg: #0b1512; --panel: #0f1d19; --panel2: #13241f; --line: #1f3530; --fg: #e3efeb; --muted: #8fa8a0;
+  --accent: #10b981; --accent-d: #047857; --accent-s: rgba(16,185,129,.14); --warn: #f59e0b; --warn-s: rgba(245,158,11,.14);
+  --rot: #ef4444; --rot-s: rgba(239,68,68,.14); --mark: #f97316;
+  --display: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: .01em }
+h1 { font-size: 1.7rem } h2 { font-size: 1.25rem } h3 { font-size: 1.02rem }
+p { margin: 0 }
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px }
+.kopf { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: .78rem; color: var(--muted) }
+.lead { color: var(--muted); max-width: 75ch }
+svg.i { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none }
+.karte { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0 }
+.schritte { display: flex; flex-wrap: wrap; gap: 6px }
+.schritte button { font: inherit; font-size: .88rem; background: var(--panel2); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; display: inline-flex; gap: 7px; align-items: center }
+.schritte button b { font-family: var(--mono); font-weight: 400; font-size: .75rem; background: var(--line); border-radius: 999px; width: 20px; height: 20px; display: grid; place-items: center }
+.schritte button.an { color: var(--fg); border-color: var(--accent-d); background: var(--accent-s) }
+.schritte button.an b { background: var(--accent-d); color: #fff }
+.arten { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px }
+.art { text-align: left; font: inherit; color: var(--fg); background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; cursor: pointer; display: flex; flex-direction: column; gap: 8px; min-width: 0 }
+.art:hover { border-color: #2c4a43 }
+.art.an { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: #10261f }
+.art .t { display: flex; gap: 9px; align-items: center; font-family: var(--display); font-weight: 700; font-size: 1.08rem }
+.art .t span.ico { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-s); color: var(--accent) }
+.art small { color: var(--muted); font-size: .85rem }
+.art ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: .84rem; display: flex; flex-direction: column; gap: 2px }
+.feld { display: flex; flex-direction: column; gap: 5px; font-size: .88rem; color: var(--muted) }
+.feld input, .feld select, .feld textarea { font: inherit; color: var(--fg); background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px }
+.feld textarea { min-height: 70px; resize: vertical }
+.raster2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px }
+.wahl { display: flex; flex-direction: column; gap: 8px }
+.wahl label { display: flex; gap: 10px; align-items: flex-start; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer }
+.wahl label:has(input:checked) { border-color: var(--accent-d); background: #10261f }
+.wahl input { accent-color: var(--accent); margin-top: 3px }
+.wahl span small { display: block; color: var(--muted); font-size: .83rem }
+.knopf { font: inherit; color: var(--fg); background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center }
+.knopf.voll { background: var(--accent-d); border-color: var(--accent-d); color: #fff; font-weight: 600 }
+.knopf:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.fuss { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap }
+.hinweis { border: 1px solid #5b4310; background: var(--warn-s); color: #fcd9a0; border-radius: 10px; padding: 9px 12px; font-size: .86rem; display: flex; gap: 8px }
+.zus { display: grid; grid-template-columns: 170px minmax(0,1fr); gap: 6px 14px; font-size: .92rem }
+.zus dt { color: var(--muted) } .zus dd { margin: 0 }
+/* Projekt-Ansicht */
+.ampel { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px }
+.lampe { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 7px; min-width: 0 }
+.lampe .k { display: flex; gap: 8px; align-items: center; font-weight: 600 }
+.punkt { width: 11px; height: 11px; border-radius: 50%; flex: none }
+.punkt.g { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-s) }
+.punkt.y { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-s) }
+.punkt.r { background: var(--rot); box-shadow: 0 0 0 3px var(--rot-s) }
+.punkt.n { background: #3c524c }
+.lampe small { color: var(--muted); font-size: .83rem }
+.lampe .knopf { align-self: flex-start; font-size: .85rem; padding: 5px 10px }
+.vorschau { border: 1px solid var(--line); border-radius: 12px; background: #0d1a17; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-height: 200px }
+.mono { font-family: var(--mono); font-size: .8rem }
+.log { font-family: var(--mono); font-size: .78rem; background: #07100d; border: 1px solid var(--line); border-radius: 9px; padding: 10px; color: #a7c4bb; white-space: pre-wrap; overflow-x: auto }
+.handy { width: 220px; max-width: 100%; height: 380px; border: 8px solid #1d2d29; border-radius: 28px; background: #f4f7f6; color: #12221d; margin: 0 auto; padding: 18px 12px; display: flex; flex-direction: column; gap: 8px; font-size: .8rem }
+.handy .bal { height: 46px; border-radius: 10px; background: #d9efe7 }
+.zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.notiz { color: var(--muted); font-size: .85rem }
+.offen { display: flex; flex-direction: column; gap: 8px; font-size: .92rem }
+.offen li { margin-left: 18px }
+@media (max-width: 640px) { .zus { grid-template-columns: 1fr } }
+</style>
+
+<div class="wrap">
+  <div class="kopf">
+    <h1>Neues Projekt – mit Technik-Art und Anbindungen</h1>
+    <span class="chip">Entwurf 1.0 · Codeschmiede 0.9</span>
+  </div>
+  <p class="lead">Zum Durchklicken: So legst du künftig jedes Projekt an – Web-App, Programm, Handy-App oder Werkzeug. Jede Art bringt ein lauffähiges Grundgerüst mit fertigen Prüfungen mit. Danach zeigt das Projekt eine Ampel, was noch angebunden werden muss.</p>
+
+  <!-- Assistent -->
+  <section class="karte" aria-label="Assistent Neues Projekt">
+    <div class="schritte" role="tablist" id="schritte">
+      <button class="an" data-s="1"><b>1</b>Art</button>
+      <button data-s="2"><b>2</b>Grunddaten</button>
+      <button data-s="3"><b>3</b>Anbindungen</button>
+      <button data-s="4"><b>4</b>Anlegen</button>
+    </div>
+
+    <div data-seite="1">
+      <h2 style="margin-bottom:10px">Was willst du bauen?</h2>
+      <div class="arten" id="arten">
+        <button class="art an" data-art="web">
+          <span class="t"><span class="ico"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>Web-App</span>
+          <small>Läuft im Browser auf PC, Tablet und Handy – wie Trainer to go.</small>
+          <ul><li>React, Tailwind, Supabase</li><li>Testseite je Zweig (Cloudflare)</li><li>Live-Vorschau im Fenster</li></ul>
+        </button>
+        <button class="art" data-art="programm">
+          <span class="t"><span class="ico"><svg class="i" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>Programm (.exe)</span>
+          <small>Eigenes Fenster für Windows (auch ARM) und Mac – wie die Codeschmiede.</small>
+          <ul><li>Tauri (klein, schnell)</li><li>Test-Installation je Zweig</li><li>Automatische Updates</li></ul>
+        </button>
+        <button class="art" data-art="handy">
+          <span class="t"><span class="ico"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg></span>Handy-App</span>
+          <small>Startet als Web-App fürs Handy (auf den Startbildschirm legen). Stores später.</small>
+          <ul><li>PWA, offline-fähig</li><li>Vorschau im Handy-Rahmen</li><li>Später App Store / Google Play</li></ul>
+        </button>
+        <button class="art" data-art="werkzeug">
+          <span class="t"><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M4 17l6-6-6-6M12 19h8"/></svg></span>Werkzeug / Skript</span>
+          <small>Ohne Oberfläche: Automatisierung, Auswertung, Datenabgleich.</small>
+          <ul><li>Node oder Python</li><li>Testlauf mit Protokoll</li><li>Zeitplan (z. B. täglich) möglich</li></ul>
+        </button>
+      </div>
+    </div>
+
+    <div data-seite="2" hidden>
+      <div class="raster2">
+        <label class="feld">Name<input id="pname" value="Haushaltsbuch"></label>
+        <label class="feld">Kennung<input id="pid" value="haushaltsbuch" class="mono"></label>
+        <label class="feld" style="grid-column:1/-1">Worum geht es?<textarea>Einnahmen und Ausgaben der Familie erfassen, Monatsübersicht, Export als PDF.</textarea></label>
+        <div class="wahl" style="grid-column:1/-1">
+          <label><input type="radio" name="sicht" checked><span>GitHub-Repository öffentlich<small>gerhardkresak-code/<span class="mono" id="repoN">haushaltsbuch</span> – Prüfungen kostenlos</small></span></label>
+          <label><input type="radio" name="sicht"><span>Privat<small>Verbraucht GitHub-Minuten für Prüfungen und Builds</small></span></label>
+        </div>
+      </div>
+    </div>
+
+    <div data-seite="3" hidden>
+      <div class="raster2">
+        <fieldset class="wahl" style="border:0;padding:0;margin:0">
+          <legend style="margin-bottom:6px;font-weight:600">Datenbank</legend>
+          <label><input type="radio" name="db" value="keine"><span>Keine<small>Daten bleiben lokal bzw. in Dateien</small></span></label>
+          <label><input type="radio" name="db" value="spiel" checked><span>Spielwiese (gemeinsam)<small>Eigener abgetrennter Bereich in der gemeinsamen Datenbank – sofort startklar</small></span></label>
+          <label><input type="radio" name="db" value="eigen"><span>Eigenes Supabase-Projekt<small>Für ernste Apps mit echten Nutzern – später jederzeit umziehen</small></span></label>
+        </fieldset>
+        <fieldset class="wahl" style="border:0;padding:0;margin:0" id="weitere">
+          <legend style="margin-bottom:6px;font-weight:600">Weitere Anbindungen</legend>
+          <label data-nur="web handy"><input type="checkbox" checked><span>Testseite je Zweig (Cloudflare)<small>z. B. haushaltsbuch.pages.dev, je Zweig eine eigene Adresse</small></span></label>
+          <label data-nur="programm"><input type="checkbox" checked><span>Test-Installation je Zweig<small>Wird in GitHub gebaut, Start in der Windows-Sandbox</small></span></label>
+          <label data-nur="programm"><input type="checkbox" checked><span>Automatische Updates<small>Signiert, eigene Update-Seite je Programm</small></span></label>
+          <label data-nur="werkzeug"><input type="checkbox"><span>Zeitplan<small>Läuft automatisch in GitHub (z. B. täglich 6:00)</small></span></label>
+          <label><input type="checkbox" checked><span>Fehler-Meldungen an die Codeschmiede<small>Abstürze werden mit einem Klick zum Auftrag</small></span></label>
+        </fieldset>
+      </div>
+    </div>
+
+    <div data-seite="4" hidden>
+      <dl class="zus" id="zus"></dl>
+      <div class="hinweis"><svg class="i" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        <span>Die Werkstatt legt Repository und Grundgerüst an, die Prüfungen laufen sofort. Was eine Anmeldung oder ein Geheimnis braucht, erledigst du selbst – die Ampel im Projekt führt dich mit orangen Markierungen hin.</span></div>
+    </div>
+
+    <div class="fuss">
+      <button class="knopf" id="zurueck">Zurück</button>
+      <button class="knopf voll" id="weiter">Weiter</button>
+    </div>
+  </section>
+
+  <!-- Projekt-Ansicht nach dem Anlegen -->
+  <section class="karte" aria-label="Projekt nach dem Anlegen" id="projekt">
+    <div class="zeile"><h2 id="ptitel">Haushaltsbuch</h2><span class="chip" id="partchip">Web-App</span><span class="chip">Projekt › Übersicht</span></div>
+    <p class="notiz">Anbindungen – ein Klick auf eine gelbe oder rote Lampe öffnet den passenden Schritt. Die Ampel prüft sich alle paar Minuten selbst.</p>
+    <div class="ampel" id="ampel"></div>
+    <h3>Vorschau</h3>
+    <div class="vorschau" id="vorschau"></div>
+  </section>
+
+  <section class="karte" aria-label="Offene Punkte">
+    <h2>Was du dazu wissen musst</h2>
+    <ul class="offen">
+      <li><b>Spielwiese braucht einen Supabase-Platz:</b> Deine zwei kostenlosen Plätze sind belegt (Trainer to go Test, Codeschmiede). Für die Spielwiese versuche ich eine zweite kostenlose Organisation – klappt das nicht, entscheidest du zwischen Pro und Verzicht.</li>
+      <li><b>Windows-Sandbox</b> gibt es nur in Windows 11 Pro/Enterprise (auch ARM). Ist dein PC „Home“, testen wir Programme stattdessen in einer abgeschotteten Test-Installation – das prüfe ich vor dem Bau auf deinem PC.</li>
+      <li><b>Handy-App als PWA:</b> Ohne Store-Konto. App Store/Google Play kommen später als eigener Schritt.</li>
+      <li><b>Datenbank-Station</b> (Test automatisch, Live nach Freigabe im Auftrag) ist der nächste Entwurf und nutzt diese Anbindungen.</li>
+      <li><b>Bestehende Projekte</b> (Trainer to go, Codeschmiede) bekommen die Ampel ebenfalls – Art „Web-App“ bzw. „Programm“.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(function () {
+  var art = "web", seite = 1;
+  var NAMEN = { web: "Web-App", programm: "Programm (.exe)", handy: "Handy-App (PWA)", werkzeug: "Werkzeug / Skript" };
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  function zeigeSeite(n) {
+    seite = n;
+    $$("[data-seite]").forEach(function (el) { el.hidden = Number(el.getAttribute("data-seite")) !== n; });
+    $$("#schritte button").forEach(function (b) { b.classList.toggle("an", Number(b.getAttribute("data-s")) === n); });
+    $("#zurueck").style.visibility = n === 1 ? "hidden" : "visible";
+    $("#weiter").textContent = n === 4 ? "Projekt anlegen" : "Weiter";
+    if (n === 3) $$("#weitere label[data-nur]").forEach(function (l) { l.hidden = l.getAttribute("data-nur").split(" ").indexOf(art) < 0; });
+    if (n === 4) zusammenfassung();
+  }
+  function dbWahl() { var r = $("input[name=db]:checked"); return r ? r.value : "keine"; }
+  function zusammenfassung() {
+    var db = { keine: "keine", spiel: "Spielwiese (eigener Bereich)", eigen: "eigenes Supabase-Projekt" }[dbWahl()];
+    var gg = { web: "React + Vite + Tailwind, Supabase-Anbindung, Prüfungen (Bauen, Tests, Sicherheit)", programm: "Tauri 2 (Windows x64/ARM, Mac), Updater, Prüfungen und Build in GitHub", handy: "React-PWA (Manifest, offline), Handy-Layout, Prüfungen", werkzeug: "Node-Projekt mit Tests, Ablauf in GitHub, Protokoll" }[art];
+    $("#zus").innerHTML = "<dt>Art</dt><dd>" + NAMEN[art] + "</dd><dt>Name</dt><dd>" + esc($("#pname").value) + "</dd><dt>Repository</dt><dd class='mono'>gerhardkresak-code/" + esc($("#pid").value) + "</dd><dt>Grundgerüst</dt><dd>" + gg + "</dd><dt>Datenbank</dt><dd>" + db + "</dd><dt>Regelwerk</dt><dd>AI-Dev-OS, Handbuch, CHANGELOG, Datenschutz</dd>";
+  }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+
+  function lampe(f, titel, text, knopf) {
+    return "<div class='lampe'><span class='k'><span class='punkt " + f + "'></span>" + titel + "</span><small>" + text + "</small>" + (knopf ? "<button class='knopf'>" + knopf + "</button>" : "") + "</div>";
+  }
+  function projekt() {
+    $("#ptitel").textContent = $("#pname").value || "Neues Projekt";
+    $("#partchip").textContent = NAMEN[art];
+    var db = dbWahl(), l = [];
+    l.push(lampe("g", "GitHub", "Repository angelegt, Grundgerüst drin, Prüfungen grün."));
+    if (db === "spiel") l.push(lampe("g", "Datenbank: Spielwiese", "Bereich „haushaltsbuch“ angelegt, Rechte (RLS) an."));
+    if (db === "eigen") l.push(lampe("y", "Datenbank: eigenes Projekt", "Projekt in Supabase anlegen (Frankfurt) und Adresse eintragen.", "Einrichten"));
+    if (db === "keine") l.push(lampe("n", "Datenbank", "Keine – jederzeit nachrüstbar."));
+    if (art === "web" || art === "handy") l.push(lampe("y", "Testseite (Cloudflare)", "Pages-Projekt verbinden – einmal in Cloudflare bestätigen.", "Einrichten"));
+    if (art === "programm") { l.push(lampe("g", "Build Windows/Mac", "Läuft in GitHub bei jedem Zweig.")); l.push(lampe("y", "Update-Signatur", "Schlüssel erzeugen und als GitHub-Geheimnis hinterlegen (machst du selbst).", "Anleitung")); l.push(lampe("g", "Windows-Sandbox", "Auf diesem PC verfügbar.")); }
+    if (art === "werkzeug") l.push(lampe("g", "Testlauf", "Läuft in GitHub, Protokoll in der Codeschmiede."));
+    l.push(lampe("g", "Fehler-Meldungen", "Bereit – meldet sich die App mit Fehler, entsteht ein Hinweis."));
+    $("#ampel").innerHTML = l.join("");
+    var v = "";
+    if (art === "web") v = "<div class='zeile'><span class='chip'>Zweig: auftrag-12</span><span class='chip mono'>auftrag-12.haushaltsbuch.pages.dev</span><span class='ab'></span><button class='knopf'>Zeigen &amp; kommentieren</button></div><div class='log' style='min-height:120px'>[ Live-Vorschau der Web-App im Fenster – wie heute bei Trainer to go ]</div>";
+    if (art === "programm") v = "<div class='zeile'><span class='chip'>Zweig: auftrag-12</span><span class='chip'>Build vor 4 Min. · grün</span></div><div class='zeile'><button class='knopf voll'>In Windows-Sandbox starten</button><button class='knopf'>Installationsdatei laden (.exe / .dmg)</button></div><p class='notiz'>Die Sandbox ist eine Wegwerf-Umgebung: Schließen löscht alles, dein PC bleibt unberührt.</p>";
+    if (art === "handy") v = "<div class='handy'><b>Haushaltsbuch</b><div class='bal'></div><div class='bal'></div><div class='bal' style='height:90px'></div><span style='margin-top:auto;text-align:center;color:#5d7a71'>Vorschau im Handy-Rahmen</span></div><p class='notiz' style='text-align:center'>QR-Code zum Öffnen am echten Handy folgt im Bau.</p>";
+    if (art === "werkzeug") v = "<div class='zeile'><button class='knopf voll'>Testlauf starten</button><span class='chip'>letzter Lauf: grün · 38 s</span></div><div class='log'>▶ npm test … 12 Tests grün\n▶ Lauf mit Beispieldaten\n  412 Buchungen gelesen, 3 doppelte erkannt\n  Ergebnis: bericht-2026-10.pdf (Ausgabe als Download)</div>";
+    $("#vorschau").innerHTML = v;
+  }
+
+  $$("#arten .art").forEach(function (b) { b.addEventListener("click", function () { art = b.getAttribute("data-art"); $$("#arten .art").forEach(function (x) { x.classList.toggle("an", x === b); }); projekt(); }); });
+  $$("#schritte button").forEach(function (b) { b.addEventListener("click", function () { zeigeSeite(Number(b.getAttribute("data-s"))); }); });
+  $("#weiter").addEventListener("click", function () { if (seite < 4) zeigeSeite(seite + 1); else { projekt(); $("#projekt").scrollIntoView({ behavior: "smooth" }); } });
+  $("#zurueck").addEventListener("click", function () { if (seite > 1) zeigeSeite(seite - 1); });
+  $("#pid").addEventListener("input", function () { $("#repoN").textContent = $("#pid").value; });
+  $$("input[name=db]").forEach(function (r) { r.addEventListener("change", projekt); });
+  zeigeSeite(1); projekt();
+})();
+</script>

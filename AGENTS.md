@@ -40,6 +40,12 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-24 14:36–14:50 – Codeschmiede nur für Gerhard, für alles:** Kein Verkauf (Produkt-Konzept ruht). Projekt-Arten Web-App, Programm (.exe),
+  Handy-App (zuerst PWA, Stores später), Werkzeug/Skript. Datenbank-Änderungen: Test automatisch, Live nach Freigabe im Auftrag (Datenbank-Station,
+  nächster Schritt). Programme nur auf Gerhards PCs (keine Code-Signatur), Test in der Windows-Sandbox. Datenbanken: gemeinsame Spielwiese, bei Bedarf eigenes
+  Projekt; Supabase Pro erst, wenn die erste App eine Datenbank braucht – **vor jeder kostenpflichtigen Änderung immer Gerhards Bestätigung**.
+  GitHub: eine Organisation/Konto für alle Projekte (keine Organisation je Projekt). Code-Editor in der Codeschmiede (Hand-Änderung als Auftrag mit Zweig,
+  Prüfungen, Freigabe; Admin und Entwickler mit Recht im Bereich) – Entwurf folgt.
 - **2026-10-24 – Eigene Design-Freigabe für den Seiten-Designer:** Die Plattform-Rechte von Trainer to go bleiben am Plattform-Programm
   (app.me() nicht lockern). Die Codeschmiede hat einen eigenen Design-Schlüssel, signiert NUR „ttg-design|register/verify/code|…“, der Inhaber
   gibt den PC einmal frei; die Design-Sitzung öffnet nur die Design-Pakete. Ein Design-Schlüssel öffnet nie die Plattform-Verwaltung.

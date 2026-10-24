@@ -57,3 +57,48 @@ jobs:
         with: { workspaces: desktop/src-tauri -> target }
       - name: Programm prüfen (Tests)
         run: cargo test --release
+  vorlagen:
+    # Grundgerüste je Projekt-Art (Entwurf 1.0 „Neues Projekt“): einmal erzeugen und so prüfen, wie es das neue Repository tut.
+    # Programm auf Windows (wie oben, ohne Linux-Systempakete).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - art: web
+            os: ubuntu-24.04
+          - art: handy
+            os: ubuntu-24.04
+          - art: werkzeug
+            os: ubuntu-24.04
+          - art: programm
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    defaults: { run: { shell: bash } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Grundgerüst erzeugen
+        run: |
+          mkdir -p "$RUNNER_TEMP/neu"
+          node --input-type=module -e "import { geruestSchreiben } from './desktop/dienst/lib/repo.mjs'; await geruestSchreiben(process.argv[1], null, { name: 'Prüf-App \"Ä\"', repo: 'gerhardkresak-code/9pruef_app.x', art: '${{ matrix.art }}' });" "$RUNNER_TEMP/neu"
+      - name: Web/Handy/Werkzeug prüfen
+        if: ${{ matrix.art != 'programm' }}
+        working-directory: ${{ runner.temp }}/neu
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+          if [ "${{ matrix.art }}" != "werkzeug" ]; then npm run build; else npm start; fi
+      - uses: dtolnay/rust-toolchain@stable
+        if: ${{ matrix.art == 'programm' }}
+      - name: Programm prüfen
+        if: ${{ matrix.art == 'programm' }}
+        working-directory: ${{ runner.temp }}/neu
+        run: |
+          # Bei Fehler die letzten Zeilen als Hinweis zeigen (das Protokoll ist sonst nur bei GitHub lesbar)
+          schritt() { "$@" > "$RUNNER_TEMP/aus.txt" 2>&1 || { echo "::error::$(tail -n 40 "$RUNNER_TEMP/aus.txt" | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"; exit 1; }; tail -n 5 "$RUNNER_TEMP/aus.txt"; }
+          schritt npx --yes @tauri-apps/cli@^2 icon app-icon.png
+          schritt cargo test --manifest-path src-tauri/Cargo.toml
+          schritt npx --yes @tauri-apps/cli@^2 build --bundles nsis
+          ls src-tauri/target/release/bundle/nsis/*.exe

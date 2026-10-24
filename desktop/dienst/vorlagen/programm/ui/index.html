@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>[PROJEKTNAME]</title>
+    <style>
+      :root { color-scheme: light dark; --gruen: #047857; }
+      body { margin: 0; font-family: Barlow, "Segoe UI", system-ui, sans-serif; background: Canvas; color: CanvasText; }
+      header { background: var(--gruen); color: #fff; padding: 14px 20px; font-size: 20px; font-weight: 700; }
+      main { padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+      button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 0; background: var(--gruen); color: #fff; cursor: pointer; align-self: flex-start; }
+    </style>
+  </head>
+  <body>
+    <header>[PROJEKTNAME]</header>
+    <main>
+      <p>Das Grundgerüst steht. Neue Funktionen gibst du als Auftrag in der Codeschmiede.</p>
+      <button id="gruss" type="button">Begrüßen</button>
+      <p id="antwort" aria-live="polite"></p>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
