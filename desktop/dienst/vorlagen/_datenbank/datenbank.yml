@@ -44,7 +44,7 @@ jobs:
           if [ -z "${DB_URL:-}" ]; then echo "::notice::Für „$ZIEL“ ist keine Datenbank eingetragen (Geheimnis SUPABASE_DB_URL der Umgebung) – nichts zu tun"; exit 0; fi
           export PGCONNECT_TIMEOUT=20 PGAPPNAME=codeschmiede-datenbank
           # Fehler ohne Datenwerte ausgeben (z. B. „Key (email)=(…)“), ohne SQL-Ausschnitte (LINE/CONTEXT/QUERY) und ohne IP-Adressen
-          melde() { { grep -vE '^[[:space:]]*(DETAIL|LINE [0-9]+|CONTEXT|QUERY|HINT|WHERE):|^[[:space:]]*\^' || true; } | sed -E 's/\(([^)]{0,200})\)=\([^)]*\)/(\1)=(…)/g; s/"[^"]*"/"…"/g; s/[0-9]{1,3}(\.[0-9]{1,3}){3}/…/g; s/\[[0-9a-fA-F:]{3,}\]|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{0,4}){3,7}/…/g' | head -c 600; }
+          melde() { { grep -vE '^[[:space:]]*(DETAIL|LINE [0-9]+|CONTEXT|QUERY|HINT|WHERE):|^[[:space:]]*\^' || true; } | sed -E 's/\(([^)]{0,200})\)=\([^)]*\)/(\1)=(…)/g; s/"[^"]*"/"…"/g; s/'[^']*'/'…'/g; s/["'][^"']*$/…/; s/[0-9]{1,3}(\.[0-9]{1,3}){3}/…/g; s/\[[0-9a-fA-F:]{3,}\]|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{0,4}){3,7}/…/g' | head -c 600 || true; }
           q() { psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 -t -A "$@"; }
           mapfile -t DATEIEN < <(ls supabase/migrations/ 2>/dev/null | grep -E '^[A-Za-z0-9._-]+\.sql$' | LC_ALL=C sort || true)
           if ! da=$(q -c "select to_regclass('codeschmiede.migrationen') is not null" 2>fehler.txt); then echo "::error::Keine Verbindung zur $ZIEL-Datenbank: $(melde < fehler.txt)"; exit 1; fi

@@ -101,6 +101,7 @@ test("Einrichten nimmt eine Zeile ins Änderungsprotokoll mit (sonst lehnt die S
   assert.equal((z[4].match(/\|/g) || []).length, 5);
   assert.equal(z[5], "| 1.0 | 2026-01-01 | X | Alt |");
   assert.equal(changelogZeile("ohne Tabelle"), null);
+  assert.ok(changelogZeile(log.replace(/\n/g, "\r\n"), "2026-10-24").split("\r\n")[4].startsWith("| – (Datenbank-Station)"), "CRLF bleibt CRLF");
   let auftrag = null;
   const sh = async (b, a) => {
     if (a[0] === "api" && a[1].includes("/contents/.github")) throw new Error("HTTP 404");
@@ -113,4 +114,19 @@ test("Einrichten nimmt eine Zeile ins Änderungsprotokoll mit (sonst lehnt die S
   assert.deepEqual(auftrag.dateien.map((d) => d.pfad), [ABLAUF_PFAD, CHANGELOG_PFAD]);
   assert.equal(auftrag.dateien[1].basis_blob, "d".repeat(40));
   assert.match(auftrag.dateien[1].inhalt, /Datenbank-Station/);
+});
+
+test("Einrichten: Änderungsprotokoll mit vermeintlichem Geheimnis wird weggelassen statt den Auftrag zu kippen", async () => {
+  const log = "| Version | Datum | Wer | Was |\n|---|---|---|---|\n| 1 | 2026 | X | password=Geheim12345 |\n";
+  let auftrag = null;
+  const sh = async (b, a) => {
+    if (a[0] === "api" && a[1].includes("/contents/.github")) throw new Error("HTTP 404");
+    if (a[0] === "api" && a[1].includes("/contents/docs/CHANGELOG.md")) return { stdout: `${"d".repeat(40)}\t${Buffer.from(log).toString("base64")}\n` };
+    if (a[0] === "api" && a[1].endsWith("git/ref/heads/main")) return { stdout: "c".repeat(40) };
+    if (a[0] === "secret") return { stdout: "SUPABASE_DB_URL\n" };
+    return { stdout: "" };
+  };
+  const t = await dbEinrichten({ sh, projekt: { repo: "o/app", db_test_ref: "abcdefghijabcdefghij", db_live_ref: null, db_test_bestehend: true }, vorlage: "ABLAUF", auftragAnlegen: async (d) => { auftrag = d; return 8; } });
+  assert.deepEqual(auftrag.dateien.map((d) => d.pfad), [ABLAUF_PFAD]);
+  assert.match(t, /Änderungsprotokoll/);
 });
