@@ -20,6 +20,7 @@ import CodeEditor from "./CodeEditor";
 import Fehler from "./Fehler";
 import { LogoZeichen } from "./Logo";
 import CodeschmiedeZeichen from "./Zeichen";
+import GeraeteRahmen from "./GeraeteRahmen";
 const AboLimits = lazy(() => import("./AboLimits"));
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
@@ -1065,7 +1066,7 @@ function LiveVorschau({ projekt, a, f, darfMerken, toast, onBaustein, baustein }
     const { error } = await supabase.rpc("ws_feature_vorschau_setzen", { p_feature: f.id, p_pfad: jetztSeite });
     if (error) toast(fehler(error)); else { setGemerkt(jetztSeite); toast(`Gemerkt: ${f.name} öffnet ab jetzt ${jetztSeite}`); }
   };
-  const [breite, setBreite] = useState("100%");
+  const [geraet, setGeraet] = useState("pc");   // echte Gerätebreite, eingepasst (GeraeteRahmen, Fehlerkorrektur 0.9.5)
   const [neu, setNeu] = useState(false); const [stand, setStand] = useState(null); const [schluessel, setSchluessel] = useState(0);
   const [zeigen, setZeigen] = useState(false); const [helfer, setHelfer] = useState(false);
   const frame = useRef(null);
@@ -1111,7 +1112,7 @@ function LiveVorschau({ projekt, a, f, darfMerken, toast, onBaustein, baustein }
     <div className={`${card} flex flex-col min-h-[480px] min-w-0 overflow-hidden`}>
       <div className="flex flex-wrap items-center gap-2 p-2 border-b border-slate-200 dark:border-slate-800">
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-slate-500 bg-slate-50 dark:bg-slate-950 rounded-lg px-2.5 py-1.5" title={url}>{url.replace("https://", "")}{a ? ` · Auftrag #${a.id}` : " · aktuelle App"}</span>
-        {[["390px", Smartphone, "Handy"], ["820px", Tablet, "Tablet"], ["100%", Monitor, "Desktop"]].map(([w, I, t]) => <button key={w} type="button" title={t} aria-pressed={breite === w} onClick={() => setBreite(w)} className={`p-2 rounded-lg border ${breite === w ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950" : "border-slate-200 dark:border-slate-800"}`}><I className="w-4 h-4" /></button>)}
+        {[["handy", Smartphone, "Handy (390 px)"], ["tablet", Tablet, "Tablet (820 px)"], ["pc", Monitor, "PC (1280 px)"]].map(([w, I, t]) => <button key={w} type="button" title={t} aria-pressed={geraet === w} onClick={() => setGeraet(w)} className={`p-2 rounded-lg border ${geraet === w ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950" : "border-slate-200 dark:border-slate-800"}`}><I className="w-4 h-4" /></button>)}
         <label className="sr-only" htmlFor="lv-design">Design in der Vorschau</label>
         <select id="lv-design" value={designWahl} onChange={(e) => { setDesignWahl(e.target.value); neuLaden(); }} title="Wirkt nur in dieser Vorschau – nichts wird gespeichert"
           className="h-9 max-w-[220px] rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2 text-sm">
@@ -1133,9 +1134,11 @@ function LiveVorschau({ projekt, a, f, darfMerken, toast, onBaustein, baustein }
         {designWahl === "seiten" ? "Vorschau mit dem gespeicherten Seiten-Entwurf (Plattform-Standard) – nur hier sichtbar, nichts wird geändert. Voraussetzung: Der Seiten-Designer (App-Designer › Seiten) war in dieser Sitzung offen und freigegeben – sonst zeigt die Vorschau die aktuelle App." : "Vorschau mit dem Grunddesign-Entwurf – nur hier sichtbar. In der App wirkt er erst, wenn du ihn im App-Designer als Auftrag sendest."}</p>}
       {neu && <button type="button" onClick={neuLaden} className="m-2 self-end inline-flex items-center gap-2 rounded-full bg-emerald-700 text-white px-3 py-1.5 text-sm font-semibold"><RefreshCw className="w-4 h-4" />Neuer Stand da · neu laden</button>}
       {baustein && <div className="mx-2 mt-2 text-xs rounded-lg border border-orange-400 bg-orange-50 dark:bg-orange-950/40 px-2.5 py-1.5 flex items-center gap-2">Gewählt: <b>{baustein.name}</b>{baustein.seite && <span className="text-slate-500">· {baustein.seite}</span>}<button type="button" className="ml-auto" onClick={() => onBaustein(null)} title="Auswahl aufheben"><X className="w-3.5 h-3.5" /></button></div>}
-      <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-2 overflow-auto grid justify-items-center">
-        <iframe key={schluessel} ref={frame} title="Live-Vorschau" src={`${url}${mitCs(startSeite)}`} className="h-full min-h-[440px] bg-white rounded-lg border border-slate-200 dark:border-slate-800" style={{ width: breite, maxWidth: "100%" }}
-          onLoad={() => { setHelfer(false); frame.current?.contentWindow?.postMessage({ cs: "hallo" }, herkunft); }} />
+      <div className="flex-1 min-h-0 bg-slate-100 dark:bg-slate-950 p-2 overflow-auto flex flex-col">
+        <GeraeteRahmen geraet={geraet} hoehe={geraet === "pc" ? "fuellen" : "geraet"} einpassen="beide" className="flex-1 min-h-[440px]" rahmenClass="bg-white rounded-lg border border-slate-200 dark:border-slate-800">
+          <iframe key={schluessel} ref={frame} title="Live-Vorschau" src={`${url}${mitCs(startSeite)}`} className="block w-full h-full bg-white"
+            onLoad={() => { setHelfer(false); frame.current?.contentWindow?.postMessage({ cs: "hallo" }, herkunft); }} />
+        </GeraeteRahmen>
       </div>
     </div>);
 }

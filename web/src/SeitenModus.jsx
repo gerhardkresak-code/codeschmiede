@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutGrid, Send, Loader2, RefreshCw, ExternalLink } from "lucide-react";
 import { supabase } from "./supabase";
 import { isDesktop, tauri } from "./desktop";
+import GeraeteRahmen from "./GeraeteRahmen";
 
 const card = "rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900";
 const ghost = "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-semibold disabled:opacity-50";
@@ -58,13 +59,11 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
   const auftrag = async () => {
     const t = wunsch.trim(); if (t.length < 10 || !g) return; setBusy(true);
     try {
-      const titel = `Neue Kachel für den Seiten-Designer: ${t}`;
-      const { data, error } = await supabase.from("ws_auftraege").insert({ gruppe_id: g.id, titel: titel.length > 80 ? titel.slice(0, 78) + "…" : titel, art: "neu", erstellt_von: ich.id }).select().single();
+      // Auftrag und Beschreibung in EINEM Schritt (Datenbank 0036, ws_design_auftrag) – die Werkstatt startet nie ohne Beschreibung
+      const { data, error } = await supabase.rpc("ws_design_auftrag", { p_projekt: projekt.id, p_art: "kachel", p_titel: t.length > 43 ? t.slice(0, 42) + "…" : t,
+        p_text: `Neue Kachel-Art für den Seiten-Designer (App-Designer › Seiten): ${t}\n\nAls Baustein in der Bibliothek des Designers anlegen (alle Geräte, Varianten wie die übrigen Kacheln, sicherer Rückfall), Handbuch und CHANGELOG mitführen.` });
       if (error) throw error;
-      const r = await supabase.from("ws_nachrichten").insert({ auftrag_id: data.id, von: ich.id, art: "text", kanal: "codeschmiede",
-        text: `Neue Kachel-Art für den Seiten-Designer (App-Designer › Seiten): ${t}\n\nAls Baustein in der Bibliothek des Designers anlegen (alle Geräte, Varianten wie die übrigen Kacheln, sicherer Rückfall), Handbuch und CHANGELOG mitführen.` });
-      if (r.error) throw r.error;
-      setWunsch(""); toast(`Auftrag #${data.id} an Werkstatt ${g.name} gestellt`);
+      setWunsch(""); toast(`Auftrag #${data} an Werkstatt ${g.name} gestellt`);
     } catch (e) { toast(e?.message || "Auftrag nicht gestellt"); } finally { setBusy(false); }
   };
 
@@ -74,7 +73,7 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
       <div className="flex flex-wrap items-center gap-2">
         <LayoutGrid className="w-4 h-4 text-emerald-700" />
         <h2 className="font-display font-bold">Seiten</h2>
-        <span className="text-xs text-slate-500">Startseiten je Rolle, Übersichten, Arbeitsseiten · PC/Tablet/Handy · für alle Vereine oder einzelne (Individualdesign). Freigeben wirkt sofort in der App.</span>
+        <span className="text-xs text-slate-500">Startseiten je Rolle, Übersichten, Arbeitsseiten · PC/Tablet/Handy · für alle Vereine oder einzelne (Individualdesign). Freigeben mit „Sofort“ wirkt sofort in der App; „Schrittweise“ erst ab der ersten Stufe.</span>
         <span className="flex-1" />
         <button type="button" className={ghost} title="Neu laden" onClick={() => { setBereit(false); setSchluessel((k) => k + 1); }}><RefreshCw className="w-4 h-4" /></button>
         <a className={ghost} href={url} target="_blank" rel="noopener noreferrer" title="Nur eingebettet nutzbar – außerhalb zeigt die App „Seite nicht gefunden“"><ExternalLink className="w-4 h-4" /></a>
@@ -83,8 +82,11 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
         {bereit ? "Seiten-Designer der App – mit dem oben gewählten Grunddesign. Speichern und Freigeben laufen in der App (Testfassung) mit deinen Design-Rechten."
           : "Der Seiten-Designer lädt aus der Testfassung der App. Beim ersten Mal dort mit deinem Betreiber-Konto anmelden; der Inhaber gibt diesen PC einmal für das Design frei."}
       </p>
-      <iframe key={schluessel} ref={rahmen} title="Seiten-Designer der App" src={url} onLoad={() => setTimeout(senden, 400)}
-        className="w-full h-[calc(100vh-260px)] min-h-[620px] rounded-xl bg-white ring-1 ring-black/10" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" />
+      {/* Echte PC-Breite (1280 px), eingepasst in die Spalte – sonst klappt das Menü der App auf Symbole zusammen (Fehlerkorrektur 0.9.5) */}
+      <GeraeteRahmen geraet="pc" hoehe="fuellen" className="h-[calc(100vh-260px)] min-h-[620px]" rahmenClass="rounded-xl bg-white ring-1 ring-black/10">
+        <iframe key={schluessel} ref={rahmen} title="Seiten-Designer der App" src={url} onLoad={() => setTimeout(senden, 400)}
+          className="block w-full h-full bg-white" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" />
+      </GeraeteRahmen>
       {darf && g && (
         <div className="flex flex-wrap items-center gap-2">
           <label htmlFor="sd-wunsch" className="text-sm text-slate-600 dark:text-slate-300">Eine Kachel-Art fehlt?</label>

@@ -71,9 +71,12 @@ function TabellenMuster({ v, f, name }) {
 }
 
 /** Linke Seite + Mitte im Modus „Bausteine“. */
-export function BausteineModus({ w, aendere, bearbeitbar, projekt, d, ich, toast, dunkel, Testseite, breite, onChat }) {
+export function BausteineModus({ w, aendere, bearbeitbar, darf = false, projekt, d, ich, toast, dunkel, Testseite, breite, onChat, bausteinEntwurf, setBausteinEntwurf }) {
   const verz = useVerzeichnis(projekt.id);
-  const [mitte, setMitte] = useState("vorschau"); const [vari, setVari] = useState("klar"); const [q, setQ] = useState(""); const [neu, setNeu] = useState(null);
+  const [mitte, setMitte] = useState("vorschau"); const [vari, setVari] = useState("klar"); const [q, setQ] = useState(""); const [neu, setNeu] = useState(false);
+  // Eingaben des Dialogs „Neuer Baustein“ bleiben erhalten (auch nach „Erst mit Claude ausarbeiten“) – liegen im Designer, falls er sie mitgibt
+  const [eigenerEntwurf, setEigenerEntwurf] = useState({ name: "", text: "", art: "zusammen" });
+  const bsEntwurf = bausteinEntwurf || eigenerEntwurf; const setBsEntwurf = setBausteinEntwurf || setEigenerEntwurf;
   const [umdesign, setUmdesign] = useState(null);   // { art: "symbol"|"baustein", name } – Rechtsklick in Galerie oder Verzeichnis
   const kannUmdesign = bearbeitbar;
   const f = w.farben[dunkel ? "dunkel" : "hell"]; const dis = !bearbeitbar;
@@ -107,10 +110,10 @@ export function BausteineModus({ w, aendere, bearbeitbar, projekt, d, ich, toast
           <Feld label="Ecken">{wahl(["icons", "ecken"], [["rund", "Rund"], ["eckig", "Eckig"]], w.icons.ecken)}</Feld>
           <p className="text-xs text-slate-500">Gilt für alle Lucide-Symbole der App.</p>
         </Abschnitt>
-        <div className="pt-2 flex flex-col gap-1.5">
-          <button type="button" className={ghost} onClick={() => setNeu({ name: "", text: "" })}><Plus className="w-4 h-4" />Neuer Baustein …</button>
+        {darf && <div className="pt-2 flex flex-col gap-1.5">
+          <button type="button" className={ghost} onClick={() => setNeu(true)}><Plus className="w-4 h-4" />{bsEntwurf.name.trim() || bsEntwurf.text.trim() ? "Neuer Baustein (Entwurf) …" : "Neuer Baustein …"}</button>
           <p className="text-xs text-slate-500">Mit Chat: beschreib den Baustein, Claude hilft beim Ausarbeiten; gebaut wird er über einen Auftrag.</p>
-        </div>
+        </div>}
       </section>
       <section className={`${card} min-w-0 flex flex-col`}>
         <div className="flex flex-wrap items-center gap-1 p-2 border-b border-slate-200 dark:border-slate-800" role="tablist" aria-label="Ansicht">
@@ -141,34 +144,34 @@ export function BausteineModus({ w, aendere, bearbeitbar, projekt, d, ich, toast
             </div>)}
         </div>
       </section>
-      {neu && <NeuerBaustein projekt={projekt} d={d} ich={ich} toast={toast} onClose={() => setNeu(null)} onChat={onChat} />}
+      {neu && darf && <NeuerBaustein projekt={projekt} d={d} toast={toast} wert={bsEntwurf} setWert={setBsEntwurf} onClose={() => setNeu(false)} onChat={onChat} />}
     </>);
 }
 
-function NeuerBaustein({ projekt, d, ich, toast, onClose, onChat }) {
-  const [name, setName] = useState(""); const [text, setText] = useState(""); const [art, setArt] = useState("zusammen"); const [busy, setBusy] = useState(false);
+function NeuerBaustein({ projekt, d, toast, wert, setWert, onClose, onChat }) {
+  const { name, text, art } = wert; const [busy, setBusy] = useState(false);
+  const setze = (k, v) => setWert((alt) => ({ ...alt, [k]: v }));
   const g = d.gruppen.find((x) => x.id === projekt.design_gruppe_id);
+  // Auftrag und Beschreibung in EINEM Schritt (Datenbank 0036, ws_design_auftrag) – die Werkstatt startet nie ohne Beschreibung
   const senden = async () => {
     if (!name.trim() || !g) return; setBusy(true);
     try {
-      const titel = `Neuer Baustein: ${name.trim()}`.slice(0, 80);
-      const { data, error } = await supabase.from("ws_auftraege").insert({ gruppe_id: g.id, titel, art: "neu", erstellt_von: ich.id }).select().single();
-      if (error) throw error;
       const t = `Neuen Baustein bauen: ${name.trim()} (${art === "grund" ? "Grundbaustein" : art === "diagramm" ? "Diagramm" : art === "fach" ? "Fachbaustein" : "zusammengesetzter Baustein"}).\n${text.trim()}\n\nRegeln (Baustein-Bibliothek): erst prüfen, ob es schon einen passenden Baustein gibt (docs/BAUSTEINE.md); nur Grundwerte aus dem Grunddesign verwenden (keine eigenen Farben/Abstände); Varianten und Zustände (laden, leer, Fehler) vorsehen; in die Galerie /bausteine aufnehmen; danach \`node tools/bausteine.mjs\` ausführen und docs/BAUSTEINE.md mit einchecken.`;
-      const r = await supabase.from("ws_nachrichten").insert({ auftrag_id: data.id, von: ich.id, art: "text", text: t, kanal: "codeschmiede" });
-      if (r.error) throw r.error;
-      toast(`Auftrag #${data.id} angelegt – Baustein „${name.trim()}“`); onClose();
+      const { data, error } = await supabase.rpc("ws_design_auftrag", { p_projekt: projekt.id, p_art: "baustein", p_titel: name.trim(), p_text: t });
+      if (error) throw error;
+      toast(`Auftrag #${data} angelegt – Baustein „${name.trim()}“`); setWert({ name: "", text: "", art: "zusammen" }); onClose();
     } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
   };
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-black/45 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label="Neuer Baustein" className={`${card} w-full max-w-lg p-5 flex flex-col gap-3`}>
         <h3 className="font-display font-bold text-xl flex items-center gap-2"><Shapes className="w-5 h-5 text-emerald-700" />Neuer Baustein</h3>
-        <label className="flex flex-col gap-1 text-sm text-slate-500">Name<input id="cs-bs-name" className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="z. B. Spieltag-Karte" autoFocus /></label>
-        <label className="flex flex-col gap-1 text-sm text-slate-500">Art<select className={input} value={art} onChange={(e) => setArt(e.target.value)}><option value="grund">Grundbaustein</option><option value="zusammen">Zusammengesetzt (Karte, Kachel …)</option><option value="diagramm">Diagramm</option><option value="fach">Fachbaustein</option></select></label>
-        <label className="flex flex-col gap-1 text-sm text-slate-500">Was soll er zeigen und können?<textarea id="cs-bs-text" className={`${input} min-h-[90px]`} value={text} onChange={(e) => setText(e.target.value)} /></label>
+        <label className="flex flex-col gap-1 text-sm text-slate-500">Name<input id="cs-bs-name" className={input} value={name} maxLength={60} onChange={(e) => setze("name", e.target.value)} placeholder="z. B. Spieltag-Karte" autoFocus /></label>
+        <label className="flex flex-col gap-1 text-sm text-slate-500">Art<select className={input} value={art} onChange={(e) => setze("art", e.target.value)}><option value="grund">Grundbaustein</option><option value="zusammen">Zusammengesetzt (Karte, Kachel …)</option><option value="diagramm">Diagramm</option><option value="fach">Fachbaustein</option></select></label>
+        <label className="flex flex-col gap-1 text-sm text-slate-500">Was soll er zeigen und können?<textarea id="cs-bs-text" className={`${input} min-h-[90px]`} value={text} maxLength={6000} onChange={(e) => setze("text", e.target.value)} /></label>
         <div className="flex flex-wrap justify-end gap-2">
-          <button type="button" className={ghost} onClick={() => { onChat(`Ich möchte einen neuen Baustein „${name || "…"}“ anlegen: ${text || "…"} Hilf mir, ihn auszuarbeiten (Varianten, Zustände, wo er verwendet wird).`); onClose(); }}>Erst mit Claude ausarbeiten</button>
+          <button type="button" className={ghost} onClick={() => { onChat(`Ich möchte einen neuen Baustein „${name || "…"}“ anlegen: ${text || "…"} Hilf mir, ihn auszuarbeiten (Varianten, Zustände, wo er verwendet wird).`); onClose(); }}
+            title="Deine Eingaben bleiben erhalten – „Neuer Baustein“ öffnet sie wieder">Erst mit Claude ausarbeiten</button>
           <button type="button" className={btn} disabled={busy || !name.trim() || !g} onClick={senden}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}Als Auftrag senden</button>
         </div>
       </div>

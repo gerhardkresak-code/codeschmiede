@@ -12,7 +12,7 @@ export const SCHEMA_TEXT = `Erlaubte Werte (nur diese Schlüssel, nur diese Form
   streifen true/false, rahmen ∈ {"karte","linien","keine"}, kopf ∈ {"leise","akzent"}, handy ∈ {"liste","tabelle"}, suche true/false;
   zuweisung: {"<Tabellen-Schlüssel>": "<Variante>"}
 - icons: strich 1.25–2.5 (Schritte 0.25), ecken ∈ {"rund","eckig"}
-- marke (Logo, wird aus den Werten gezeichnet): zeichen ∈ {"bild","schild","ball","monogramm","pfeil","glut"}, farbe/farbe2 "#rrggbb",
+- marke (Logo, wird aus den Werten gezeichnet): zeichen ∈ {"bild","schild","ball","monogramm","pfeil","glut","eigen"} („eigen“ = eingelesenes Logo, nur wenn marke.vektor schon vorhanden ist – vektor nie selbst erfinden), farbe/farbe2 "#rrggbb",
   kuerzel 1–3 Buchstaben/Ziffern, name (max. 40 Zeichen), gewicht 600/700/800, sperrung -2–8, form ∈ {"rund","eckig"}
 - spiel (nur App-Art Spiel): feld/figur "#rrggbb", figur_form ∈ {"rund","kantig","pixel"}, punkte ∈ {"oben","aus"}, knoepfe ∈ {"gross","klein"}
 - webseite: start ∈ {"gross","schlicht"}, abschnitte ∈ {"spalten","untereinander"}, fuss ∈ {"dunkel","hell"}
