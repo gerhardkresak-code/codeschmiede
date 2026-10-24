@@ -259,7 +259,7 @@ export function installOrdner({ env = process.env, home = os.homedir(), plattfor
 export function herstellerOrdner(name, { env = process.env, home = os.homedir(), plattform = process.platform } = {}) {
   const lokal = env.LOCALAPPDATA || path.join(home, "AppData", "Local");
   const tabelle = plattform === "win32"
-    ? { grok: [path.join(home, ".grok", "bin")], "cursor-agent": [path.join(lokal, "cursor-agent")], agy: [path.join(lokal, "Antigravity"), path.join(lokal, "Programs", "Antigravity CLI")] }
+    ? { grok: [path.join(home, ".grok", "bin")], "cursor-agent": [path.join(lokal, "cursor-agent")], agy: [path.join(lokal, "agy", "bin"), path.join(lokal, "Antigravity"), path.join(lokal, "Programs", "Antigravity CLI")] }
     : { grok: [path.join(home, ".grok", "bin")], agy: [path.join(home, ".antigravity", "bin")] };
   return Object.hasOwn(tabelle, name) ? tabelle[name] : [];
 }
@@ -272,18 +272,28 @@ function regLies(reg, schluessel) {
     const m = !f && /\sPath\s+REG_(?:EXPAND_)?SZ\s+(.*)/i.exec(aus || ""); fertig(m ? m[1].trim() : "");
   }));
 }
+let regLauf = null;
+function regNeu(env) {
+  if (regLauf) return regLauf;
+  regPfad.laeuft = true;
+  const reg = path.join(env.SystemRoot || env.SYSTEMROOT || "C:\\Windows", "System32", "reg.exe");
+  regLauf = Promise.all([regLies(reg, "HKCU\\Environment"), regLies(reg, "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment")]).then((teile) => {
+    // ungelöste %VAR% → ganzer Eintrag verworfen; nur Laufwerkspfade (kein UNC/Netzlaufwerk, Prüfung B4)
+    const ordner = teile.join(";").split(";").map((o) => o.replace(/%([A-Za-z0-9_()]+)%/g, (x, n) => env[n] ?? env[n.toUpperCase()] ?? x)).filter((o) => o && !o.includes("%") && !o.includes('"') && laufwerk(o));
+    regPfad = { zeit: Date.now(), ordner, laeuft: false };
+  }).catch(() => { regPfad = { ...regPfad, zeit: Date.now(), laeuft: false }; }).finally(() => { regLauf = null; });
+  return regLauf;
+}
 export function registryPfad({ env = process.env, plattform = process.platform } = {}) {
   if (plattform !== "win32") return [];
-  if (Date.now() - regPfad.zeit > 60000 && !regPfad.laeuft) {
-    regPfad.laeuft = true;
-    const reg = path.join(env.SystemRoot || env.SYSTEMROOT || "C:\\Windows", "System32", "reg.exe");
-    Promise.all([regLies(reg, "HKCU\\Environment"), regLies(reg, "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment")]).then((teile) => {
-      // ungelöste %VAR% → ganzer Eintrag verworfen; nur Laufwerkspfade (kein UNC/Netzlaufwerk, Prüfung B4)
-      const ordner = teile.join(";").split(";").map((o) => o.replace(/%([A-Za-z0-9_()]+)%/g, (x, n) => env[n] ?? env[n.toUpperCase()] ?? x)).filter((o) => o && !o.includes("%") && !o.includes('"') && laufwerk(o));
-      regPfad = { zeit: Date.now(), ordner, laeuft: false };
-    }, () => { regPfad = { ...regPfad, zeit: Date.now(), laeuft: false }; });
-  }
+  if (Date.now() - regPfad.zeit > 60000 && !regPfad.laeuft) regNeu(env);
   return regPfad.ordner;
+}
+/** Nach einer Installation: Suchpfad aus der Registry sofort frisch lesen (Gerhard 24.10. 09:46 – „installiert, aber nicht gefunden“). */
+export async function registryNeuLaden({ env = process.env, plattform = process.platform } = {}) {
+  if (plattform !== "win32") return;
+  if (regLauf) await regLauf;   // ein Lauf, der vor der Installation begann, zählt nicht (Prüfung 0.8.8)
+  await regNeu(env);
 }
 /** Suchordner: PATH, Registry-PATH (Windows), allgemeine Installer-Ordner, Hersteller-Ordner des Namens – nur absolute, keine Netzpfade. */
 export function suchOrdner({ env = process.env, home = os.homedir(), plattform = process.platform, mitRegistry = true, name = "" } = {}) {
@@ -321,15 +331,40 @@ export function startdateiAufloesen(cmdPfad, { lies = (p) => readFileSync(p, "ut
   else if (exe && !/\\node\.exe$/i.test(exe.p)) r = { befehl: exe.p, vorne: [] };
   return r && !zielGesperrt(r.befehl) ? r : null;
 }
+/**
+ * Cursor unter Windows: cursor-agent.cmd → cursor-agent.ps1 → versions\<JJJJ.MM.TT-…>\node.exe index.js (Gerhard 24.10. 09:39).
+ * Ohne Shell und ohne das Skript auszuführen: neueste Version wie das offizielle Skript wählen, node.exe und index.js müssen
+ * (nach Auflösen von Verknüpfungen) im Cursor-Ordner liegen.
+ */
+export function cursorAufloesen(ordner, { gibt = existsSync, liste = (d) => readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name), realpath = echt } = {}) {
+  try {
+    ordner = path.win32.normalize(ordner);
+    const v = path.win32.join(ordner, "versions");
+    const zahl = (n) => { const [j, m, t] = n.split("-")[0].split("."); return Number(j + m.padStart(2, "0") + t.padStart(2, "0")); };
+    const namen = liste(v).filter((n) => /^\d{4}\.\d{1,2}\.\d{1,2}(-\d{2}-\d{2}-\d{2})?-[a-f0-9]+$/.test(n)).sort((a, b) => zahl(b) - zahl(a) || (a < b ? 1 : -1));
+    const basis = (realpath(ordner) || ordner).toLowerCase();
+    for (const n of namen) {
+      const node = path.win32.join(v, n, "node.exe"); const js = path.win32.join(v, n, "index.js");
+      if (!gibt(node) || !gibt(js)) continue;
+      const rn = realpath(node); const rj = realpath(js);
+      if (!rn || !rj || !rn.toLowerCase().startsWith(basis + "\\") || !rj.toLowerCase().startsWith(basis + "\\")) continue;
+      return { befehl: node, vorne: [js] };
+    }
+  } catch { /* kein Cursor-Ordner */ }
+  return null;
+}
 /** Programm finden (für eingebaute Katalog-Einträge und eigene Anbieter). */
-export function findeIn(namen, { env = process.env, home = os.homedir(), plattform = process.platform, gibt = existsSync, lies, realpath, mitRegistry = true } = {}) {
+export function findeIn(namen, { env = process.env, home = os.homedir(), plattform = process.platform, gibt = existsSync, lies, realpath, cursorListe, mitRegistry = true } = {}) {
   for (const name of namen) {
     if (!PROGRAMM.test(name || "")) continue;
     for (const o of suchOrdner({ env, home, plattform, mitRegistry, name })) {
       if (plattform !== "win32") { const p = path.join(o, name); if (gibt(p)) return { befehl: p, vorne: [], pfad: p }; continue; }
       const exe = path.win32.join(o, `${name}.exe`); if (gibt(exe)) return { befehl: exe, vorne: [], pfad: exe };
       const cmd = path.win32.join(o, `${name}.cmd`);
-      if (gibt(cmd)) { const r = startdateiAufloesen(cmd, { gibt, ...(lies ? { lies } : {}), ...(realpath ? { realpath } : {}) }); if (r) return { ...r, pfad: cmd }; }
+      if (gibt(cmd)) {
+        const r = startdateiAufloesen(cmd, { gibt, ...(lies ? { lies } : {}), ...(realpath ? { realpath } : {}) }); if (r) return { ...r, pfad: cmd };
+        if (name === "cursor-agent") { const c = cursorAufloesen(o, { gibt, ...(realpath ? { realpath } : {}), ...(cursorListe ? { liste: cursorListe } : {}) }); if (c) return { ...c, pfad: cmd }; }
+      }
     }
   }
   return null;

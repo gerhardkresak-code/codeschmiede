@@ -95,3 +95,16 @@ test("Prüfung 0.8.7: Hersteller-Ordner nur für den Hersteller, keine Datenstr�
   assert.ok(programmGesperrt("powershell.exe") && programmGesperrt("msiexec") && programmGesperrt("claude") && !programmGesperrt("cursor-agent"));
   assert.equal(findeFreiesProgramm("pwsh"), null);
 });
+
+test("Cursor unter Windows: neueste Version aus dem Cursor-Ordner, ohne Skript (Gerhard 24.10.)", async () => {
+  const { findeIn } = await import("../lib/ki.mjs");
+  const o = "C:\\Users\\g\\AppData\\Local\\cursor-agent";
+  const da = new Set([`${o}\\cursor-agent.cmd`, `${o}\\versions\\2026.10.22-27dcf5f\\node.exe`, `${o}\\versions\\2026.10.22-27dcf5f\\index.js`, `${o}\\versions\\2026.9.1-aaaa\\node.exe`, `${o}\\versions\\2026.9.1-aaaa\\index.js`]);
+  const lies = () => '@echo off\r\n%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%\\cursor-agent.ps1" %*';
+  const env = { PATH: "", APPDATA: "C:\\Users\\g\\AppData\\Roaming", LOCALAPPDATA: "C:\\Users\\g\\AppData\\Local" };
+  const r = findeIn(["cursor-agent"], { env, home: "C:\\Users\\g", plattform: "win32", gibt: (p) => da.has(p), lies, realpath: (x) => x, cursorListe: () => ["2026.9.1-aaaa", "2026.10.22-27dcf5f", "boese"], mitRegistry: false });
+  assert.equal(r.befehl, `${o}\\versions\\2026.10.22-27dcf5f\\node.exe`);
+  assert.deepEqual(r.vorne, [`${o}\\versions\\2026.10.22-27dcf5f\\index.js`]);
+  const raus = findeIn(["cursor-agent"], { env, home: "C:\\Users\\g", plattform: "win32", gibt: (p) => da.has(p), lies, realpath: (x) => (x.endsWith("node.exe") ? "C:\\Windows\\node.exe" : x), cursorListe: () => ["2026.10.22-27dcf5f"], mitRegistry: false });
+  assert.equal(raus, null);
+});
