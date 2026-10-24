@@ -55,10 +55,20 @@ jobs:
           # liefen sie ins Leere oder schickten Schlüssel der Live-Datenbank an das Test-Projekt.
           aufraeumen() {
             [ "$ZIEL" = "live" ] || return 0
-            q -c "do \$\$ begin perform cron.unschedule(jobid) from cron.job where jobname like '%demo%'
-                    or (command ~ 'https://[a-z]{20}\.supabase\.co' and ('$REF' = '' or command !~ 'https://$REF\.supabase\.co'));
-                  exception when others then null; end \$\$;" > /dev/null 2>fehler.txt || echo "::warning::Zeitpläne in Live nicht geprüft: $(melde < fehler.txt)"
+            # Kennung aus dem Lauf, sonst die gespeicherte; ohne Kennung werden fremde Zeitpläne nur ANGEHALTEN (nicht gelöscht) und gemeldet
+            erg=$(q -c "do \$\$ declare r text; n int := 0; begin
+                    if to_regnamespace('cron') is null then raise warning 'CS: kein pg_cron'; return; end if;
+                    r := coalesce(nullif('$REF', ''), (select projekt from codeschmiede.umgebung where ziel = 'live'));
+                    if r is null then raise warning 'CS: Projektkennung unbekannt – Zeitpläne mit fester Projektadresse werden angehalten'; end if;
+                    select count(*) into n from cron.job where active and (jobname like '%demo%'
+                      or (command ~ 'https://[a-z]{20}\.supabase\.co' and (r is null or command !~ ('https://' || r || '\.supabase\.co'))));
+                    perform cron.alter_job(jobid, active := false) from cron.job where active and (jobname like '%demo%'
+                      or (command ~ 'https://[a-z]{20}\.supabase\.co' and (r is null or command !~ ('https://' || r || '\.supabase\.co'))));
+                    if n > 0 then raise warning 'CS: % Zeitpläne in Live angehalten (Demo oder anderes Projekt)', n; end if;
+                  end \$\$;" 2>&1 >/dev/null) || { echo "::warning::Zeitpläne in Live nicht geprüft: $(printf '%s' "$erg" | melde)"; return 0; }
+            printf '%s\n' "$erg" | sed -nE 's/^.*WARNING: +CS: (.*)$/::warning::\1/p'
           }
+          trap aufraeumen EXIT
           # Fehler ohne Datenwerte ausgeben (z. B. „Key (email)=(…)“), ohne SQL-Ausschnitte (LINE/CONTEXT/QUERY) und ohne IP-Adressen
           melde() { { grep -vE '^[[:space:]]*(DETAIL|LINE [0-9]+|CONTEXT|QUERY|HINT|WHERE):|^[[:space:]]*\^' || true; } | sed -E 's/\(([^)]{0,200})\)=\([^)]*\)/(\1)=(…)/g; s/"[^"]*"/«…»/g; s/\x27[^\x27]*\x27/«…»/g; s/["\x27].*$/«…»/; s/[0-9]{1,3}(\.[0-9]{1,3}){3}/…/g; s/\[[0-9a-fA-F:]{3,}\]|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{0,4}){3,7}/…/g' | head -c 600 || true; }
           q() { psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 -t -A "$@"; }
@@ -134,4 +144,3 @@ jobs:
             q --single-transaction -f einspielen.sql > /dev/null 2>fehler.txt || { echo "::error::$f konnte nicht in die $ZIEL-Datenbank eingespielt werden (nichts davon übernommen, nichts Weiteres eingespielt): $(melde < fehler.txt)"; exit 1; }
             echo "::notice::$ZIEL: $f eingespielt"
           done
-          aufraeumen
