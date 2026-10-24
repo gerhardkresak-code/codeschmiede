@@ -43,6 +43,9 @@ jobs:
           set -euo pipefail
           if [ -z "${DB_URL:-}" ]; then echo "::notice::Für „$ZIEL“ ist keine Datenbank eingetragen (Geheimnis SUPABASE_DB_URL der Umgebung) – nichts zu tun"; exit 0; fi
           export PGCONNECT_TIMEOUT=20 PGAPPNAME=codeschmiede-datenbank
+          # Jede Datei erfährt, wohin sie läuft: current_setting('codeschmiede.ziel', true) = 'test' bzw. 'live'.
+          # Demo- und Testdaten prüfen das (bzw. die Tabelle codeschmiede.umgebung) und laufen in Live nicht.
+          export PGOPTIONS="-c codeschmiede.ziel=$ZIEL"
           # Fehler ohne Datenwerte ausgeben (z. B. „Key (email)=(…)“), ohne SQL-Ausschnitte (LINE/CONTEXT/QUERY) und ohne IP-Adressen
           melde() { { grep -vE '^[[:space:]]*(DETAIL|LINE [0-9]+|CONTEXT|QUERY|HINT|WHERE):|^[[:space:]]*\^' || true; } | sed -E 's/\(([^)]{0,200})\)=\([^)]*\)/(\1)=(…)/g; s/"[^"]*"/«…»/g; s/\x27[^\x27]*\x27/«…»/g; s/["\x27].*$/«…»/; s/[0-9]{1,3}(\.[0-9]{1,3}){3}/…/g; s/\[[0-9a-fA-F:]{3,}\]|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{0,4}){3,7}/…/g' | head -c 600 || true; }
           q() { psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 -t -A "$@"; }
@@ -79,6 +82,12 @@ jobs:
               echo "::notice::$ZIEL-Datenbank übernommen (vorhandene Dateien als eingespielt vermerkt)"
             fi
           fi
+          # Die Datenbank merkt sich, ob sie Test oder Live ist – steht das Geheimnis versehentlich auf der falschen Datenbank, bricht der Lauf ab
+          q --single-transaction -c "create table if not exists codeschmiede.umgebung (ziel text primary key check (ziel in ('test','live')), seit timestamptz not null default now()); revoke all on codeschmiede.umgebung from public;" > /dev/null 2>fehler.txt \
+            || { echo "::error::Umgebung der $ZIEL-Datenbank nicht lesbar: $(melde < fehler.txt)"; exit 1; }
+          andere=$(q -c "select string_agg(ziel, ',') from codeschmiede.umgebung where ziel <> '$ZIEL'")
+          if [ -n "$andere" ]; then echo "::error::Diese Datenbank ist als „$andere“ gekennzeichnet, der Lauf will nach „$ZIEL“ – Geheimnis SUPABASE_DB_URL der Umgebung „$ZIEL“ prüfen. Nichts eingespielt."; exit 1; fi
+          q -c "insert into codeschmiede.umgebung (ziel) values ('$ZIEL') on conflict do nothing" > /dev/null
           declare -A FERTIG=()
           while IFS='|' read -r d s; do [ -n "$d" ] && FERTIG["$d"]="$s"; done < <(q -c "select datei, coalesce(pruefsumme, '') from codeschmiede.migrationen")
           OFFEN=()
