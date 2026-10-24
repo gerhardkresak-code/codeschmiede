@@ -415,6 +415,11 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
     try {
       const s = await sitzungen(); const v = (s[auftrag.id]?.versuch || 0) + 1; await merkeSitzung(auftrag.id, { ...(s[auftrag.id] || {}), versuch: v });
       await log(auftrag.id, "fehler", `Fehler: ${text}`);
+      if (auftrag.hand) {   // Hand-Änderung: nicht nachfragen, sondern abbrechen (Inhalte werden dabei gelöscht)
+        await nachricht(auftrag.id, "ergebnis", `Die Hand-Änderung hat nicht geklappt: ${text}\nBitte im Code-Editor neu öffnen und wieder als Auftrag speichern.`);
+        await db.from("ws_auftraege").update({ stand: "abgebrochen" }).eq("id", auftrag.id);
+        return;
+      }
       await nachricht(auftrag.id, "frage", `Ich bin auf ein Problem gestoßen: ${text}\nSoll ich es noch einmal versuchen (mit stärkerem Modell) oder den Auftrag anpassen?`);
       await db.from("ws_auftraege").update({ stand: "frage" }).eq("id", auftrag.id);
     } catch { /* Datenbank nicht erreichbar – nächster Durchlauf versucht es wieder */ }

@@ -90,4 +90,12 @@ select ws_rechte_setzen('00000000-0000-0000-0000-0000000000d1','plattform',true,
 update ws_auftraege set stand='freigabe', pr_nummer=1, zweig='auftrag-x' where hand and erstellt_von='00000000-0000-0000-0000-0000000000d1';
 :D1
 select ws_freigeben((select min(id) from ws_auftraege where hand));
+\echo [8] 0033: Geheimnis im Inhalt -> FEHLER; Windows-Pfad .github./x -> FEHLER; CODEOWNERS (D1) -> FEHLER; Abbruch loescht Inhalte (0)
+:D1
+select ws_code_hand_auftrag((select id from ws_gruppen where bereich_id='plattform' limit 1),'Geheim','',repeat('a',40),'[{"pfad":"src/k.js","inhalt":"const k = \"ghp_abcdefghijklmnopqrstuvwx\";"}]');
+select ws_code_hand_auftrag((select id from ws_gruppen where bereich_id='plattform' limit 1),'Win','',repeat('a',40),'[{"pfad":".github./workflows/x.yml","inhalt":"x"}]');
+select ws_code_hand_auftrag((select id from ws_gruppen where bereich_id='plattform' limit 1),'Owner','',repeat('a',40),'[{"pfad":"docs/CODEOWNERS","inhalt":"x"}]');
+:ADM
+update ws_auftraege set stand='abgebrochen' where hand;
+select count(*) as rest from ws_code_aenderungen;
 rollback;

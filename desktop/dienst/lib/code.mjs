@@ -12,7 +12,8 @@ const SHA = /^[0-9a-f]{40}$/;
 export const zweigOk = (z) => /^[A-Za-z0-9._/-]{1,100}$/.test(z || "") && !/\.\./.test(z) && !/^[/.-]/.test(z);
 // Wie public.ws_code_pfad_ok (Datenbank 0032): keine „.“/„..“-Abschnitte, kein / am Anfang/Ende, kein //, kein Doppelpunkt
 export const pfadOk = (p) => typeof p === "string" && p.length >= 1 && p.length <= 400 && !/(^|\/)\.\.?(\/|$)/.test(p) && !p.startsWith("/")
-  && !p.endsWith("/") && !p.includes("//") && !/[\x00-\x1f\\:]/.test(p) && !/(^|\/)\.git(\/|$)/.test(p) && !/^-/.test(p) && !/[ .]$/.test(p);
+  && !p.endsWith("/") && !p.includes("//") && !/[\x00-\x1f\\:]/.test(p) && !/(^|\/)\.git(\/|$)/.test(p) && !/^-/.test(p) && !/[ .](\/|$)/.test(p) && !/[*?"<>|]/.test(p)
+  && !/(^|\/)(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.[^/]*)?(\/|$)/i.test(p);
 // Wie public.ws_code_geheim (Datenbank 0032)
 export const geheimPfad = (p) => heikleDatei(p) || /(^|\/)\.env|\.(pem|key|p12|pfx|jks|keystore)$|(^|\/)credentials|(^|\/)id_(rsa|ed25519|ecdsa)|(^|\/)\.dev\.vars$|(^|\/)\.npmrc$|(^|\/)\.netrc$|(^|\/)serviceaccount[^/]*\.json$|(^|\/)secrets?\.[^/]*$/i.test(p);
 

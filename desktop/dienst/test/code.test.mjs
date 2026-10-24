@@ -27,7 +27,7 @@ async function testRepo() {
 
 test("Pfad-Prüfung", () => {
   assert.ok(pfadOk("src/a.js") && pfadOk("README.md"));
-  for (const p of ["../x", "a/../b", "/etc/x", ".git/config", "a\\b", "-x", "", ".", "./a", "a/.", "a/", "a//b", "a:b", "a."]) assert.ok(!pfadOk(p), p);
+  for (const p of ["../x", "a/../b", "/etc/x", ".git/config", "a\\b", "-x", "", ".", "./a", "a/.", "a/", "a//b", "a:b", "a.", ".github./x", "a /b", "con", "x/nul.txt", "a*b"]) assert.ok(!pfadOk(p), p);
 });
 
 test("Baum und Dateien: geheim gesperrt, Geheimnisse maskiert, Binär ohne Inhalt", async () => {
