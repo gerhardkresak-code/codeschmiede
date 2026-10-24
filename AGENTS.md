@@ -40,6 +40,8 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-24 16:20 – Fehler-Meldungen:** Sammelstelle ist die Codeschmiede selbst (kein Fremdanbieter), nur Technik – nie Namen, E-Mails, Eingaben
+  oder Kennungen (Daten von Kindern in Trainer to go!), keine Sitzungs-Kennung; Liste mit „Als Auftrag“ (kein automatischer Auftrag); 30 Tage.
 - **2026-10-24 14:36–14:50 – Codeschmiede nur für Gerhard, für alles:** Kein Verkauf (Produkt-Konzept ruht). Projekt-Arten Web-App, Programm (.exe),
   Handy-App (zuerst PWA, Stores später), Werkzeug/Skript. Datenbank-Änderungen: Test automatisch, Live nach Freigabe im Auftrag (Datenbank-Station,
   nächster Schritt). Programme nur auf Gerhards PCs (keine Code-Signatur), Test in der Windows-Sandbox. Datenbanken: gemeinsame Spielwiese, bei Bedarf eigenes

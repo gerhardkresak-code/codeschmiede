@@ -1180,6 +1180,16 @@ async function ampelMelden(p) {
     const werte = await ampelPruefen({ sh: ghGrenze, projekt: p });
     const dbLampen = await dbAmpel({ sh: ghGrenze, projekt: p }).catch(() => null);   // Datenbank-Station (0034)
     if (dbLampen) Object.assign(werte, dbLampen);
+    // Fehler-Meldungen (0035): Schlüssel da? Meldungen angekommen? offene Fehler?
+    if (p.technik_art === "web" || p.technik_art === "handy" || !p.technik_art) {
+      const { data: fk, error: fe } = await db.from("ws_fehler_schluessel").select("aktiv, letzte_meldung").eq("projekt_id", p.id).maybeSingle();
+      if (!fe) {
+        const { count } = await db.from("ws_fehler").select("id", { count: "exact", head: true }).eq("projekt_id", p.id).eq("stand", "offen");
+        werte.fehler = !fk || !fk.aktiv ? { stand: "gelb", text: "Melde-Schlüssel anlegen (unten) und in der App eintragen" }
+          : !fk.letzte_meldung ? { stand: "gelb", text: "Schlüssel da – noch keine Meldung angekommen (Melder in der App eingebaut, Werte bei Cloudflare eingetragen?)" }
+          : { stand: count ? "gelb" : "gruen", text: count ? `Melder aktiv · ${count} offene Fehler (Menü „Fehler“)` : "Melder aktiv · keine offenen Fehler" };
+      }
+    }
     const { error } = await db.rpc("ws_anbindungen_melden", { p_pc: pcId, p_projekt: p.id, p_werte: werte });
     if (error && !/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", `Ampel ${p.name}: ${ohneGeheimnisse(error.message)}`);
   } catch (e) { melde("fehler", `Ampel ${p.name}: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 200)}`); }

@@ -1,0 +1,118 @@
+<title>Fehler-Meldungen Entwurf</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+:root { --bg:#0b1512; --panel:#0f1d19; --panel2:#13241f; --line:#1f3530; --fg:#e3efeb; --muted:#8fa8a0; --accent:#10b981; --accent-d:#047857; --accent-s:rgba(16,185,129,.14);
+  --warn:#f59e0b; --warn-s:rgba(245,158,11,.14); --rot:#f87171; --rot-s:rgba(239,68,68,.14);
+  --display:"Barlow Semi Condensed","Barlow",system-ui,sans-serif; --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"JetBrains Mono",ui-monospace,Consolas,monospace; color-scheme:dark; }
+* { box-sizing:border-box }
+body { background:var(--bg); color:var(--fg); font-family:var(--body); font-size:15px; line-height:1.45; padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px)); padding-block:20px 40px }
+h1,h2,h3 { font-family:var(--display); margin:0; text-wrap:balance } h1{font-size:1.7rem} h2{font-size:1.2rem} p{margin:0}
+.wrap { max-width:1180px; margin:0 auto; display:flex; flex-direction:column; gap:18px }
+.chip { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:999px; padding:3px 10px; font-size:.78rem; color:var(--muted) }
+.lead { color:var(--muted); max-width:80ch }
+svg.i { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none }
+.karte { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:12px; min-width:0 }
+.leiste { display:flex; flex-wrap:wrap; gap:8px; align-items:center }
+.seg { display:inline-flex; border:1px solid var(--line); border-radius:9px; padding:2px; background:var(--panel2) }
+.seg button { font:inherit; font-size:.86rem; background:none; border:0; color:var(--muted); padding:5px 11px; border-radius:7px; cursor:pointer }
+.seg button.an { background:var(--panel); color:var(--fg); box-shadow:0 0 0 1px var(--line) }
+.knopf { font:inherit; font-size:.86rem; color:var(--fg); background:var(--panel2); border:1px solid var(--line); border-radius:9px; padding:6px 11px; cursor:pointer; display:inline-flex; gap:6px; align-items:center }
+.knopf.voll { background:var(--accent-d); border-color:var(--accent-d); color:#fff; font-weight:600 }
+.knopf:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:2px }
+.liste { display:flex; flex-direction:column; gap:8px }
+.f { border:1px solid var(--line); border-radius:12px; background:var(--panel2); padding:12px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 12px }
+.f .t { font-weight:600; font-family:var(--mono); font-size:.88rem; word-break:break-word }
+.f .m { color:var(--muted); font-size:.8rem; display:flex; flex-wrap:wrap; gap:6px 12px }
+.f .zahl { text-align:right; font-family:var(--display); font-size:1.4rem; line-height:1 }
+.f .zahl small { display:block; font-family:var(--body); font-size:.72rem; color:var(--muted) }
+.f .aktion { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px }
+.f.neu { border-color:#5b4310; box-shadow:inset 3px 0 0 var(--warn) }
+.f.auftrag { box-shadow:inset 3px 0 0 var(--accent) }
+.badge { font-size:.72rem; border-radius:999px; padding:1px 8px; border:1px solid var(--line) }
+.badge.neu { border-color:#5b4310; color:#fcd9a0; background:var(--warn-s) }
+.badge.auftrag { border-color:var(--accent-d); color:var(--accent); background:var(--accent-s) }
+.badge.erl { color:var(--muted) }
+details pre { font-family:var(--mono); font-size:.76rem; background:#07100d; border:1px solid var(--line); border-radius:8px; padding:8px; overflow-x:auto; margin:6px 0 0; color:#a7c4bb }
+.raster { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px }
+.box { border:1px solid var(--line); border-radius:12px; padding:12px; background:var(--panel2); display:flex; flex-direction:column; gap:6px; font-size:.9rem }
+.ok { color:var(--accent) } .nein { color:var(--rot) }
+ul { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:3px }
+.toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--accent-d); color:#fff; padding:8px 14px; border-radius:10px; font-size:.9rem }
+</style>
+
+<div class="wrap">
+  <div style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:baseline"><h1>Fehler-Meldungen aus den Apps</h1><span class="chip">Entwurf 1.0 · Codeschmiede</span></div>
+  <p class="lead">Zum Durchklicken: Neuer Menüpunkt „Fehler“. Stürzt in einer App etwas ab, meldet sie es an die Codeschmiede – nur Technik, keine Personendaten. Gleiche Fehler werden zusammengefasst und gezählt. Du entscheidest mit „Als Auftrag“, was behoben wird. Nach 30 Tagen wird gelöscht.</p>
+
+  <section class="karte" aria-label="Fehler-Liste">
+    <div class="leiste">
+      <h2 style="flex:1">Fehler · Trainer to go</h2>
+      <span class="seg" role="group" aria-label="Filter"><button class="an" data-f="offen">Offen</button><button data-f="auftrag">Mit Auftrag</button><button data-f="erledigt">Erledigt</button><button data-f="alle">Alle</button></span>
+    </div>
+    <div class="liste" id="liste"></div>
+  </section>
+
+  <div class="raster">
+    <section class="karte"><h2>Was gemeldet wird</h2>
+      <div class="box"><b class="ok">Gemeldet</b><ul><li>Fehlertext (bereinigt)</li><li>Code-Stelle (Datei, Zeile)</li><li>Seite ohne Kennungen, z. B. <span style="font-family:var(--mono)">/kader/:id</span></li><li>App-Version, Browser, Gerät (Handy/PC)</li><li>Zeit und Anzahl</li></ul></div>
+      <div class="box"><b class="nein">Nie gemeldet</b><ul><li>Namen, E-Mails, Telefonnummern</li><li>Eingaben in Formularen</li><li>Nutzer-, Vereins- oder Spieler-Kennungen</li><li>Anmeldedaten, Schlüssel, Token</li></ul></div>
+      <p class="lead" style="font-size:.85rem">Doppelt gefiltert: in der App vor dem Senden und in der Codeschmiede-Datenbank beim Annehmen.</p>
+    </section>
+    <section class="karte"><h2>Einrichten je App</h2>
+      <ul class="lead" style="font-size:.9rem">
+        <li>Unter „Anbindungen“ erzeugst du einen <b>Melde-Schlüssel</b> je App. Er darf nur melden, nichts lesen.</li>
+        <li>Die App bekommt einen kleinen Melder (bei neuen Projekten schon im Grundgerüst, bei Trainer to go als Auftrag).</li>
+        <li>Gemeldet wird nur aus der Live- und Testfassung, nicht beim Entwickeln.</li>
+        <li>Je App höchstens 300 Meldungen pro Stunde – mehr wird verworfen.</li>
+        <li>Die Ampel „Fehler-Meldungen“ wird grün, sobald die erste Meldung ankommt.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function () {
+  var F = [
+    { id: 1, t: "TypeError: Cannot read properties of undefined (reading 'datum')", stelle: "src/pages/Calendar.jsx:142", seite: "/kalender", n: 37, nutzer: "heute", zuerst: "heute 08:12", zuletzt: "vor 4 Min.", version: "v2.14.0", geraet: "Handy 31 · PC 6", stand: "offen", neu: true,
+      stack: "TypeError: Cannot read properties of undefined (reading 'datum')\n    at Woche (Calendar.jsx:142:31)\n    at renderWithHooks (react-dom.production.min.js)" },
+    { id: 2, t: "Fetch fehlgeschlagen: 500 bei /rest/v1/rpc/kader_liste", stelle: "src/lib/backend.js:88", seite: "/kader/:id", n: 9, nutzer: "seit gestern", zuerst: "gestern 19:40", zuletzt: "vor 2 Std.", version: "v2.14.0", geraet: "PC 9", stand: "auftrag", auftrag: "#64",
+      stack: "Error: 500 Internal Server Error\n    at holen (backend.js:88:11)" },
+    { id: 3, t: "ChunkLoadError: Loading chunk 412 failed", stelle: "(Laden der Seite)", seite: "/training/:id", n: 4, nutzer: "am Montag", zuerst: "Mo 07:02", zuletzt: "Mo 07:15", version: "v2.13.2", geraet: "Handy 4", stand: "erledigt",
+      stack: "ChunkLoadError: Loading chunk 412 failed.\n(nach einem Update – Seite neu laden behebt es)" }
+  ];
+  var filter = "offen";
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function zeige() {
+    var l = F.filter(function (f) { return filter === "alle" || f.stand === filter; });
+    document.getElementById("liste").innerHTML = l.length ? l.map(function (f) {
+      var b = f.stand === "auftrag" ? "<span class='badge auftrag'>Auftrag " + f.auftrag + "</span>" : f.stand === "erledigt" ? "<span class='badge erl'>erledigt</span>" : f.neu ? "<span class='badge neu'>neu</span>" : "";
+      var akt = f.stand === "offen" ? "<button class='knopf voll' data-a='auftrag' data-id='" + f.id + "'>Als Auftrag</button><button class='knopf' data-a='erledigt' data-id='" + f.id + "'>Erledigt</button><button class='knopf' data-a='ignorieren' data-id='" + f.id + "'>Ignorieren</button>"
+        : f.stand === "auftrag" ? "<button class='knopf' data-a='zum'>Zum Auftrag " + f.auftrag + "</button><button class='knopf' data-a='erledigt' data-id='" + f.id + "'>Erledigt</button>"
+        : "<button class='knopf' data-a='oeffnen' data-id='" + f.id + "'>Wieder öffnen</button>";
+      return "<article class='f " + (f.stand === "auftrag" ? "auftrag" : f.neu && f.stand === "offen" ? "neu" : "") + "'>" +
+        "<div><div class='t'>" + esc(f.t) + "</div><div class='m'>" + b + "<span>" + esc(f.stelle) + "</span><span>Seite " + esc(f.seite) + "</span><span>" + esc(f.version) + "</span><span>" + esc(f.geraet) + "</span><span>zuerst " + esc(f.zuerst) + " · zuletzt " + esc(f.zuletzt) + "</span></div>" +
+        "<details><summary style='cursor:pointer;font-size:.82rem;color:var(--muted)'>Ablauf (Stack)</summary><pre>" + esc(f.stack) + "</pre></details></div>" +
+        "<div class='zahl'>" + f.n + "<small>× · " + esc(f.nutzer) + "</small></div><div class='aktion'>" + akt + "</div></article>";
+    }).join("") : "<p class='lead'>Nichts in dieser Ansicht.</p>";
+  }
+  function toast(t) { var e = document.getElementById("toast"); e.textContent = t; e.hidden = false; clearTimeout(toast.z); toast.z = setTimeout(function () { e.hidden = true; }, 2600); }
+  document.getElementById("liste").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    var f = F.filter(function (x) { return String(x.id) === b.getAttribute("data-id"); })[0];
+    var a = b.getAttribute("data-a");
+    if (a === "auftrag") { f.stand = "auftrag"; f.auftrag = "#65"; f.neu = false; toast("Auftrag #65 angelegt – mit Fehlertext, Code-Stelle und Ablauf"); }
+    if (a === "erledigt") { f.stand = "erledigt"; toast("Als erledigt markiert – taucht er wieder auf, ist er wieder offen"); }
+    if (a === "ignorieren") { f.stand = "erledigt"; toast("Ignoriert – wird weiter gezählt, aber nicht mehr als neu gezeigt"); }
+    if (a === "oeffnen") { f.stand = "offen"; }
+    if (a === "zum") toast("Öffnet den Auftrag in der Zentrale");
+    zeige();
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".seg button"), function (b) {
+    b.addEventListener("click", function () { filter = b.getAttribute("data-f"); Array.prototype.forEach.call(document.querySelectorAll(".seg button"), function (x) { x.classList.toggle("an", x === b); }); zeige(); });
+  });
+  zeige();
+})();
+</script>
