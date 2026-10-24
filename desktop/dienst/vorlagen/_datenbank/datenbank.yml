@@ -1,0 +1,113 @@
+name: Datenbank
+# Datenbank-Station der Codeschmiede: spielt neue Dateien aus supabase/migrations/ ein.
+#   main → Umgebung „test“ (automatisch nach dem Zusammenführen)
+#   live → Umgebung „live“ (startet die Codeschmiede beim Live-Schalten, also erst nach deiner Freigabe)
+# Zugang: je Umgebung das Geheimnis SUPABASE_DB_URL (Verbindungsadresse NUR dieser Datenbank, „Session pooler“) – trägst du selbst in
+# GitHub › Settings › Environments ein. Die Umgebungen lassen nur ihren Zweig zu (main bzw. live), andere Zweige kommen nicht an den Zugang.
+# Was eingespielt ist und die Sicherung des Aufbaus (vor jedem Einspielen in Live) liegen in der Datenbank selbst im Schema „codeschmiede“
+# (nicht über die App erreichbar). Jede Datei läuft in einer eigenen Transaktion: Fehler → nichts von ihr bleibt, nichts Weiteres läuft.
+# Grenzen: Eine Datei mit eigenem begin/commit hebt diese Klammer auf; „create index concurrently“ und „vacuum“ gehen hier nicht
+# (in einer Transaktion verboten) – solche Schritte gehören in eine eigene, von Hand ausgeführte Datei.
+on:
+  push:
+    branches: [main]
+    paths: ['supabase/migrations/**', '.github/workflows/datenbank.yml']
+  workflow_dispatch:
+    inputs:
+      vorher: { description: 'Bisheriger Stand (setzt die Codeschmiede beim Live-Schalten)', required: false, default: '' }
+      kennung: { description: 'Kennung des Laufs (Codeschmiede)', required: false, default: '' }
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Datenbank {0} {1}', github.ref_name, inputs.kennung) || '' }}
+permissions:
+  contents: read
+concurrency:
+  group: datenbank-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  einspielen:
+    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/live' }}
+    environment: ${{ github.ref == 'refs/heads/live' && 'live' || 'test' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: Einspielen
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ZIEL: ${{ github.ref == 'refs/heads/live' && 'live' || 'test' }}
+          BESTEHEND: ${{ vars.BESTEHEND }}
+          VORHER: ${{ inputs.vorher || github.event.before }}
+          COMMIT: ${{ github.sha }}
+          EREIGNIS: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DB_URL:-}" ]; then echo "::notice::Für „$ZIEL“ ist keine Datenbank eingetragen (Geheimnis SUPABASE_DB_URL der Umgebung) – nichts zu tun"; exit 0; fi
+          export PGCONNECT_TIMEOUT=20 PGAPPNAME=codeschmiede-datenbank
+          # Fehler ohne Datenwerte ausgeben (z. B. „Key (email)=(…)“)
+          melde() { grep -v '^DETAIL:' | sed -E 's/\(([^)]{0,200})\)=\([^)]*\)/(\1)=(…)/g; s/"[^"]*"/"…"/g' | head -c 600; }
+          q() { psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 -t -A "$@"; }
+          mapfile -t DATEIEN < <(ls supabase/migrations/ 2>/dev/null | grep -E '^[A-Za-z0-9._-]+\.sql$' | LC_ALL=C sort || true)
+          if ! da=$(q -c "select to_regclass('codeschmiede.migrationen') is not null" 2>fehler.txt); then echo "::error::Keine Verbindung zur $ZIEL-Datenbank: $(melde < fehler.txt)"; exit 1; fi
+          if [ "$da" != "t" ]; then
+            tabellen=$(q -c "select count(*) from information_schema.tables where table_schema = 'public'")
+            if [ "${BESTEHEND:-}" = "ja" ] && [ "$tabellen" = "0" ]; then
+              echo "::error::Die $ZIEL-Datenbank ist leer, aber „enthält die vorhandenen Dateien schon“ ist gesetzt – bitte in der Codeschmiede auf „Nein“ stellen."; exit 1
+            fi
+            if [ "${BESTEHEND:-}" != "ja" ] && [ "$tabellen" != "0" ]; then
+              echo "::error::Die $ZIEL-Datenbank ist nicht leer ($tabellen Tabellen), aber „enthält die vorhandenen Dateien schon“ ist nicht gesetzt. Bitte in der Codeschmiede unter Anbindungen › Datenbank-Station festlegen."; exit 1
+            fi
+            # Übernahme in EINER Transaktion: Schema, Tabellen und – bei bestehender Datenbank – die vorhandenen Dateien als eingespielt
+            NEU=""; VORHER_OK=nein
+            if [[ "${VORHER:-}" =~ ^[0-9a-f]{40}$ ]] && [ "$VORHER" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$VORHER^{commit}" 2>/dev/null; then
+              NEU=$(git diff --name-only --diff-filter=A "$VORHER" "$COMMIT" -- supabase/migrations/ | xargs -r -n1 basename); VORHER_OK=ja
+            fi
+            {
+              echo "create schema if not exists codeschmiede; revoke all on schema codeschmiede from public;"
+              echo "do \$\$ begin execute 'revoke all on schema codeschmiede from anon, authenticated'; exception when others then null; end \$\$;"
+              echo "create table if not exists codeschmiede.migrationen (datei text primary key, eingespielt timestamptz not null default now(), commit text, art text not null default 'eingespielt', pruefsumme text);"
+              echo "create table if not exists codeschmiede.sicherungen (id bigint generated always as identity primary key, zeit timestamptz not null default now(), commit text, aufbau jsonb);"
+              echo "revoke all on all tables in schema codeschmiede from public;"
+              if [ "${BESTEHEND:-}" = "ja" ]; then
+                for f in "${DATEIEN[@]}"; do grep -qxF "$f" <<< "$NEU" && continue; echo "insert into codeschmiede.migrationen (datei, commit, art) values ('$f', '$COMMIT', 'bestand') on conflict do nothing;"; done
+              fi
+            } > uebernahme.sql
+            if [ "${BESTEHEND:-}" = "ja" ] && [ "$VORHER_OK" != "ja" ]; then
+              echo "::error::Übernahme der bestehenden $ZIEL-Datenbank braucht den bisherigen Stand (sonst würden neue Dateien als eingespielt gelten). Bitte über die Codeschmiede (Live schalten) bzw. per Push auf main starten."; exit 1
+            fi
+            q --single-transaction -f uebernahme.sql > /dev/null 2>fehler.txt || { echo "::error::Übernahme der $ZIEL-Datenbank fehlgeschlagen: $(melde < fehler.txt)"; exit 1; }
+            if [ "${BESTEHEND:-}" = "ja" ]; then
+              :
+              echo "::notice::$ZIEL-Datenbank übernommen (vorhandene Dateien als eingespielt vermerkt)"
+            fi
+          fi
+          declare -A FERTIG=()
+          while IFS='|' read -r d s; do [ -n "$d" ] && FERTIG["$d"]="$s"; done < <(q -c "select datei, coalesce(pruefsumme, '') from codeschmiede.migrationen")
+          OFFEN=()
+          for f in "${DATEIEN[@]}"; do
+            summe=$(sha256sum "supabase/migrations/$f" | cut -c1-64)
+            if [ -n "${FERTIG[$f]+x}" ]; then
+              [ -n "${FERTIG[$f]}" ] && [ "${FERTIG[$f]}" != "$summe" ] && echo "::warning::$f wurde nach dem Einspielen geändert – Änderungen an eingespielten Dateien werden nicht nachgespielt (neue Datei anlegen)"
+              continue
+            fi
+            OFFEN+=("$f")
+          done
+          if [ ${#OFFEN[@]} -eq 0 ]; then echo "::notice::$ZIEL-Datenbank ist aktuell"; exit 0; fi
+          if [ "$ZIEL" = "live" ]; then
+            # Sicherung des Aufbaus (keine Daten) in der Datenbank selbst – nichts davon verlässt die Datenbank
+            q -c "insert into codeschmiede.sicherungen (commit, aufbau) select '$COMMIT', json_build_object(
+                'tabellen', (select json_agg(json_build_object('schema', c.table_schema, 'tabelle', c.table_name, 'spalte', c.column_name, 'typ', c.data_type, 'null', c.is_nullable, 'standard', c.column_default) order by c.table_schema, c.table_name, c.ordinal_position)
+                             from information_schema.columns c where c.table_schema not in ('pg_catalog','information_schema','auth','storage','extensions','graphql','graphql_public','realtime','supabase_functions','supabase_migrations','vault','pgsodium','pgsodium_masks','net','cron','pgbouncer','codeschmiede') and c.table_schema not like 'pg_%'),
+                'regeln', (select json_agg(json_build_object('schema', schemaname, 'tabelle', tablename, 'name', policyname, 'befehl', cmd, 'rollen', roles, 'using', qual, 'check', with_check)) from pg_policies where schemaname not in ('auth','storage','realtime','supabase_functions','vault')),
+                'funktionen', (select json_agg(pg_get_functiondef(p.oid)) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                               where p.prokind = 'f' and n.nspname not in ('pg_catalog','information_schema','auth','storage','extensions','graphql','graphql_public','realtime','supabase_functions','vault','pgsodium','net','cron','pgbouncer','codeschmiede') and n.nspname not like 'pg_%'),
+                'eingespielt', (select json_agg(datei order by datei) from codeschmiede.migrationen))::jsonb" > /dev/null 2>fehler.txt \
+              || { echo "::error::Sicherung des Aufbaus fehlgeschlagen – nichts eingespielt: $(melde < fehler.txt)"; exit 1; }
+            echo "::notice::Aufbau der Live-Datenbank gesichert (codeschmiede.sicherungen)"
+          fi
+          for f in "${OFFEN[@]}"; do
+            echo "Spiele ein: $f"
+            summe=$(sha256sum "supabase/migrations/$f" | cut -c1-64)
+            { cat "supabase/migrations/$f"; echo; echo "insert into codeschmiede.migrationen (datei, commit, pruefsumme) values ('$f', '$COMMIT', '$summe') on conflict (datei) do update set eingespielt = now(), commit = excluded.commit, art = 'eingespielt', pruefsumme = excluded.pruefsumme;"; } > einspielen.sql
+            q --single-transaction -f einspielen.sql > /dev/null 2>fehler.txt || { echo "::error::$f konnte nicht in die $ZIEL-Datenbank eingespielt werden (nichts davon übernommen, nichts Weiteres eingespielt): $(melde < fehler.txt)"; exit 1; }
+            echo "::notice::$ZIEL: $f eingespielt"
+          done

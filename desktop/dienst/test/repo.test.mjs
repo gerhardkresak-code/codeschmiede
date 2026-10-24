@@ -33,6 +33,7 @@ test("Grundgerüst je Technik-Art: Code, Abläufe, Platzhalter sicher gefüllt",
     const ziel = await mkdtemp(path.join(os.tmpdir(), `cs-art-${art}-`));
     const d = await geruestSchreiben(ziel, null, { name: 'Haus"buch <{x}>', repo: "gerhardkresak-code/haushaltsbuch", art });
     assert.ok(d.includes("README-ART.md") && d.includes("package.json"), art);
+    assert.equal(d.includes(".github/workflows/datenbank.yml"), art !== "programm", `${art}: Datenbank-Station`);
     assert.ok(d.some((x) => x.startsWith(".github/workflows/")) && !d.some((x) => x.startsWith("github/")), art);
     const pkg = JSON.parse(await readFile(path.join(ziel, "package.json"), "utf8"));
     assert.equal(pkg.name, "haushaltsbuch");

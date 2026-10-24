@@ -51,6 +51,16 @@ Menüpunkt „Code“: Dateibaum und Dateien je Zweig über eine Werkstatt (nur 
 `ws_code_anfragen`). Bearbeiten nur auf main; Speichern = Auftrag mit `hand = true` und Dateien in `ws_code_aenderungen`. Die Werkstatt schreibt genau
 diese Dateien in den Auftrags-Zweig (Konflikt-Prüfung je Datei gegen den Ausgangsstand), Commit, Push, Pull Request – danach der normale Weg.
 
+### Datenbank-Station (seit 0.9.1)
+| Zweig | Datenbank | Wann |
+|---|---|---|
+| main | Test (`db_test_ref`) | automatisch nach dem Zusammenführen |
+| live | Live (`db_live_ref`) | beim Live-Schalten (nach Freigabe), vorher Sicherung des Aufbaus |
+Ablauf `.github/workflows/datenbank.yml` (Vorlage `desktop/dienst/vorlagen/_datenbank/`), Buchführung je Datenbank in `codeschmiede.migrationen`,
+Sicherungen in `codeschmiede.sicherungen` (Schema ohne Zugriff für anon/authenticated). Zugang: GitHub-Umgebungen „test“/„live“ mit Zweig-Regel und
+Geheimnis `SUPABASE_DB_URL` (Session pooler, nur diese Datenbank); Variable `BESTEHEND` je Umgebung. Live startet die Werkstatt nach dem Live-Schalten.
+Zurück auf eine ältere Version setzt nur den Code zurück; die Datenbank bleibt (Sperre, wenn die Version nicht zur Datenbank passt).
+
 ## Rollen und Rechte
 | Rolle | Aufträge | Freigeben / Erlauben | Löschen | Claude | GitHub |
 |---|---|---|---|---|---|

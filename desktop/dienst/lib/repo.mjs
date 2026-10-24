@@ -88,6 +88,12 @@ export async function geruestSchreiben(ziel, vorlageOrdner, { name, repo, beschr
   if (art) {
     if (!ARTEN.includes(art)) throw new Error("Unbekannte Projekt-Art");
     await ordnerKopieren(ziel, path.join(artOrdner, art), werte, geschrieben);
+    // Datenbank-Station (main → Test-Datenbank, live → Live-Datenbank nach Freigabe) für alles außer Programmen
+    if (art !== "programm") {
+      await mkdir(path.join(ziel, ".github", "workflows"), { recursive: true });
+      await copyFile(path.join(artOrdner, "_datenbank", "datenbank.yml"), path.join(ziel, ".github", "workflows", "datenbank.yml"));
+      if (!geschrieben.includes(".github/workflows/datenbank.yml")) geschrieben.push(".github/workflows/datenbank.yml");
+    }
   }
   const datum = heute.toISOString().slice(0, 10);
   const extra = {
