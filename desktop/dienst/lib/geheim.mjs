@@ -25,7 +25,7 @@ const ABRUF = /^(?:omit|include|same-origin)$/i;
 function nurSchalter(name, wert) {
   let w = wert.replace(/^\\(["'])(.*)\\\1$/, "$1$2$1");
   if (/^(["']).*\1$/.test(w)) w = w.slice(1, -1);
-  else w = w.replace(/[,;})\]]$/, "");
+  else w = w.replace(/[,;})\]`]$/, "");
   return SCHALTER.test(w) || (/credentials$/i.test(name) && ABRUF.test(w));
 }
 

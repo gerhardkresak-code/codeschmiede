@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { dbEinrichten, dbAmpel, dbOffen, dbLiveEinspielen, ABLAUF_PFAD } from "../lib/datenbank.mjs";
+import { dbEinrichten, dbAmpel, dbOffen, dbLiveEinspielen, ABLAUF_PFAD, CHANGELOG_PFAD, changelogZeile } from "../lib/datenbank.mjs";
 
 const run = promisify(execFile);
 const git = async (cwd, ...a) => (await run("git", a, { cwd })).stdout.trim();
@@ -23,7 +23,7 @@ test("Einrichten: Umgebungen nur für ihren Zweig, Auftrag nur wenn Ablauf fehlt
   const projekt = { repo: "o/app", db_test_ref: "abcdefghijabcdefghij", db_live_ref: null, db_test_bestehend: true, db_live_bestehend: false };
   let t = await dbEinrichten({ sh: sh(null, false, "7\tfeature/*\tbranch\n"), projekt, vorlage: "ABLAUF", auftragAnlegen: async (d) => { auftrag = d; return 42; } });
   assert.match(t, /Auftrag #42/); assert.match(t, /SUPABASE_DB_URL in „test“/);
-  assert.deepEqual(auftrag, { pfad: ABLAUF_PFAD, inhalt: "ABLAUF", basis_blob: "", basis_sha: "c".repeat(40) });
+  assert.deepEqual(auftrag, { dateien: [{ pfad: ABLAUF_PFAD, inhalt: "ABLAUF", basis_blob: "" }], basis_sha: "c".repeat(40) });
   assert.ok(aufrufe.some((x) => x.startsWith("api -X PUT repos/o/app/environments/test")));
   assert.ok(aufrufe.includes("api -X DELETE repos/o/app/environments/test/deployment-branch-policies/7"), "fremde Zweig-Regel entfernt");
   assert.ok(aufrufe.includes("api -X POST repos/o/app/environments/test/deployment-branch-policies -f name=main -f type=branch"));
@@ -91,4 +91,66 @@ test("Abläufe zwischen live und main geändert", async () => {
   await writeFile(path.join(d, ".github/workflows/a.yml"), "b"); await git(d, "add", "-A"); await c("b");
   assert.equal(await ablaeufeGeaendert(git, d), true);
   await rm(d, { recursive: true, force: true });
+});
+
+test("Einrichten nimmt eine Zeile ins Änderungsprotokoll mit (sonst lehnt die Sicherheitsprüfung ab)", async () => {
+  const log = "# Protokoll\n\n| Version | Datum | Wer | Was |\n|---|---|---|---|\n| 1.0 | 2026-01-01 | X | Alt |\n";
+  const neu = changelogZeile(log, "2026-10-24");
+  const z = neu.split("\n");
+  assert.equal(z[4].startsWith("| – (Datenbank-Station) | 2026-10-24 | Codeschmiede"), true);
+  assert.equal((z[4].match(/\|/g) || []).length, 5);
+  assert.equal(z[5], "| 1.0 | 2026-01-01 | X | Alt |");
+  assert.equal(changelogZeile("ohne Tabelle"), null);
+  assert.ok(changelogZeile(log.replace(/\n/g, "\r\n"), "2026-10-24").split("\r\n")[4].startsWith("| – (Datenbank-Station)"), "CRLF bleibt CRLF");
+  let auftrag = null;
+  const sh = async (b, a) => {
+    if (a[0] === "api" && a[1].includes("/contents/.github")) throw new Error("HTTP 404");
+    if (a[0] === "api" && a[1].includes("/contents/docs/CHANGELOG.md")) return { stdout: `${"d".repeat(40)}\t${Buffer.from(log).toString("base64")}\n` };
+    if (a[0] === "api" && a[1].endsWith("git/ref/heads/main")) return { stdout: "c".repeat(40) };
+    if (a[0] === "secret") return { stdout: "SUPABASE_DB_URL\n" };
+    return { stdout: "" };
+  };
+  await dbEinrichten({ sh, projekt: { repo: "o/app", db_test_ref: "abcdefghijabcdefghij", db_live_ref: null, db_test_bestehend: true }, vorlage: "ABLAUF", auftragAnlegen: async (d) => { auftrag = d; return 7; } });
+  assert.deepEqual(auftrag.dateien.map((d) => d.pfad), [ABLAUF_PFAD, CHANGELOG_PFAD]);
+  assert.equal(auftrag.dateien[1].basis_blob, "d".repeat(40));
+  assert.match(auftrag.dateien[1].inhalt, /Datenbank-Station/);
+});
+
+test("Einrichten: Änderungsprotokoll mit vermeintlichem Geheimnis wird weggelassen statt den Auftrag zu kippen", async () => {
+  const log = "| Version | Datum | Wer | Was |\n|---|---|---|---|\n| 1 | 2026 | X | password=Geheim12345 |\n";
+  let auftrag = null;
+  const sh = async (b, a) => {
+    if (a[0] === "api" && a[1].includes("/contents/.github")) throw new Error("HTTP 404");
+    if (a[0] === "api" && a[1].includes("/contents/docs/CHANGELOG.md")) return { stdout: `${"d".repeat(40)}\t${Buffer.from(log).toString("base64")}\n` };
+    if (a[0] === "api" && a[1].endsWith("git/ref/heads/main")) return { stdout: "c".repeat(40) };
+    if (a[0] === "secret") return { stdout: "SUPABASE_DB_URL\n" };
+    return { stdout: "" };
+  };
+  const t = await dbEinrichten({ sh, projekt: { repo: "o/app", db_test_ref: "abcdefghijabcdefghij", db_live_ref: null, db_test_bestehend: true }, vorlage: "ABLAUF", auftragAnlegen: async (d) => { auftrag = d; return 8; } });
+  assert.deepEqual(auftrag.dateien.map((d) => d.pfad), [ABLAUF_PFAD]);
+  assert.match(t, /Änderungsprotokoll/);
+});
+
+test("Vorlage: melde() läuft in bash und gibt keine Werte aus", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const yml = await readFile(new URL("../vorlagen/_datenbank/datenbank.yml", import.meta.url), "utf8");
+  const zeile = yml.split("\n").find((z) => z.trim().startsWith("melde() {")).trim();
+  const probe = async (eingabe) => {
+    const { spawn } = await import("node:child_process");
+    return new Promise((ok, nein) => {
+      const k = spawn("bash", ["-c", `set -euo pipefail\n${zeile}\nx=$(melde); printf '%s' "$x"`]);
+      let out = "", err = "";
+      k.stdout.on("data", (d) => (out += d)); k.stderr.on("data", (d) => (err += d));
+      k.on("close", (c) => (c === 0 && !err ? ok(out) : nein(new Error(`Exit ${c}: ${err}`))));
+      k.stdin.end(eingabe);
+    });
+  };
+  const a = await probe('psql:e.sql:3: ERROR:  duplicate key value violates unique constraint "kinder_email"\nDETAIL:  Key (email)=(max@x.de) already exists.\nLINE 3: values (\'Max\')\n        ^\n');
+  assert.match(a, /duplicate key value/); assert.doesNotMatch(a, /max@x\.de|kinder_email|Max/);
+  const b = await probe("psql: error: connection to server at \"db.example\" (3.120.12.4), port 5432 failed: value too long: 'max@x.de'\n");
+  assert.match(b, /connection to server/); assert.doesNotMatch(b, /3\.120|max@x|db\.example/);
+  const c = await probe('ERROR:  syntax error at or near "\'secret\n');
+  assert.match(c, /syntax error/); assert.doesNotMatch(c, /secret/);
+  assert.equal(await probe("DETAIL: nur das\n"), "");
+  assert.ok((await probe("ERROR: " + "x".repeat(5000) + "\n")).length <= 600);
 });
