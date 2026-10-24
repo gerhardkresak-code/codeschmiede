@@ -46,6 +46,11 @@ stellt beim ersten Auftrag eines neuen Projekts zuerst ihre Fragen (Pflicht-Star
 | Werkzeug | Node mit Tests, Ablauf „Lauf“ (per Knopf / Zeitplan) | Testlauf in GitHub mit Ergebnis-Datei | Zeitplan im Ablauf |
 Die Ampel („Anbindungen“) prüft die Werkstatt des Admins nur lesend über GitHub; kein Projekt-Code läuft auf dem Admin-PC.
 
+### Code-Editor (seit 0.9.0)
+Menüpunkt „Code“: Dateibaum und Dateien je Zweig über eine Werkstatt (nur lesen aus dem Abgleich-Klon; Inhalte liegen höchstens eine Stunde in
+`ws_code_anfragen`). Bearbeiten nur auf main; Speichern = Auftrag mit `hand = true` und Dateien in `ws_code_aenderungen`. Die Werkstatt schreibt genau
+diese Dateien in den Auftrags-Zweig (Konflikt-Prüfung je Datei gegen den Ausgangsstand), Commit, Push, Pull Request – danach der normale Weg.
+
 ## Rollen und Rechte
 | Rolle | Aufträge | Freigeben / Erlauben | Löschen | Claude | GitHub |
 |---|---|---|---|---|---|

@@ -1,0 +1,218 @@
+<title>Code-Editor Entwurf</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #0b1512; --panel: #0f1d19; --panel2: #13241f; --line: #1f3530; --fg: #e3efeb; --muted: #8fa8a0;
+  --accent: #10b981; --accent-d: #047857; --accent-s: rgba(16,185,129,.14); --warn: #f59e0b; --warn-s: rgba(245,158,11,.14);
+  --plus: rgba(16,185,129,.16); --minus: rgba(239,68,68,.16); --rot: #f87171;
+  --display: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance }
+h1 { font-size: 1.7rem } h2 { font-size: 1.2rem } p { margin: 0 }
+.wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: .78rem; color: var(--muted) }
+.lead { color: var(--muted); max-width: 80ch }
+svg.i { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none }
+.app { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); overflow: hidden; display: flex; flex-direction: column; min-height: 640px }
+.leiste { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line) }
+select, .knopf, input.such { font: inherit; font-size: .9rem; color: var(--fg); background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px }
+.knopf { cursor: pointer; display: inline-flex; gap: 6px; align-items: center }
+.knopf.voll { background: var(--accent-d); border-color: var(--accent-d); color: #fff; font-weight: 600 }
+.knopf:disabled { opacity: .45; cursor: default }
+.knopf:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.ab { flex: 1 }
+.koerper { display: grid; grid-template-columns: 240px minmax(0,1fr) 300px; flex: 1; min-height: 0 }
+.baum { border-right: 1px solid var(--line); padding: 8px; overflow: auto; font-size: .88rem }
+.baum button { display: flex; width: 100%; gap: 6px; align-items: center; background: none; border: 0; color: var(--muted); font: inherit; padding: 4px 6px; border-radius: 6px; cursor: pointer; text-align: left }
+.baum button:hover { background: var(--panel2) }
+.baum button.an { background: var(--accent-s); color: var(--fg) }
+.baum button .geaendert { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--warn) }
+.baum .ordner { color: #6f8a82; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; padding: 8px 6px 2px }
+.baum .gesperrt { opacity: .55; cursor: not-allowed }
+.mitte { display: flex; flex-direction: column; min-width: 0; min-height: 0 }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 6px 8px 0; overflow-x: auto }
+.tabs button { font: inherit; font-size: .84rem; background: var(--panel2); color: var(--muted); border: 1px solid var(--line); border-bottom: 0; border-radius: 8px 8px 0 0; padding: 5px 10px; display: inline-flex; gap: 6px; align-items: center; cursor: pointer; white-space: nowrap }
+.tabs button.an { background: #0a1613; color: var(--fg) }
+.tabs .punkt { width: 7px; height: 7px; border-radius: 50%; background: var(--warn) }
+.editor { flex: 1; display: grid; grid-template-columns: 52px minmax(0,1fr); background: #0a1613; min-height: 380px; position: relative }
+.zeilen { font-family: var(--mono); font-size: 13px; line-height: 20px; color: #4d6a62; text-align: right; padding: 10px 10px 10px 0; user-select: none; overflow: hidden; white-space: pre }
+textarea.code { font-family: var(--mono); font-size: 13px; line-height: 20px; color: #d4e7e1; background: transparent; border: 0; resize: none; padding: 10px 12px; white-space: pre; overflow: auto; tab-size: 2; width: 100%; height: 100% }
+textarea.code[readonly] { color: #a9c0b9 }
+.statuszeile { display: flex; flex-wrap: wrap; gap: 12px; padding: 6px 12px; font-size: .78rem; color: var(--muted); border-top: 1px solid var(--line) }
+.rechts { border-left: 1px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 12px; overflow: auto; min-width: 0 }
+.rechts h3 { font-size: 1rem }
+.diff { font-family: var(--mono); font-size: 12px; line-height: 18px; background: #0a1613; border: 1px solid var(--line); border-radius: 9px; padding: 6px 0; overflow-x: auto; white-space: pre }
+.diff div { padding: 0 8px }
+.diff .p { background: var(--plus); color: #a7f3d0 }
+.diff .m { background: var(--minus); color: #fecaca }
+.diff .k { color: #5f7d75 }
+.leer { color: var(--muted); font-size: .88rem }
+.hinweis { border: 1px solid #5b4310; background: var(--warn-s); color: #fcd9a0; border-radius: 10px; padding: 8px 10px; font-size: .84rem; display: flex; gap: 8px }
+.ok { border-color: var(--accent-d); background: var(--accent-s); color: #a7f3d0 }
+.dialog { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; z-index: 5 }
+.dialog > div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; width: min(560px, 100%); display: flex; flex-direction: column; gap: 12px }
+.feld { display: flex; flex-direction: column; gap: 5px; font-size: .86rem; color: var(--muted) }
+.feld input, .feld textarea, .feld select { font: inherit; color: var(--fg); background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px }
+.ablauf { display: flex; flex-wrap: wrap; gap: 6px; font-size: .78rem }
+.ablauf span { border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; color: var(--muted) }
+.ablauf span.an { border-color: var(--accent-d); color: var(--accent); background: var(--accent-s) }
+.rolle { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden }
+.rolle button { font: inherit; font-size: .82rem; background: var(--panel2); color: var(--muted); border: 0; padding: 5px 10px; cursor: pointer }
+.rolle button.an { background: var(--accent-d); color: #fff }
+.karte { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 8px }
+.karte ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px }
+@media (max-width: 1000px) { .koerper { grid-template-columns: 200px minmax(0,1fr) } .rechts { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line) } }
+@media (max-width: 640px) { .koerper { grid-template-columns: minmax(0,1fr) } .baum { border-right: 0; border-bottom: 1px solid var(--line); max-height: 180px } }
+</style>
+
+<div class="wrap">
+  <div style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:baseline">
+    <h1>Code – ansehen und von Hand ändern</h1><span class="chip">Entwurf 1.0 · Codeschmiede</span>
+  </div>
+  <p class="lead">Zum Durchklicken: Neuer Menüpunkt „Code“. Links die Dateien des gewählten Zweigs, in der Mitte der Editor, rechts deine Änderungen. „Als Auftrag speichern“ macht daraus einen Auftrag mit eigenem Zweig, Prüfungen und Freigabe – wie jeder andere Auftrag. Probier die Rolle oben rechts um: Leser und Texter sehen nur.</p>
+
+  <section class="app" aria-label="Code-Editor">
+    <div class="leiste">
+      <svg class="i" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg><b>Code</b>
+      <select aria-label="Zweig" id="zweig"><option>main (Testfassung)</option><option>live</option><option>auftrag/58-kalender-farben</option></select>
+      <input class="such" placeholder="Datei suchen …" aria-label="Datei suchen" id="such" style="width:180px">
+      <span class="ab"></span>
+      <span class="rolle" role="group" aria-label="Rolle zum Ausprobieren"><button class="an" data-r="admin">Admin</button><button data-r="entwickler">Entwickler</button><button data-r="leser">Leser/Texter</button></span>
+    </div>
+    <div class="koerper">
+      <nav class="baum" id="baum" aria-label="Dateien"></nav>
+      <div class="mitte">
+        <div class="tabs" id="tabs" role="tablist"></div>
+        <div class="editor"><div class="zeilen" id="zeilen" aria-hidden="true"></div><textarea class="code" id="code" spellcheck="false" aria-label="Datei-Inhalt"></textarea></div>
+        <div class="statuszeile" id="status"></div>
+      </div>
+      <aside class="rechts">
+        <h3>Deine Änderungen</h3>
+        <div id="aenderungen"></div>
+        <button class="knopf voll" id="speichern" disabled><svg class="i" viewBox="0 0 24 24"><path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9"/></svg>Als Auftrag speichern</button>
+        <button class="knopf" id="verwerfen" disabled>Alle verwerfen</button>
+        <div class="hinweis" id="rolleHinweis" hidden></div>
+        <p class="leer" style="font-size:.8rem">Entwürfe bleiben auf diesem PC, bis du speicherst oder verwirfst. Geheime Dateien (.env, Schlüssel) sind gesperrt.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="karte">
+    <h2>So läuft eine Hand-Änderung</h2>
+    <div class="ablauf"><span class="an">1 · Ändern im Editor</span><span class="an">2 · Als Auftrag speichern</span><span>3 · Werkstatt: eigener Zweig + Commit</span><span>4 · Prüfungen (Test, Build)</span><span>5 · Sicherheitsprüfung</span><span>6 · Freigabe</span><span>7 · Zusammenführen</span></div>
+    <ul class="lead">
+      <li>Gespeichert wird nie direkt in main – immer über Zweig und Pull Request, wie bei Claude.</li>
+      <li>Basis ist der Stand, den du geöffnet hast. Hat sich die Datei inzwischen geändert, warnt die Codeschmiede vor dem Speichern.</li>
+      <li>Dateien bis 512 KB, nur Text. Bilder und große Dateien siehst du als Hinweis statt Inhalt.</li>
+      <li>Wer ändern darf: Admin und Entwickler mit Auftrags-Recht im Bereich der gewählten Gruppe. Texter und Leser sehen nur.</li>
+    </ul>
+  </section>
+</div>
+
+<div class="dialog" id="dlg" hidden>
+  <div role="dialog" aria-modal="true" aria-label="Als Auftrag speichern">
+    <h2>Als Auftrag speichern</h2>
+    <label class="feld">Titel<input id="titel" value="Kalender: Wochenstart Montag"></label>
+    <label class="feld">Gruppe<select><option>Spielbetrieb · Kalender</option><option>Plattform · Einstellungen</option></select></label>
+    <label class="feld">Was und warum (optional)<textarea rows="3">Woche beginnt in Österreich am Montag.</textarea></label>
+    <p class="leer" id="dlgDateien"></p>
+    <div class="hinweis ok"><svg class="i" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span>Die Werkstatt legt den Zweig an, übernimmt genau deine Änderung und startet die Prüfungen. Danach siehst du den Auftrag in der Zentrale.</span></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px"><button class="knopf" id="abbrechen">Abbrechen</button><button class="knopf voll" id="los">Auftrag anlegen</button></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var DATEIEN = {
+    "src/lib/kalender.js": "// Kalender-Hilfen\nexport function wochenstart(datum) {\n  const d = new Date(datum);\n  const tag = d.getDay(); // 0 = Sonntag\n  d.setDate(d.getDate() - tag);\n  return d;\n}\n\nexport function istWochenende(datum) {\n  const t = new Date(datum).getDay();\n  return t === 0 || t === 6;\n}\n",
+    "src/pages/Calendar.jsx": "import { wochenstart } from \"../lib/kalender\";\n\nexport default function Calendar() {\n  const start = wochenstart(new Date());\n  return <h1>Woche ab {start.toLocaleDateString(\"de-AT\")}</h1>;\n}\n",
+    "README.md": "# Trainer to go\n\nVereins- und Trainer-App für den Nachwuchsfußball.\n",
+    "docs/CHANGELOG.md": "# Änderungsprotokoll\n\n| Version | Datum | Wer | Was |\n|---|---|---|---|\n",
+    ".env": null, "public/logo.png": false
+  };
+  var ORDNER = [["src/lib", ["src/lib/kalender.js"]], ["src/pages", ["src/pages/Calendar.jsx"]], ["docs", ["docs/CHANGELOG.md"]], ["", ["README.md", ".env", "public/logo.png"]]];
+  var entwurf = {}, offen = ["src/lib/kalender.js"], aktiv = "src/lib/kalender.js", rolle = "admin";
+  var $ = function (s) { return document.querySelector(s); };
+  var darf = function () { return rolle !== "leser"; };
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function inhalt(p) { return p in entwurf ? entwurf[p] : DATEIEN[p]; }
+  function geaendert() { return Object.keys(entwurf).filter(function (p) { return entwurf[p] !== DATEIEN[p]; }); }
+
+  function baum() {
+    var q = ($("#such").value || "").toLowerCase(), h = "";
+    ORDNER.forEach(function (o) {
+      var f = o[1].filter(function (p) { return !q || p.toLowerCase().indexOf(q) >= 0; });
+      if (!f.length) return;
+      if (o[0]) h += "<div class='ordner'>" + esc(o[0]) + "</div>";
+      f.forEach(function (p) {
+        var gesperrt = DATEIEN[p] === null, bild = DATEIEN[p] === false;
+        h += "<button data-p='" + esc(p) + "' class='" + (p === aktiv ? "an " : "") + (gesperrt ? "gesperrt" : "") + "'" + (gesperrt ? " title='Geheime Datei – gesperrt'" : "") + ">" +
+          (gesperrt ? "<svg class='i' viewBox='0 0 24 24'><rect x='3' y='11' width='18' height='11' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>" : "<svg class='i' viewBox='0 0 24 24'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg>") +
+          esc(p.split("/").pop()) + (geaendert().indexOf(p) >= 0 ? "<span class='geaendert' title='geändert'></span>" : "") + (bild ? "<span class='geaendert' style='background:#3c524c' title='Bild'></span>" : "") + "</button>";
+      });
+    });
+    $("#baum").innerHTML = h || "<p class='leer'>Keine Datei gefunden</p>";
+    Array.prototype.forEach.call(document.querySelectorAll("#baum button"), function (b) {
+      b.addEventListener("click", function () { var p = b.getAttribute("data-p"); if (DATEIEN[p] === null) return; if (offen.indexOf(p) < 0) offen.push(p); aktiv = p; alles(); });
+    });
+  }
+  function tabs() {
+    $("#tabs").innerHTML = offen.map(function (p) {
+      return "<button role='tab' aria-selected='" + (p === aktiv) + "' data-p='" + esc(p) + "' class='" + (p === aktiv ? "an" : "") + "'>" + esc(p.split("/").pop()) + (geaendert().indexOf(p) >= 0 ? "<span class='punkt'></span>" : "") + "</button>";
+    }).join("");
+    Array.prototype.forEach.call(document.querySelectorAll("#tabs button"), function (b) { b.addEventListener("click", function () { aktiv = b.getAttribute("data-p"); alles(); }); });
+  }
+  function editor() {
+    var t = $("#code"), v = inhalt(aktiv);
+    if (v === false) { t.value = "Bild (public/logo.png, 24 KB) – Bilder werden nicht im Editor geändert.\nNeues Bild: als Auftrag mit Anhang."; t.readOnly = true; }
+    else { t.value = v; t.readOnly = !darf(); }
+    zeilen();
+    $("#status").innerHTML = "<span>" + esc(aktiv) + "</span><span>" + $("#zweig").value.split(" ")[0] + " · Stand a3f9c21</span><span>" + (t.readOnly ? "nur ansehen" : "bearbeitbar") + "</span><span>" + (/\.jsx?$/.test(aktiv) ? "JavaScript" : /\.md$/.test(aktiv) ? "Markdown" : "Text") + "</span>";
+  }
+  function zeilen() { var n = $("#code").value.split("\n").length; var s = ""; for (var i = 1; i <= n; i++) s += i + "\n"; $("#zeilen").textContent = s; }
+  function diffText(alt, neu) {
+    var a = alt.split("\n"), b = neu.split("\n"), out = [], i = 0, j = 0;
+    while (i < a.length || j < b.length) {
+      if (i < a.length && j < b.length && a[i] === b[j]) { out.push(["k", "  " + a[i]]); i++; j++; }
+      else if (j < b.length && a.indexOf(b[j], i) < 0) { out.push(["p", "+ " + b[j]]); j++; }
+      else if (i < a.length) { out.push(["m", "- " + a[i]]); i++; }
+      else { out.push(["p", "+ " + b[j]]); j++; }
+    }
+    // nur geänderte Zeilen mit je einer Zeile Umgebung
+    return out.filter(function (z, k) { return z[0] !== "k" || (out[k - 1] && out[k - 1][0] !== "k") || (out[k + 1] && out[k + 1][0] !== "k"); });
+  }
+  function rechts() {
+    var g = geaendert();
+    $("#aenderungen").innerHTML = g.length ? g.map(function (p) {
+      return "<p style='font-size:.85rem;margin:6px 0 4px'><b>" + esc(p) + "</b></p><div class='diff'>" + diffText(DATEIEN[p], entwurf[p]).map(function (z) { return "<div class='" + z[0] + "'>" + esc(z[1]) + "</div>"; }).join("") + "</div>";
+    }).join("") : "<p class='leer'>Noch nichts geändert. Tipp: in kalender.js „- tag“ durch „- ((tag + 6) % 7)“ ersetzen.</p>";
+    $("#speichern").disabled = !g.length || !darf(); $("#verwerfen").disabled = !g.length || !darf();
+    var h = $("#rolleHinweis");
+    h.hidden = rolle === "admin";
+    h.innerHTML = rolle === "leser" ? "<svg class='i' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10'/><path d='M12 8v4M12 16h.01'/></svg><span>Als Leser oder Texter siehst du den Code nur.</span>"
+      : "<svg class='i' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10'/><path d='M12 8v4M12 16h.01'/></svg><span>Als Entwickler speicherst du nur in Gruppen, in denen du Aufträge geben darfst.</span>";
+  }
+  function alles() { baum(); tabs(); editor(); rechts(); }
+  $("#code").addEventListener("input", function () { if (inhalt(aktiv) === false) return; entwurf[aktiv] = $("#code").value; zeilen(); baum(); tabs(); rechts(); });
+  $("#code").addEventListener("scroll", function () { $("#zeilen").scrollTop = $("#code").scrollTop; });
+  $("#code").addEventListener("keydown", function (e) { if (e.key === "Tab" && !$("#code").readOnly) { e.preventDefault(); var t = e.target, s = t.selectionStart; t.setRangeText("  ", s, t.selectionEnd, "end"); t.dispatchEvent(new Event("input")); } });
+  $("#such").addEventListener("input", baum);
+  $("#zweig").addEventListener("change", editor);
+  $("#verwerfen").addEventListener("click", function () { entwurf = {}; alles(); });
+  $("#speichern").addEventListener("click", function () { $("#dlgDateien").textContent = "Geänderte Dateien: " + geaendert().join(", "); $("#dlg").hidden = false; $("#titel").focus(); });
+  $("#abbrechen").addEventListener("click", function () { $("#dlg").hidden = true; });
+  $("#los").addEventListener("click", function () { $("#dlg").hidden = true; entwurf = {}; alles(); $("#aenderungen").innerHTML = "<div class='hinweis ok'><svg class='i' viewBox='0 0 24 24'><path d='M20 6 9 17l-5-5'/></svg><span>Auftrag #61 angelegt – die Werkstatt erstellt den Zweig und startet die Prüfungen.</span></div>"; });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") $("#dlg").hidden = true; });
+  Array.prototype.forEach.call(document.querySelectorAll(".rolle button"), function (b) {
+    b.addEventListener("click", function () { rolle = b.getAttribute("data-r"); Array.prototype.forEach.call(document.querySelectorAll(".rolle button"), function (x) { x.classList.toggle("an", x === b); }); alles(); });
+  });
+  alles();
+})();
+</script>

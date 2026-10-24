@@ -31,6 +31,7 @@ import { bildAusDataUrl, markePrompt, markeAntwort } from "./lib/marke.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen, codexBauen, codexLimits } from "./lib/ki.mjs";
 import { uebernehmen, prText } from "./lib/ersatz.mjs";
 import { ampelPruefen, sandboxStarten, testlaufStarten } from "./lib/anbindungen.mjs";
+import { zweigStand, codeBaum, codeDatei, handSchreiben } from "./lib/code.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -301,7 +302,8 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
       : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature), await holeWissen(projekt.id));
 
     let r;
-    if (ersatz) r = await ersatzBau({ auftrag, projekt, ordner, zweig, prompt, signal: abort.signal });
+    if (auftrag.hand && !fortsetzen && !nacharbeit) r = await handBau({ auftrag, projekt, ordner, zweig });
+    else if (ersatz) r = await ersatzBau({ auftrag, projekt, ordner, zweig, prompt, signal: abort.signal });
     else {
     // Erlaubnis-Brücke (MCP) für Werkzeuge außerhalb der freigegebenen Liste
     const mcp = { mcpServers: { werkstatt: { command: process.execPath, args: [path.join(HIER, "erlaubnis-mcp.mjs")], env: {
@@ -370,8 +372,9 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
       await nachricht(auftrag.id, "ergebnis", r.text || "Fertig.");
       // Bauen & Tests selbst auf diesem PC (Ersatz, solange GitHub nicht prüfen kann – Entscheidung Gerhard 20:36)
       // Ersatz-Bau: KEINE lokale Prüfung (sonst liefe der Code des Ersatzes ohne Sandbox auf diesem PC, Prüfung 0.8.6 R3) – geprüft wird in der Cloud
-      if (!r.ersatz) await log(auftrag.id, "test", "Bauen & Tests auf diesem PC …");
-      const lokal = r.ersatz ? { ok: true, text: "Übersprungen (Ersatz-Bau) – Bauen & Tests laufen in der Cloud und in der Sicherheitsprüfung" } : await lokalePruefung(ordner);
+      if (!r.ersatz && !r.hand) await log(auftrag.id, "test", "Bauen & Tests auf diesem PC …");
+      const lokal = r.ersatz ? { ok: true, text: "Übersprungen (Ersatz-Bau) – Bauen & Tests laufen in der Cloud und in der Sicherheitsprüfung" }
+        : r.hand ? { ok: true, text: "Übersprungen (Hand-Änderung) – Bauen & Tests laufen in GitHub und in der Sicherheitsprüfung" } : await lokalePruefung(ordner);
       const { data: jetzt } = await db.from("ws_auftraege").select("pruefung").eq("id", auftrag.id).single();
       const pruefung = { ...(jetzt?.pruefung || {}), lokal: { ergebnis: lokal.ok ? "gruen" : "rot", befund: lokal.text, zeit: new Date().toISOString(), pc: cfg.pc_name } };
       if (lokal.ok) {
@@ -407,6 +410,61 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
   } finally {
     laeuft = null;
   }
+}
+
+// ---------- Hand-Änderung aus dem Code-Editor (Datenbank 0031) ----------
+// Schreibt genau die gespeicherten Dateien in den Auftrags-Zweig (von main), Commit, Push, Pull Request. Kein Claude, kein Projekt-Code.
+async function handBau({ auftrag, projekt, ordner, zweig }) {
+  const { data: aend, error } = await db.from("ws_code_aenderungen").select("pfad, inhalt, basis_blob").eq("auftrag_id", auftrag.id).order("id");
+  if (error) throw error;
+  if (!aend?.length) throw new Error("Zu dieser Hand-Änderung sind keine Dateien gespeichert");
+  await log(auftrag.id, "info", `Hand-Änderung: ${aend.length} Datei(en) werden übernommen`);
+  const { data: von } = await db.from("ws_benutzer").select("name").eq("id", auftrag.erstellt_von).maybeSingle();
+  const w = await handSchreiben(gitSicher, ordner, "origin/main", aend);
+  if (!w.ok) return { art: "frage", text: `Seit dem Öffnen im Code-Editor hat sich in main geändert: ${w.konflikte.join(", ")}.\nBitte die Datei(en) im Code-Editor neu öffnen, die Änderung nochmal machen und speichern – diesen Auftrag dann abbrechen.` };
+  await log(auftrag.id, "aendern", `Übernommen: ${w.dateien.join(", ")}`.slice(0, 480));
+  await gitSicher(ordner, "add", "--", ...w.dateien);
+  const st = await gitSicher(ordner, "status", "--porcelain");
+  if (!st.trim()) return { art: "antwort", text: "Die gespeicherte Änderung ist identisch mit main – nichts zu tun." };
+  const name = String(von?.name || "Codeschmiede").replace(/[^\p{L}\p{N} .-]/gu, "").slice(0, 60) || "Codeschmiede";
+  await gitSicher(ordner, "-c", `user.name=${name} (Code-Editor)`, "-c", "user.email=codeschmiede@trainer-to-go.at", "commit", "-m", `Auftrag #${auftrag.id}: ${String(auftrag.titel || "").replace(/[\r\n]+/g, " ").slice(0, 80)} (Hand-Änderung)`);
+  await gitSicher(ordner, "push", "origin", `HEAD:refs/heads/${zweig}`);
+  const body = `Auftrag #${auftrag.id} – **Hand-Änderung** von ${name} im Code-Editor der Codeschmiede.\n\nDateien: ${w.dateien.map((d) => `\`${d}\``).join(", ")}\n\nPrüfungen und Sicherheitsprüfung wie bei jedem Auftrag.`;
+  const { stdout } = await sh("gh", ["pr", "create", "--repo", projekt.repo, "--head", zweig, "--base", "main", "--title", `#${auftrag.id} ${String(auftrag.titel || "").replace(/[\r\n]+/g, " ").slice(0, 100)}`, "--body", body], { cwd: ordner, timeout: 120000 });
+  const nummer = Number(/\/pull\/(\d+)/.exec(stdout)?.[1]) || null;
+  if (!nummer) throw new Error("Pull Request konnte nicht angelegt werden");
+  return { art: "pr", nummer, hand: true, text: `Hand-Änderung übernommen (${w.dateien.length} Datei(en)) – Pull Request #${nummer}. Prüfungen laufen in GitHub.` };
+}
+
+// Code ansehen: Anfragen beantworten (eigener Takt, auch während ein Auftrag läuft). Nur lesen aus dem Abgleich-Klon.
+let codeLaeuft = false; const codeAbruf = new Map(); let codeAufgeraeumt = 0;
+const gitRoh = async (cwd, ...args) => (await sh("git", args, { cwd, maxBuffer: 2 * 1024 * 1024, encoding: "buffer" })).stdout;
+async function codeArbeit() {
+  if (codeLaeuft || stopp) return;
+  codeLaeuft = true;
+  try {
+    for (let i = 0; i < 5; i++) {
+      const { data, error } = await db.rpc("ws_code_nehmen", { p_pc: pcId });
+      if (error) { if (!/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", ohneGeheimnisse(error.message)); return; }
+      const a = data?.[0]; if (!a) break;
+      const antwort = (w) => db.rpc("ws_code_antwort", { p_pc: pcId, p_id: a.id, p_stand_sha: w.stand_sha || null, p_baum: w.baum || null, p_inhalt: w.inhalt ?? null,
+        p_blob_sha: w.blob_sha || null, p_hinweis: w.hinweis || null, p_nur_lesen: !!w.nur_lesen, p_fehler: !!w.fehler });
+      try {
+        const repo = await abgleichRepo({ id: a.projekt_id, repo: a.repo });
+        const k = `${a.projekt_id}|${a.zweig}`;
+        if (!codeAbruf.has(k) || Date.now() - codeAbruf.get(k) > 30000) {
+          await git(repo, "fetch", "-q", "origin", `+refs/heads/${a.zweig}:refs/heads/${a.zweig}`).catch(() => git(repo, "fetch", "-q", "origin", `+refs/heads/${a.zweig}:refs/heads/${a.zweig}`));
+          codeAbruf.set(k, Date.now());
+        }
+        const stand = await zweigStand(git, repo, a.zweig);
+        if (a.art === "baum") await antwort({ stand_sha: stand, baum: await codeBaum(git, repo, stand) });
+        else await antwort({ stand_sha: stand, ...(await codeDatei(git, gitRoh, repo, stand, a.pfad)) });
+      } catch (e) {
+        await antwort({ fehler: true, hinweis: kuerzen(ohneGeheimnisse(e?.stderr?.toString?.() || e?.message || String(e)), 280) }).catch(() => {});
+      }
+    }
+    if (Date.now() - codeAufgeraeumt > 10 * 60 * 1000) { codeAufgeraeumt = Date.now(); await db.rpc("ws_code_aufraeumen").then(() => {}, () => {}); }
+  } finally { codeLaeuft = false; }
 }
 
 // ---------- Ersatz beim Programmieren (Gerhard 2026-10-23 „Nur als Ersatz“) ----------
@@ -1269,7 +1327,7 @@ async function naechsterAuftrag() {
     if (!darf) continue;
     // Abo-Limit fast voll: nur weiter, wenn der Admin ChatGPT als Ersatz fürs Programmieren eingestellt hat (sonst warten)
     let ersatz = false;
-    if (pause) {
+    if (pause && !a.hand) {   // Hand-Änderungen brauchen kein Claude
       const { data: g } = await db.from("ws_gruppen").select("ws_bereiche!inner(projekt_id)").eq("id", a.gruppe_id).single();
       if (!g || a.art === "text" || !(await ersatzErlaubt(g.ws_bereiche.projekt_id))) { melde("status", "Abo-Limit fast erreicht – Werkstatt wartet bis zur Rücksetzung"); continue; }
       ersatz = true;
@@ -1297,6 +1355,7 @@ async function start() {
   db.from("ws_ki_kopplung").update({ schritt: "fehler", hinweis: "Abgebrochen (Programm wurde beendet) – nochmal „Hinzufügen“ klicken.", einricht_code: null, schritt_zeit: new Date().toISOString() })
     .eq("pc_id", pcId).in("schritt", ["installieren", "anmelden", "pruefen", "bestaetigen"]).then(() => {}, () => {});
   setTimeout(() => kopplungAbgleich(true).catch(() => {}), 5 * 1000); setInterval(kopplung, 30 * 1000);
+  setInterval(() => codeArbeit().catch(() => {}), 2500);   // Code-Editor: Dateibaum und Dateien liefern
   const schleife = async () => {
     try { await naechsterAuftrag(); } catch (e) { melde("fehler", ohneGeheimnisse(e?.message || String(e))); }
     if (!stopp) setTimeout(schleife, 5000);

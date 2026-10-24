@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useStat
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
   Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power,
-  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale, ListChecks, Rocket, Undo2, Pin, FlaskConical, ScanSearch, Plug,
+  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale, ListChecks, Rocket, Undo2, Pin, FlaskConical, ScanSearch, Plug, Code2,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { Markdown } from "./Markdown";
@@ -16,6 +16,7 @@ import Einrichtung, { EinrichtungChip, useEinrichtung } from "./Einrichtung";
 import { MitErwaehnung, erwaehnte, FeatureBezuege } from "./Bezuege";
 import Regelwerk from "./Regelwerk";
 import Anbindungen, { NeuesProjektAssistent } from "./ProjektArten";
+import CodeEditor from "./CodeEditor";
 import { LogoZeichen } from "./Logo";
 import CodeschmiedeZeichen from "./Zeichen";
 const AboLimits = lazy(() => import("./AboLimits"));
@@ -181,7 +182,7 @@ export default function App() {
   if (!sitzung) return <Anmelden />;
   if (!ich) return <EinladungAnnehmen sitzung={sitzung} onFertig={ladeIch} />;
 
-  const nav = [["zentrale", "Auftrags-Zentrale", Inbox], ["erledigen", "Zu erledigen", ListChecks], ["vorschau", "Live-Vorschau", Eye], ["anbindungen", "Anbindungen", Plug], ["designer", "App-Designer", Palette], ["global", "Globale Einstellungen", Globe], ["_", "Ablauf"], ["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen], ["_", "Dokumentation"], ["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["regelwerk", "Regelwerk", Scale], ["_", "Verwaltung"], ["benutzer", "Benutzer & Rechte", KeyRound], ["ki", "KI-Anbieter", Cpu], ["einrichtung", "Einrichtung", Wrench], ["verbrauch", "Verbrauch & Limits", Gauge]];
+  const nav = [["zentrale", "Auftrags-Zentrale", Inbox], ["erledigen", "Zu erledigen", ListChecks], ["vorschau", "Live-Vorschau", Eye], ["anbindungen", "Anbindungen", Plug], ["code", "Code", Code2], ["designer", "App-Designer", Palette], ["global", "Globale Einstellungen", Globe], ["_", "Ablauf"], ["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen], ["_", "Dokumentation"], ["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["regelwerk", "Regelwerk", Scale], ["_", "Verwaltung"], ["benutzer", "Benutzer & Rechte", KeyRound], ["ki", "KI-Anbieter", Cpu], ["einrichtung", "Einrichtung", Wrench], ["verbrauch", "Verbrauch & Limits", Gauge]];
   const offen = daten.auftraege.filter((a) => a.offeneFrage).length;
   const zuTun = daten.projektId ? aufgabenListe(daten, rechteVon(daten, ich)).length : 0;
   const aktuell = daten.projekte.find((p) => p.id === daten.projektId);
@@ -242,6 +243,7 @@ export default function App() {
           : ansicht === "wissen" ? <Wissensdatenbank key={daten.projektId} d={daten} />
           : ansicht === "log" ? <Aenderungsprotokoll key={daten.projektId} d={daten} />
           : ansicht === "doku" ? <Dokumentation key={daten.projektId} d={daten} />
+          : ansicht === "code" ? <CodeEditor key={daten.projektId} d={daten} ich={ich} toast={setToast} onAuftrag={() => setAnsicht("zentrale")} />
           : ansicht === "anbindungen" ? <Anbindungen key={daten.projektId} d={daten} ich={ich} toast={setToast} onVorschau={() => setAnsicht("vorschau")} />
           : ansicht === "vorschau" ? <LiveVorschauSeite key={daten.projektId} d={daten} ich={ich} toast={setToast} />
           : ansicht === "designer" ? <Designer key={daten.projektId} d={daten} ich={ich} toast={setToast} />
