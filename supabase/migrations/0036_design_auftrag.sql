@@ -16,8 +16,11 @@ begin
   if char_length(t) not between 2 and 80 then raise exception 'Name fehlt oder ist zu lang (höchstens 80 Zeichen)'; end if;
   if char_length(x) not between 10 and 8000 then raise exception 'Beschreibung fehlt oder ist zu lang (10 bis 8000 Zeichen)'; end if;
   -- Steuerzeichen (außer Zeilenumbruch und Tabulator) haben im Titel und Text nichts verloren
-  if t ~ '[[:cntrl:]]' or x ~ '[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]' then raise exception 'Ungültige Zeichen'; end if;
-  select design_gruppe_id into g from public.ws_projekte where id = p_projekt;
+  -- dazu C1-Steuerzeichen, Richtungs- und unsichtbare Zeichen (Verschleierung, Prüfung 2026-10-24)
+  if t ~ '[[:cntrl:]\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069\ufeff]'
+     or x ~ '[\x01-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069\ufeff]' then raise exception 'Ungültige Zeichen'; end if;
+  select design_gruppe_id into g from public.ws_projekte where id = p_projekt and not coalesce(archiviert, false);
+  if not found then raise exception 'Projekt nicht gefunden oder archiviert'; end if;
   if g is null then raise exception 'Der App-Designer ist für dieses Projekt noch nicht eingerichtet'; end if;
   t := left(case p_art when 'baustein' then 'Neuer Baustein: ' else 'Neue Kachel für den Seiten-Designer: ' end || t, 80);
   insert into public.ws_auftraege (gruppe_id, titel, art, erstellt_von) values (g, t, 'neu', auth.uid()) returning id into a;

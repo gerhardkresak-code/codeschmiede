@@ -46,6 +46,10 @@ select ws_design_auftrag('trainer-to-go','baustein',repeat('x',81),'Beschreibung
 select ws_design_auftrag('trainer-to-go','feature','Karte','Beschreibung lang genug.');
 select ws_design_auftrag('trainer-to-go','baustein','Kar' || chr(7) || 'te','Beschreibung lang genug.');
 select ws_design_auftrag('gibt-es-nicht','baustein','Karte','Beschreibung lang genug.');
+\echo [3b] Verschleierung: RLO im Namen, unsichtbares Zeichen im Namen, C1-Zeichen im Text -> 3x FEHLER
+select ws_design_auftrag('trainer-to-go','baustein','Kar' || chr(8238) || 'te','Beschreibung lang genug.');
+select ws_design_auftrag('trainer-to-go','baustein','Kar' || chr(8203) || 'te','Beschreibung lang genug.');
+select ws_design_auftrag('trainer-to-go','baustein','Karte','Beschreibung ' || chr(155) || ' lang genug.');
 \echo [4] Fehlschlag legt nichts halb an: weiterhin genau 2 Auftraege von D1 mit je einer Nachricht (2 | 2)
 select count(*) as auftraege, (select count(*) from ws_nachrichten n join ws_auftraege a on a.id = n.auftrag_id where a.erstellt_von = auth.uid()) as nachrichten
   from ws_auftraege where erstellt_von = auth.uid();
@@ -55,4 +59,10 @@ select ws_design_auftrag('trainer-to-go','baustein','Karte','Beschreibung lang g
 reset role;
 \echo [6] Protokoll hat 2 Eintraege design_auftrag
 select count(*) from ws_protokoll where was = 'design_auftrag';
+\echo [7] Archiviertes Projekt -> FEHLER
+update ws_projekte set archiviert = true where id = 'trainer-to-go';
+set role authenticated;
+:D1
+select ws_design_auftrag('trainer-to-go','baustein','Karte','Beschreibung lang genug.');
+reset role;
 rollback;
