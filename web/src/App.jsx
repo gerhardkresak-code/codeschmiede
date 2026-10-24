@@ -841,7 +841,7 @@ function LiveWeg({ d, ich, projekt, toast }) {
       </ol>
       {!projekt.live_zweig ? (
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-3 text-sm">
-          <p><b>Noch ohne Testfassung:</b> Was zusammengeführt und geprüft ist, geht bisher direkt live{projekt.live_url ? ` (${projekt.live_url})` : ""}. Mit <b>Test & Live</b> landet es zuerst auf einer Testadresse und geht erst live, wenn du auf „Live schalten“ klickst. Test und Live nutzen dieselbe Datenbank.</p>
+          <p><b>Noch ohne Testfassung:</b> Was zusammengeführt und geprüft ist, geht bisher direkt live{projekt.live_url ? ` (${projekt.live_url})` : ""}. Mit <b>Test & Live</b> landet es zuerst auf einer Testadresse und geht erst live, wenn du auf „Live schalten“ klickst. {projekt.db_live_ref ? "Datenbank-Änderungen gehen mit dem Live-Schalten in die Live-Datenbank (Datenbank-Station)." : "Test und Live nutzen dieselbe Datenbank (eigene Live-Datenbank: unter „Anbindungen“ › Datenbank-Station)."}</p>
           {!projekt.repo ? <p className="text-slate-500">Zuerst braucht das Projekt ein GitHub-Repository (Projekte verwalten).</p>
             : !admin ? <p className="text-slate-500">Einrichten kann der Admin.</p>
             : !jetzt ? <button type="button" className={`${btn} self-start`} disabled={busy || offen} onClick={() => anfordern("einrichten")}><FlaskConical className="w-4 h-4" />Test & Live einrichten</button>
@@ -862,11 +862,12 @@ function LiveWeg({ d, ich, projekt, toast }) {
             <div className="flex items-center gap-2"><FlaskConical className="w-5 h-5 text-blue-600" /><b className="font-display text-lg">Test</b><span className="text-xs text-slate-500">neuester Hauptstand (main)</span></div>
             {projekt.test_url && <a className="text-sm font-mono text-blue-700 dark:text-blue-300 break-all" href={projekt.test_url} target="_blank" rel="noreferrer">{projekt.test_url.replace(/^https:\/\//, "")}</a>}
             <span className="text-xs text-slate-500">{testStand ? <>Stand <span className="font-mono">{testStand.main_sha.slice(0, 7)}</span> · abgeglichen {fmt(testStand.zeit)}{jetzt?.commit_sha === testStand.main_sha ? " · gleich wie live" : ""}</> : "Stand noch unbekannt – der Abgleich der Werkstatt läuft alle 10 Minuten"}</span>
+            <DbOffen projekt={projekt} />
             <p className="text-sm text-slate-600 dark:text-slate-300">{imTest.length ? <>Neu gegenüber live: {imTest.slice(0, 5).map((f) => f.name).join(" · ")}{imTest.length > 5 ? " …" : ""}</> : "Gleich wie live oder nur kleine Änderungen ohne Feature."}</p>
             <div className="flex gap-2 flex-wrap mt-auto">
               {projekt.test_url && <a className={`${ghost} h-9`} href={projekt.test_url} target="_blank" rel="noreferrer"><ExternalLink className="w-4 h-4" />Testseite öffnen</a>}
               {admin && (frage?.art === "live"
-                ? <span className="flex gap-2 flex-wrap items-center text-sm">Stand {testStand?.main_sha.slice(0, 7)} live schalten? Genau dieser Stand geht live.<button type="button" className={`${btn} h-9 text-sm`} disabled={busy} onClick={() => anfordern("live")}>Ja, live schalten</button><button type="button" className={`${ghost} h-9`} onClick={() => setFrage(null)}>Abbrechen</button></span>
+                ? <span className="flex gap-2 flex-wrap items-center text-sm">Stand {testStand?.main_sha.slice(0, 7)} live schalten? Genau dieser Stand geht live.{projekt.db_live_ref && (projekt.db_offen || []).length ? ` Dabei werden ${projekt.db_offen.length} Datenbank-Änderung(en) in die Live-Datenbank eingespielt – vorher wird ihr Aufbau gesichert.` : ""}<button type="button" className={`${btn} h-9 text-sm`} disabled={busy} onClick={() => anfordern("live")}>Ja, live schalten</button><button type="button" className={`${ghost} h-9`} onClick={() => setFrage(null)}>Abbrechen</button></span>
                 : <button type="button" className={`${btn} h-9 text-sm`} disabled={busy || offen || !testStand || jetzt?.commit_sha === testStand?.main_sha} onClick={() => setFrage({ art: "live" })}><Rocket className="w-4 h-4" />Live schalten</button>)}
             </div>
           </div>
@@ -889,6 +890,20 @@ function LiveWeg({ d, ich, projekt, toast }) {
           </div>
         </div>)}
     </section>);
+}
+
+// Datenbank-Station (0034): Datenbank-Dateien, die auf main liegen, aber noch nicht live sind
+function DbOffen({ projekt }) {
+  const offen = projekt.db_offen || [];
+  if (!offen.length) return null;
+  return (
+    <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/30 p-2.5 text-sm flex flex-col gap-1.5">
+      <b className="text-amber-900 dark:text-amber-200">{offen.length} Datenbank-Änderung{offen.length > 1 ? "en" : ""} {projekt.db_live_ref ? "gehen mit dem Live-Schalten in die Live-Datenbank" : "– Test und Live teilen sich die Datenbank (schon eingespielt)"}</b>
+      {offen.map((o) => (
+        <details key={o.datei} className="text-xs"><summary className="cursor-pointer font-mono">{o.datei}</summary>
+          <pre className="mt-1 max-h-64 overflow-auto rounded bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 font-mono text-[11.5px] whitespace-pre">{o.sql}</pre></details>))}
+      {projekt.db_live_ref && <span className="text-xs text-amber-800 dark:text-amber-300">Vor dem Einspielen sichert der Ablauf „Datenbank“ den Aufbau der Live-Datenbank (90 Tage bei GitHub). Daten werden nicht gelöscht, solange die Dateien es nicht tun – bitte vor dem Live-Schalten durchsehen.</span>}
+    </div>);
 }
 
 // Jetzt unabhängig prüfen: ein Feature, eine Gruppe oder die ganze App (Werkstatt des Admins, nur lesen)

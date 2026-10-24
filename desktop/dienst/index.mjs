@@ -32,6 +32,7 @@ import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopp
 import { uebernehmen, prText } from "./lib/ersatz.mjs";
 import { ampelPruefen, sandboxStarten, testlaufStarten } from "./lib/anbindungen.mjs";
 import { zweigStand, codeBaum, codeDatei, handSchreiben } from "./lib/code.mjs";
+import { dbEinrichten, dbAmpel, dbOffen } from "./lib/datenbank.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -1107,6 +1108,11 @@ async function projektAbgleich() {
       try {
         const repo = await abgleichRepo(p);
         await mitSperre(repo, () => git(repo, "fetch", "-q", "--prune", "origin", "+refs/heads/*:refs/heads/*"));
+        // Datenbank-Station: Dateien, die noch nicht live sind (Anzeige beim Live-Weg)
+        if (cfg.admin && p.live_zweig) {
+          const offen = await dbOffen(git, repo).catch(() => null);
+          if (offen) await db.rpc("ws_db_offen_melden", { p_pc: pcId, p_projekt: p.id, p_offen: offen }).then(() => {}, () => {});
+        }
         const main = await git(repo, "rev-parse", "refs/heads/main");
         const roh = await git(repo, "for-each-ref", "--format=%(refname:lstrip=2)%09%(objectname)%09%(committerdate:iso-strict)%09%(contents:subject)", "refs/heads");
         const zweige = [];
@@ -1172,6 +1178,8 @@ async function repoArbeit() {
 async function ampelMelden(p) {
   try {
     const werte = await ampelPruefen({ sh: ghGrenze, projekt: p });
+    const dbLampen = await dbAmpel({ sh: ghGrenze, projekt: p }).catch(() => null);   // Datenbank-Station (0034)
+    if (dbLampen) Object.assign(werte, dbLampen);
     const { error } = await db.rpc("ws_anbindungen_melden", { p_pc: pcId, p_projekt: p.id, p_werte: werte });
     if (error && !/function .* does not exist|schema cache/i.test(error.message)) melde("fehler", `Ampel ${p.name}: ${ohneGeheimnisse(error.message)}`);
   } catch (e) { melde("fehler", `Ampel ${p.name}: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 200)}`); }
@@ -1195,6 +1203,23 @@ async function aktionArbeit() {
       melde("status", "Programm wird für die Windows-Sandbox geholt");
       const r = await sandboxStarten({ sh: ghGrenze, repo: a.repo, zweig: a.zweig || "main", basis: path.join(cfg.daten_ordner, "sandbox"), projektId: a.projekt_id, starten: sandboxProgramm, netz: !!a.netz });
       await fertig(`Windows-Sandbox gestartet mit ${r.datei}${a.netz ? " (mit Netzwerk)" : " (ohne Netzwerk)"} – Schließen der Sandbox löscht alles`, r.link);
+    } else if (a.art === "db_einrichten") {
+      melde("status", "Datenbank-Station wird eingerichtet");
+      const { data: p } = await db.from("ws_projekte").select("*").eq("id", a.projekt_id).single();
+      let gruppe = p.db_gruppe_id;
+      if (!gruppe) {
+        const { data: gr } = await db.from("ws_gruppen").select("id, ws_bereiche!inner(projekt_id)").eq("ws_bereiche.projekt_id", p.id).order("reihenfolge").limit(1);
+        gruppe = gr?.[0]?.id;
+      }
+      if (!gruppe) throw new Error("Im Projekt gibt es noch keine Gruppe für den Einrichtungs-Auftrag");
+      const auftragAnlegen = async (dat) => {
+        const { data: nr, error } = await db.rpc("ws_code_hand_auftrag", { p_gruppe: gruppe, p_titel: "Datenbank-Station einrichten",
+          p_text: "Ablauf „Datenbank“: main → Test-Datenbank automatisch, live → Live-Datenbank nach Freigabe (vorher Sicherung des Aufbaus).",
+          p_basis_sha: dat.basis_sha, p_dateien: [{ pfad: dat.pfad, inhalt: dat.inhalt, basis_blob: dat.basis_blob }] });
+        if (error) throw error;
+        return nr;
+      };
+      await fertig(await dbEinrichten({ sh: ghGrenze, projekt: p, auftragAnlegen }));
     } else if (a.art === "testlauf") {
       const r = await testlaufStarten({ sh: ghGrenze, repo: a.repo, zweig: a.zweig || "main" });
       await fertig("Testlauf in GitHub gestartet – Ergebnis in ein paar Minuten in der Ampel", r.link);

@@ -24,8 +24,8 @@ const DATENBANK = {
   spielwiese: ["Spielwiese (gemeinsam)", "Abgetrennter Bereich in einer gemeinsamen Datenbank. Braucht Supabase Pro – wird erst nach deiner Bestätigung angelegt"],
   eigen: ["Eigenes Supabase-Projekt", "Für ernste Apps mit echten Nutzern"],
 };
-const AMPEL_NAMEN = { github: "GitHub", pruefung: "Prüfungen", build: "Build Windows/Mac", signatur: "Automatische Updates", sandbox: "Windows-Sandbox", testseite: "Testseite", testlauf: "Testlauf", datenbank: "Datenbank", fehler: "Fehler-Meldungen" };
-const AMPEL_REIHE = ["github", "pruefung", "build", "testlauf", "testseite", "sandbox", "signatur", "datenbank", "fehler"];
+const AMPEL_NAMEN = { github: "GitHub", pruefung: "Prüfungen", build: "Build Windows/Mac", signatur: "Automatische Updates", sandbox: "Windows-Sandbox", testseite: "Testseite", testlauf: "Testlauf", datenbank: "Datenbank (Test)", datenbank_live: "Datenbank (Live)", fehler: "Fehler-Meldungen" };
+const AMPEL_REIHE = ["github", "pruefung", "build", "testlauf", "testseite", "sandbox", "signatur", "datenbank", "datenbank_live", "fehler"];
 const PUNKT = { gruen: "bg-emerald-500 ring-emerald-500/25", gelb: "bg-amber-500 ring-amber-500/25", rot: "bg-red-500 ring-red-500/25", grau: "bg-slate-400 dark:bg-slate-600 ring-slate-400/20" };
 const STAND_TEXT = { gruen: "grün", gelb: "gelb", rot: "rot", grau: "grau" };
 
@@ -217,6 +217,7 @@ export default function Anbindungen({ d, ich, toast, onVorschau }) {
           </div>
           <Ergebnis a={letzte("testlauf")} /></>)}
       </div>
+      {<DatenbankStation projekt={projekt} d={d} admin={admin} toast={toast} letzte={letzte("db_einrichten")} Ergebnis={Ergebnis} />}
       {admin && <ArtAendern projekt={projekt} toast={toast} onGeaendert={() => d.holen?.()} />}
     </section>);
 }
@@ -241,4 +242,51 @@ function ArtAendern({ projekt, toast, onGeaendert }) {
       </div>
       <p className="mt-2 text-xs text-slate-500">Ändert nur die Einordnung und Ampel. Ein neues Grundgerüst im bestehenden Repository gibst du als Auftrag.</p>
     </details>);
+}
+
+// ---------------- Datenbank-Station (Datenbank 0034) ----------------
+// main → Test-Datenbank automatisch, live → Live-Datenbank nach Freigabe (Live-Weg), vorher Sicherung des Aufbaus.
+// Eingetragen werden nur die Projekt-Kennungen von Supabase; der Zugang liegt als GitHub-Geheimnis im Repository.
+function DatenbankStation({ projekt, d, admin, toast, letzte, Ergebnis }) {
+  const [test, setTest] = useState(projekt.db_test_ref || ""); const [live, setLive] = useState(projekt.db_live_ref || "");
+  const [testB, setTestB] = useState(projekt.db_test_bestehend ?? true); const [liveB, setLiveB] = useState(projekt.db_live_bestehend ?? false);
+  const gruppen = d.gruppen.filter((g) => d.bereiche.some((b) => b.id === g.bereich_id));
+  const [gid, setGid] = useState(projekt.db_gruppe_id || gruppen.find((g) => /daten|datenbank/i.test(g.name))?.id || gruppen[0]?.id || "");
+  const [busy, setBusy] = useState(false);
+  const ok = (r) => r === "" || /^[a-z]{20}$/.test(r);
+  const einrichten = async () => {
+    setBusy(true);
+    try {
+      const r1 = await supabase.rpc("ws_projekt_datenbank", { p_projekt: projekt.id, p_test: test.trim(), p_live: live.trim(), p_test_bestehend: testB, p_live_bestehend: liveB, p_gruppe: gid || null });
+      if (r1.error) throw r1.error;
+      const r2 = await supabase.rpc("ws_projekt_aktion_anfordern", { p_projekt: projekt.id, p_art: "db_einrichten" });
+      if (r2.error) throw r2.error;
+      toast("Gespeichert – die Werkstatt richtet die Datenbank-Station ein"); d.holen?.();
+    } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
+  };
+  const geheimLink = projekt.repo ? `https://github.com/${projekt.repo}/settings/secrets/actions/new` : null;
+  return (
+    <section className={`${card} p-4 flex flex-col gap-3`} aria-label="Datenbank-Station">
+      <h3 className="font-display font-bold text-lg">Datenbank-Station</h3>
+      <p className="text-sm text-slate-600 dark:text-slate-300">Neue Datenbank-Dateien (<span className="font-mono">supabase/migrations/</span>) gehen nach dem Zusammenführen <b>automatisch in die Test-Datenbank</b> und erst mit „Live schalten“ (nach deiner Freigabe) in die <b>Live-Datenbank</b> – vorher wird deren Aufbau gesichert. Was noch nicht live ist, siehst du im „Weg bis live“.</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1 text-xs text-slate-500">Test-Datenbank (Supabase-Projektkennung, 20 Buchstaben)
+          <input className={`${input} font-mono`} value={test} disabled={!admin} onChange={(e) => setTest(e.target.value.trim().toLowerCase())} placeholder="z. B. lhdoyjdothombwslfeco" /></label>
+        <label className="flex flex-col gap-1 text-xs text-slate-500">Live-Datenbank (leer = Test und Live teilen sich eine)
+          <input className={`${input} font-mono`} value={live} disabled={!admin} onChange={(e) => setLive(e.target.value.trim().toLowerCase())} /></label>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 accent-emerald-700" checked={testB} disabled={!admin} onChange={(e) => setTestB(e.target.checked)} />
+          <span>Test-Datenbank enthält die vorhandenen Dateien schon<span className="block text-xs text-slate-500">Dann werden nur neue eingespielt (bei bestehenden Datenbanken richtig).</span></span></label>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 accent-emerald-700" checked={liveB} disabled={!admin || !live} onChange={(e) => setLiveB(e.target.checked)} />
+          <span>Live-Datenbank enthält die vorhandenen Dateien schon<span className="block text-xs text-slate-500">Bei einer neuen, leeren Live-Datenbank aus lassen – dann wird alles eingespielt.</span></span></label>
+        <label className="flex flex-col gap-1 text-xs text-slate-500 sm:col-span-2">Gruppe für den Einrichtungs-Auftrag
+          <select className={input} value={gid} disabled={!admin} onChange={(e) => setGid(e.target.value)}>{gruppen.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
+      </div>
+      <ol className="text-sm list-decimal pl-5 flex flex-col gap-1 text-slate-600 dark:text-slate-300">
+        <li>Einmal selbst: Zugang anlegen unter <a className="underline" href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener noreferrer">Supabase › Account › Access Tokens</a> und im Repository als Geheimnis <span className="font-mono">SUPABASE_ACCESS_TOKEN</span> eintragen{geheimLink && <> (<a className="underline" href={geheimLink} target="_blank" rel="noopener noreferrer">hier</a>)</>}. Den Zugang gibst du nur dort ein – nie in der Codeschmiede oder im Chat.</li>
+        <li>„Einrichten“: Die Werkstatt setzt die Einstellungen und legt einen Auftrag für den Ablauf „Datenbank“ an – Freigeben und Zusammenführen wie immer.</li>
+        <li>Danach zeigt die Ampel oben, ob Test und Live eingespielt sind.</li>
+      </ol>
+      {admin && <button type="button" className={`${btn} self-start`} disabled={busy || !ok(test) || !ok(live) || (!test && !live) || (test && test === live)} onClick={einrichten}>{busy && <Loader2 className="w-4 h-4 animate-spin" />}Einrichten</button>}
+      <Ergebnis a={letzte} />
+    </section>);
 }
