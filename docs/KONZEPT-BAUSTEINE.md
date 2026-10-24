@@ -75,6 +75,15 @@ laufen als Auftrag.** Farben frei wählbar mit **Kontrast-Wächter**; Freigabe a
 - **Offen für Etappe 2–4:** eigene Freigabe-Übersicht, Vorschau der Baustein-Entwürfe auf allen Seiten der Testfassung, zentrale Bausteine
   für die Galerie-Muster, Grunddesign (Farben/Schrift/Menü) ebenfalls direkt über Design-Pakete statt Auftrag.
 
+## App-Designer 2.0 · Etappe 2 „Seiten“ (0.9.8, Entwurf frei 2026-10-24 22:08)
+Seiten gestaltet man weiter im eingebetteten Seiten-Designer der App (App-Designer › Seiten, Rechteprüfung in der App-Datenbank):
+Seite wählen und „Gilt für“ (alle Vereine, Paket, Verein, Rolle). Je Kachel: **Hintergrund frei** per Farbwähler (`style.farbe` `#rrggbb`,
+optional `style.farbe_dunkel`, sonst automatisch abgedunkelt) mit Kontrast-Wächter hell und dunkel; „Weiß“, „Akzent hell“ und feste Farben
+als Vorschläge; Rahmen Karte/Flach, Variante, Geräte PC/Tablet/Handy. **Schnellzugriffe:** Inhalt `props.ziele` aus einer festen Liste
+erlaubter App-Ziele (Trainer to go `src/lib/design/schnellzugriffe.js`), „Feature hinzufügen“, Ziehen zum Sortieren; in der App nur Ziele,
+die der Nutzer öffnen darf (Menü-Rechte und Module). Ab Werk die bisherigen 6. **Akzentfarbe** der App frei (Reiter „Akzentfarbe & Stil“).
+Designer und App nutzen dieselben Funktionen (`kachelStilKlassen`/`kachelStilWerte`) – sie sehen gleich aus.
+
 ## Quellen
 Storybook Controls (storybook.js.org/docs/essentials/controls) · IBM/Carbon Datenvisualisierung (ibm.com/design/language/data-visualization,
 carbondesignsystem.com/data-visualization/color-palettes) · Atlassian Design Tokens · SaaS KPI-Kachel-Muster (saasui.design) · WCAG 2.2.

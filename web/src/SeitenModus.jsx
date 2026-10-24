@@ -22,7 +22,7 @@ export function seitenBasis(projekt) {
 export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toast, tab = null }) {
   const basis = seitenBasis(projekt);
   // tab: Reiter des Seiten-Designers beim Öffnen (z. B. „freigabe“ aus dem Baustein-Inspektor) – nur feste Namen
-  const url = basis ? `${basis}/designer?cs=1${tab && /^(designer|seiten|freigabe)$/.test(tab) ? `&tab=${tab}` : ""}` : null;
+  const url = basis ? `${basis}/designer?cs=1${tab && /^(designer|stil|seiten|freigabe)$/.test(tab) ? `&tab=${tab}` : ""}` : null;
   const ziel = (() => { try { return url ? new URL(url).origin : null; } catch { return null; } })();
   const rahmen = useRef(null);
   const [schluessel, setSchluessel] = useState(0);
@@ -61,7 +61,7 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
       <div className="flex flex-wrap items-center gap-2">
         <LayoutGrid className="w-4 h-4 text-emerald-700" />
         <h2 className="font-display font-bold">Seiten</h2>
-        <span className="text-xs text-slate-500">Startseiten je Rolle, Übersichten, Arbeitsseiten · PC/Tablet/Handy · für alle Vereine oder einzelne (Individualdesign). Freigeben mit „Sofort“ wirkt sofort in der App; „Schrittweise“ erst ab der ersten Stufe.</span>
+        <span className="text-xs text-slate-500">Seite wählen, „Gilt für“ (alle Vereine, Paket, Verein, Rolle) · je Kachel Hintergrund frei (Kontrast-Wächter), Rahmen, Variante, Geräte · Schnellzugriffe zusammenstellen · Akzentfarbe der App. Freigeben mit „Sofort“ wirkt sofort in der App.</span>
         <span className="flex-1" />
         <button type="button" className={ghost} title="Neu laden" onClick={() => { setBereit(false); setSchluessel((k) => k + 1); }}><RefreshCw className="w-4 h-4" /></button>
         <a className={ghost} href={url} target="_blank" rel="noopener noreferrer" title="Nur eingebettet nutzbar – außerhalb zeigt die App „Seite nicht gefunden“"><ExternalLink className="w-4 h-4" /></a>
