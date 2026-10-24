@@ -6,6 +6,7 @@
 //   VITE_CS_FEHLER_SCHLUESSEL Melde-Schlüssel dieser App (csf_…), erzeugt in der Codeschmiede unter „Anbindungen“
 const URL_ = import.meta.env.VITE_CS_FEHLER_URL;
 const ANON = import.meta.env.VITE_CS_FEHLER_ANON;
+const A = ANON; // kurzer Name: der Kopf „apikey“ trägt nur den öffentlichen Schlüssel
 const SCHLUESSEL = import.meta.env.VITE_CS_FEHLER_SCHLUESSEL;
 const VERSION = import.meta.env.VITE_APP_VERSION || "";
 const MAX_JE_SEITE = 20;
@@ -64,7 +65,7 @@ export function fehlerMelden(fehler, extra = {}) {
     };
     fetch(`${URL_.replace(/\/$/, "")}/rest/v1/rpc/ws_fehler_melden`, {
       method: "POST", keepalive: true, credentials: "omit",
-      headers: { "Content-Type": "application/json", apikey: ANON, Authorization: `Bearer ${ANON}` },
+      headers: { "Content-Type": "application/json", apikey: A, Authorization: `Bearer ${ANON}` },
       body: JSON.stringify({ p_schluessel: SCHLUESSEL, p_daten: daten }),
     }).catch(() => {});
   } catch { /* der Melder darf die App nie stören */ }
