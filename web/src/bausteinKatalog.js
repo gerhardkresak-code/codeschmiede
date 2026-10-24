@@ -83,10 +83,26 @@ export function bausteineBereinigen(alle) {
   for (const id of KATALOG_IDS) if (eigen(alle, id)) { const w = bausteinWerteBereinigen(id, alle[id]); if (Object.keys(w).length) r[id] = w; }
   return r;
 }
-/** Gespeicherte Werte über den Standard legen (für Anzeige und Kontrast). */
-export function mitStandard(id, w) {
+// Bausteine in der Akzentfarbe der App (Prüfbefund Etappe 1: Kontrast-Wächter mit der gewählten statt der festen Smaragd-Farbe)
+const IN_AKZENT = { "knopf-haupt": ["bg", "text", "rand"], "abzeichen-haupt": ["bg", "text", "rand"], schalter: ["bg"] };
+/** Akzentfarbe aus der App (Trainer to go: tokens.accent → Stufe 600 hell, 400 dunkel) streng prüfen → { hell:{bg,text}, dunkel:{bg,text} } oder null. */
+export function akzentBereinigen(a) {
+  if (!a || typeof a !== "object") return null;
+  const r = {};
+  for (const m of ["hell", "dunkel"]) { if (!HEX.test(a[m]?.bg || "") || !HEX.test(a[m]?.text || "")) return null; r[m] = { bg: a[m].bg.toLowerCase(), text: a[m].text.toLowerCase() }; }
+  return r;
+}
+/** Standardwerte eines Bausteins – mit der Akzentfarbe der App, wenn sie vom Smaragd ab Werk abweicht. */
+export function standardVon(id, akzent = null) {
   const b = bausteinVon(id); if (!b) return null;
-  const s = JSON.parse(JSON.stringify(b.std)); const x = bausteinWerteBereinigen(id, w);
+  const s = JSON.parse(JSON.stringify(b.std)); const a = akzentBereinigen(akzent);
+  if (a && IN_AKZENT[id]) for (const m of ["hell", "dunkel"]) for (const k of IN_AKZENT[id]) s[m][k] = k === "text" ? a[m].text : a[m].bg;
+  return s;
+}
+/** Gespeicherte Werte über den Standard legen (für Anzeige und Kontrast). */
+export function mitStandard(id, w, akzent = null) {
+  const b = bausteinVon(id); if (!b) return null;
+  const s = standardVon(id, akzent); const x = bausteinWerteBereinigen(id, w);
   for (const m of ["hell", "dunkel"]) if (x[m]) s[m] = { ...s[m], ...x[m] };
   for (const k of ["ecken", "groesse", "symbol"]) if (k in x) s[k] = x[k];
   return s;

@@ -105,12 +105,12 @@ export function useBausteinDesigner({ dunkel }) {
 
   /** Werte eines Bausteins setzen (voll = Werte mit Standard); speichert nach kurzer Pause automatisch. */
   const setze = useCallback((id, voll) => {
-    const grundlage = mitStandard(id, (stand.geerbt || {})[id]);
+    const grundlage = mitStandard(id, (stand.geerbt || {})[id], stand.akzent);
     const n = nurAbweichung(id, voll, grundlage);
     setEigen((alt) => { const x = { ...alt }; if (Object.keys(n).length) x[id] = n; else delete x[id]; return x; });
     setOffen((o) => ({ ...o, [id]: true }));
     clearTimeout(timer.current[id]); timer.current[id] = setTimeout(() => speichern(id), 1200);
-  }, [stand.geerbt, speichern]);
+  }, [stand.geerbt, stand.akzent, speichern]);
   useEffect(() => () => Object.values(timer.current).forEach(clearTimeout), []);
 
   const alle = useMemo(() => zusammen(stand.geerbt, eigen), [stand.geerbt, eigen]);
@@ -137,7 +137,7 @@ export function BausteinListe({ bs }) {
           <ul className="flex flex-col">{liste.map((b) => (
             <li key={b.id}><button type="button" onClick={() => bs.setWahl(b.id)} aria-current={bs.wahl === b.id}
               className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded-md text-sm ${bs.wahl === b.id ? "bg-orange-50 text-orange-900 dark:bg-orange-950/50 dark:text-orange-200 font-semibold" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}>
-              <span className="w-3 h-3 rounded-sm border border-black/10 shrink-0" style={{ background: mitStandard(b.id, bs.alle[b.id]).hell.bg }} aria-hidden="true" />
+              <span className="w-3 h-3 rounded-sm border border-black/10 shrink-0" style={{ background: mitStandard(b.id, bs.alle[b.id], bs.stand.akzent).hell.bg }} aria-hidden="true" />
               <span className="flex-1 min-w-0 truncate">{b.name}</span>
               {bs.eigen[b.id] && <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400" title="Auf dieser Ebene angepasst">angepasst</span>}
               {bs.offen[b.id] && <Loader2 className="w-3 h-3 animate-spin text-slate-400" aria-label="wird gespeichert" />}
@@ -196,8 +196,8 @@ function Bearbeiten({ b, bs, darf, dunkel, projekt, onFreigabe }) {
   const verz = useVerzeichnis(projekt.id);
   const [modus, setModus] = useState(dunkel ? "dunkel" : "hell");
   useEffect(() => setModus(dunkel ? "dunkel" : "hell"), [dunkel]);
-  const voll = mitStandard(b.id, bs.alle[b.id]);
-  const grundlage = mitStandard(b.id, (bs.stand.geerbt || {})[b.id]);
+  const voll = mitStandard(b.id, bs.alle[b.id], bs.stand.akzent);
+  const grundlage = mitStandard(b.id, (bs.stand.geerbt || {})[b.id], bs.stand.akzent);
   const gesperrt = !darf || !bs.stand.darf?.edit || !ebeneFertig(bs.ebene) || bs.stand.laden;
   const befunde = pruefeBaustein(voll, SEITE, { interaktiv: !!b.interaktiv, rahmenPflicht: !!b.rahmen });
   const sum = zusammenfassung(befunde);
@@ -235,7 +235,8 @@ function Bearbeiten({ b, bs, darf, dunkel, projekt, onFreigabe }) {
             {!x.ok && x.vorschlag && !gesperrt && <button type="button" className="text-[11px] font-semibold rounded-md border border-slate-300 dark:border-slate-700 px-1.5 py-0.5 hover:bg-white dark:hover:bg-slate-900 inline-flex items-center gap-1" title={`Vorschlag: ${x.vorschlag}`} onClick={() => lesbar(x)}>
               <i className="w-3 h-3 rounded-sm border border-black/10" style={{ background: x.vorschlag }} aria-hidden="true" />lesbar machen</button>}
           </li>))}</ul>
-        <p className="text-[10px] text-slate-500">Text mind. {String(SOLL.text).replace(".", ",")} : 1, große Schrift und Bedienelemente mind. {SOLL.bedien} : 1 (WCAG 2.1 AA). Speichern geht trotzdem.</p>
+        <p className="text-[10px] text-slate-500">Text mind. {String(SOLL.text).replace(".", ",")} : 1, große Schrift und Bedienelemente mind. {SOLL.bedien} : 1 (WCAG 2.1 AA). Speichern geht trotzdem.
+          {" "}Geprüft mit der {bs.stand.akzent ? "gewählten Akzentfarbe der App" : "Akzentfarbe ab Werk (Smaragd)"}; Vereinsfarben im Kopfbereich können abweichen.</p>
       </section>
 
       {b.felder.includes("ecken") && <label className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">Ecken
@@ -288,7 +289,7 @@ function BausteinChat({ b, bs, d, ich, projekt, darf, toast, ki }) {
     return () => { supabase.removeChannel(ch); };
   }, [holen, projekt.id, b.id]);
   useEffect(() => { ende.current?.scrollIntoView({ block: "end" }); }, [liste.length]);
-  const voll = mitStandard(b.id, bs.alle[b.id]);
+  const voll = mitStandard(b.id, bs.alle[b.id], bs.stand.akzent);
   const werkstattAn = d.pcs.some((p) => p.benutzer_id === ich.id && p.an);
   const wartet = liste.some((m) => !m.frage_id && m.von === ich.id && ["offen", "laeuft"].includes(m.stand));
   const schicke = async (t) => {
