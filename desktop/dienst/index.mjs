@@ -1062,6 +1062,8 @@ async function repoArbeit() {
     if (p.aktion === "anlegen") {
       const { data: ich } = await db.from("ws_benutzer").select("name").eq("id", cfg.user_id).maybeSingle();
       const wissen = await holeWissen(p.projekt_id);
+      const { data: pj } = await db.from("ws_projekte").select("technik_art").eq("id", p.projekt_id).maybeSingle();
+      p.technik_art = pj?.technik_art || null;
       const konzeptMd = wissen.length ? `# Konzept – ${p.name}\n\nAus der Codeschmiede (Gruppe „Konzept“), Stand ${new Date().toLocaleDateString("de-AT")}.\n\n${wissenText(wissen, 20000)}\n` : "";
       ({ repo } = await repoAnlegen({ sh, arbeit, keineHooks, projekt: p, privat: !!p.privat, inhaber: ich?.name || "", konzeptMd, melde: (t) => melde("status", t) }));
     } else {

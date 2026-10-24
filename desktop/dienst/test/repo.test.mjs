@@ -27,3 +27,29 @@ test("Grundgerüst aus dem Regelwerk (falls Vorlage vorhanden) plus README/Konze
   }
   await rm(ziel, { recursive: true, force: true });
 });
+
+test("Grundgerüst je Technik-Art: Code, Abläufe, Platzhalter sicher gefüllt", async () => {
+  for (const art of ["web", "programm", "handy", "werkzeug"]) {
+    const ziel = await mkdtemp(path.join(os.tmpdir(), `cs-art-${art}-`));
+    const d = await geruestSchreiben(ziel, null, { name: 'Haus"buch <{x}>', repo: "gerhardkresak-code/haushaltsbuch", art });
+    assert.ok(d.includes("README-ART.md") && d.includes("package.json"), art);
+    assert.ok(d.some((x) => x.startsWith(".github/workflows/")) && !d.some((x) => x.startsWith("github/")), art);
+    const pkg = JSON.parse(await readFile(path.join(ziel, "package.json"), "utf8"));
+    assert.equal(pkg.name, "haushaltsbuch");
+    for (const f of d.filter((x) => /\.(json|webmanifest)$/.test(x))) JSON.parse(await readFile(path.join(ziel, f), "utf8"));   // gültiges JSON trotz Anführungszeichen im Namen
+    for (const f of d) { if (!/\.(png)$/.test(f)) assert.doesNotMatch(await readFile(path.join(ziel, f), "utf8"), /\[(PROJEKTNAME|KENNUNG)\]/, `${art}: ${f}`); }
+    if (art === "web" || art === "handy") {
+      const app = await readFile(path.join(ziel, "src/App.jsx"), "utf8");
+      assert.match(app, /Haus&quot;buch &lt;&#123;x&#125;&gt;/); assert.doesNotMatch(app, /<\{x\}>/);
+    }
+    if (art === "programm") {
+      const conf = JSON.parse(await readFile(path.join(ziel, "src-tauri/tauri.conf.json"), "utf8"));
+      assert.equal(conf.productName, 'Haus"buch <{x}>'); assert.equal(conf.identifier, "at.kresak.haushaltsbuch");
+      assert.match(await readFile(path.join(ziel, "src-tauri/Cargo.toml"), "utf8"), /name = "haushaltsbuch"/);
+      assert.ok(d.includes("app-icon.png"));
+    }
+    assert.match(await readFile(path.join(ziel, "README.md"), "utf8"), /README-ART\.md/);
+    await rm(ziel, { recursive: true, force: true });
+  }
+  await assert.rejects(geruestSchreiben(os.tmpdir(), null, { name: "x", repo: "o/x", art: "boese" }), /Unbekannte/);
+});

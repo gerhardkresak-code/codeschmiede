@@ -4,6 +4,7 @@
 // nur „gh repo create“, Dateien schreiben, „git commit/push“ ohne Hooks – darum auch auf dem Admin-PC zulässig.
 import { copyFile, lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const REPO_KONTO = "gerhardkresak-code";
 export const REGELWERK = "gerhardkresak-code/ai-dev-os";
@@ -11,11 +12,19 @@ export const REGELWERK = "gerhardkresak-code/ai-dev-os";
 export const repoName = (id) => String(id || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "").slice(0, 100);
 export const repoOk = (r) => /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/.test(r || "") && !/\/\.\.?$/.test(r);
 
-/** Platzhalter der Vorlage füllen (nur Markdown/Text-Dateien). */
-export function vorlageFuellen(text, { name, repo, inhaber }) {
+/** Platzhalter der Vorlage füllen (Text-Dateien). art = Dateiendung, damit der Name dort sicher steht (JSON, HTML, JSX, Rust/TOML). */
+export function vorlageFuellen(text, { name, repo, inhaber, kennung = "" }, art = "md") {
+  const roh = String(name || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 80) || "Neue App";
+  const html = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  const sicher = art === "json" || art === "webmanifest" ? JSON.stringify(roh).slice(1, -1)
+    : art === "html" ? html(roh)
+    : art === "jsx" ? html(roh).replace(/\{/g, "&#123;").replace(/\}/g, "&#125;")
+    : art === "rs" || art === "toml" || art === "js" || art === "mjs" || art === "yml" || art === "yaml" ? roh.replace(/[^\p{L}\p{N} ._()-]/gu, "")
+    : roh;
   // Ersetzungsfunktionen: Sonderzeichen wie $' im Namen werden nicht als Muster gelesen (Prüfung N4)
   return String(text)
-    .replaceAll("[PROJEKTNAME]", () => name)
+    .replaceAll("[KENNUNG]", () => kennung)
+    .replaceAll("[PROJEKTNAME]", () => sicher)
     .replaceAll("[OWNER/REPO]", () => repo)
     .replaceAll("[NAME]", () => inhaber || "Inhaber")
     .replaceAll("[ENTWICKLUNG / STAGING / PRODUKTION]", () => "ENTWICKLUNG");
@@ -46,23 +55,38 @@ async function vorlageSicher(vorlage, regel) {
  * Grundgerüst in ziel schreiben: Vorlage (vorlageOrdner = …/project-template) + README, Konzept, Wissen.
  * github/ der Vorlage wird zu .github/. Gibt die Liste der geschriebenen Dateien zurück.
  */
-export async function geruestSchreiben(ziel, vorlageOrdner, { name, repo, beschreibung = "", inhaber = "", konzeptMd = "", heute = new Date() }) {
-  const grenze = vorlageOrdner ? await realpath(vorlageOrdner) : null;
-  const dateien = vorlageOrdner ? await alleDateien(grenze, grenze) : [];
-  vorlageOrdner = grenze;
-  const geschrieben = [];
-  for (const rel of dateien) {
+/** Grundgerüste je Technik-Art (Entwurf 1.0 „Neues Projekt“, 2026-10-24) – liegen im Programm unter dienst/vorlagen/<art>. */
+export const ARTEN = ["web", "programm", "handy", "werkzeug"];
+export const ART_ORDNER = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "vorlagen");
+const TEXT = /\.(md|txt|json|ya?ml|html|jsx?|mjs|css|rs|toml|webmanifest|example)$|(^|[\\/])\.gitignore$/i;
+
+async function ordnerKopieren(ziel, quelle, werte, geschrieben) {
+  const grenze = await realpath(quelle);
+  for (const rel of await alleDateien(grenze, grenze)) {
     const nach = path.join(ziel, rel.split(path.sep)[0] === "github" ? path.join(".github", ...rel.split(path.sep).slice(1)) : rel);
     await mkdir(path.dirname(nach), { recursive: true });
-    const quelle = path.join(vorlageOrdner, rel);
-    if ((await lstat(quelle)).size > 512 * 1024) continue;
-    if (/\.(md|txt|json|ya?ml)$/i.test(rel)) await writeFile(nach, vorlageFuellen(await readFile(quelle, "utf8"), { name, repo, inhaber }));
-    else await copyFile(quelle, nach);
-    geschrieben.push(path.relative(ziel, nach).split(path.sep).join("/"));
+    const q = path.join(grenze, rel);
+    if ((await lstat(q)).size > 512 * 1024) continue;
+    if (TEXT.test(rel)) await writeFile(nach, vorlageFuellen(await readFile(q, "utf8"), werte, (rel.match(/\.([a-z]+)$/i)?.[1] || "").toLowerCase()));
+    else await copyFile(q, nach);
+    const r = path.relative(ziel, nach).split(path.sep).join("/");
+    if (!geschrieben.includes(r)) geschrieben.push(r);
+  }
+}
+
+export async function geruestSchreiben(ziel, vorlageOrdner, { name, repo, beschreibung = "", inhaber = "", konzeptMd = "", heute = new Date(), art = null, artOrdner = ART_ORDNER }) {
+  const kennung = String(repo || "").split("/")[1] || "";
+  const werte = { name, repo, inhaber, kennung };
+  const geschrieben = [];
+  if (vorlageOrdner) await ordnerKopieren(ziel, vorlageOrdner, werte, geschrieben);
+  // Grundgerüst der Technik-Art darüber (Code, Prüf- und Build-Abläufe)
+  if (art) {
+    if (!ARTEN.includes(art)) throw new Error("Unbekannte Projekt-Art");
+    await ordnerKopieren(ziel, path.join(artOrdner, art), werte, geschrieben);
   }
   const datum = heute.toISOString().slice(0, 10);
   const extra = {
-    "README.md": `# ${name}\n\n${beschreibung ? `${beschreibung}\n\n` : ""}Angelegt mit der Codeschmiede am ${datum}. Regeln: [AGENTS.md](AGENTS.md) (Grundlage: ${REGELWERK}).\n`,
+    "README.md": `# ${name}\n\n${beschreibung ? `${beschreibung}\n\n` : ""}Angelegt mit der Codeschmiede am ${datum}${art ? ` als ${{ web: "Web-App", programm: "Programm (Windows/Mac)", handy: "Handy-App (PWA)", werkzeug: "Werkzeug / Skript" }[art]}` : ""}. Regeln: [AGENTS.md](AGENTS.md) (Grundlage: ${REGELWERK}).${art ? " Technik: [README-ART.md](README-ART.md)." : ""}\n`,
     "docs/KONZEPT.md": konzeptMd || `# Konzept – ${name}\n\nNoch nicht besprochen. Das Grundkonzept entsteht in der Codeschmiede in der Gruppe „Konzept“.\n`,
     "docs/WISSEN.md": `# Wissen – ${name}\n\nWas abgeschlossen und live ist, mit Entscheidungen. Konzept-Entscheidungen stehen in der Codeschmiede (Gruppe „Konzept“) und in docs/KONZEPT.md.\n`,
     ".gitattributes": "* text=auto eol=lf\n*.png binary\n*.jpg binary\n*.ico binary\n",
@@ -109,7 +133,7 @@ export async function repoAnlegen({ sh: shRoh, arbeit, keineHooks, projekt, priv
   } catch { vorlage = null; melde("Regelwerk-Vorlage nicht erreichbar – Grundgerüst ohne Regelkapitel"); }
   const ziel = path.join(arbeit, "neu");
   await mkdir(ziel, { recursive: true });
-  const dateien = await geruestSchreiben(ziel, vorlage, { name: projekt.name, repo, beschreibung: projekt.beschreibung || "", inhaber, konzeptMd });
+  const dateien = await geruestSchreiben(ziel, vorlage, { name: projekt.name, repo, beschreibung: projekt.beschreibung || "", inhaber, konzeptMd, art: projekt.technik_art || null });
   await rm(regel, { recursive: true, force: true }).catch(() => {});
   // Erst lokal committen, dann Anlegen und Hochladen in EINEM Schritt (gh repo create --source --push, Prüfung M3).
   // Der Zugang kommt nur für diesen Aufruf aus gh (Credential-Helfer per -c), die globale Git-Einstellung bleibt unverändert (N3).

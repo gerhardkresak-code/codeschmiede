@@ -1,0 +1,48 @@
+name: Programm bauen
+# Baut bei jedem Zweig die Installation für Windows (.exe) und Mac (.dmg) und legt sie als Datei zum Herunterladen ab
+# (30 Tage). Die Codeschmiede startet die Windows-Datei auf Wunsch in der Windows-Sandbox. Grundgerüst aus der Codeschmiede.
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: programm-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bauen:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            ziel: windows
+          - os: macos-latest
+            ziel: mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults: { run: { shell: bash } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.ziel == 'mac' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: src-tauri -> target }
+      - name: Programm-Symbole
+        run: npx --yes @tauri-apps/cli@^2 icon app-icon.png
+      - name: Tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --release
+      - name: Bauen
+        run: |
+          if [ "${{ matrix.ziel }}" = "mac" ]; then npx --yes @tauri-apps/cli@^2 build --target universal-apple-darwin --bundles dmg
+          else npx --yes @tauri-apps/cli@^2 build --bundles nsis; fi
+      - name: Datei einsammeln
+        run: |
+          mkdir -p ausgabe
+          if [ "${{ matrix.ziel }}" = "mac" ]; then cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg ausgabe/
+          else cp src-tauri/target/release/bundle/nsis/*.exe ausgabe/; fi
+      - uses: actions/upload-artifact@v4
+        with: { name: 'installation-${{ matrix.ziel }}', path: ausgabe/, retention-days: 30 }

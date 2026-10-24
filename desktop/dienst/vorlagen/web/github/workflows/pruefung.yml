@@ -1,0 +1,21 @@
+name: Prüfung
+# Bei jedem Zweig und Pull Request: installieren, testen, bauen. Grundgerüst aus der Codeschmiede.
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: pruefung-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
