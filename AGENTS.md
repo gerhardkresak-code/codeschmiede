@@ -40,6 +40,10 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-24 22:08 – App-Designer 2.0 (Entwurf 1.0 frei, Grundsätze 21:4x):** App-Designer 2.0: ein Designer, wirkt sofort über Design-Pakete;
+  neue Bausteine als Auftrag; Farben frei mit Kontrast-Wächter. Aussehen (Farben, Schrift, Logo, Menü, Seiten, Bausteine) geht über die
+  Design-Pakete der App (Trainer to go: `DesignPackage`, Stufen Entwurf → Freigabe, ab Werk „Sofort“), gespeichert in der eingebetteten App mit
+  deren Rechteprüfung (eigene Design-Freigabe; Rechte nie lockern). Kontrast-Wächter `web/src/kontrast.js` (Text 4,5 : 1, Bedienelemente 3 : 1, hell UND dunkel).
 - **2026-10-24 16:20 – Fehler-Meldungen:** Sammelstelle ist die Codeschmiede selbst (kein Fremdanbieter), nur Technik – nie Namen, E-Mails, Eingaben
   oder Kennungen (Daten von Kindern in Trainer to go!), keine Sitzungs-Kennung; Liste mit „Als Auftrag“ (kein automatischer Auftrag); 30 Tage.
 - **2026-10-24 14:36–14:50 – Codeschmiede nur für Gerhard, für alles:** Kein Verkauf (Produkt-Konzept ruht). Projekt-Arten Web-App, Programm (.exe),

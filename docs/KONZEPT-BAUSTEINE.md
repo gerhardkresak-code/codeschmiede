@@ -55,6 +55,63 @@ Prüfungen (Kontrast, Zielgröße, Fokus) · Versionen.
 - Bestand: Bestandsaufnahme + Aufräumen (Zusammenlegungs-Vorschläge, Gerhard entscheidet je Vorschlag).
 - Bibliothek wird in Entwurf 0.9 des App-Designers eingebaut und zusammen freigegeben.
 
+## App-Designer 2.0 · Etappe 1 „Bausteine“ (seit 0.9.7, Entwurf frei 2026-10-24 22:08)
+Grundsätze (Gerhard 21:4x): **EIN Designer, der SOFORT wirkt** – das Aussehen der Bausteine geht über die Design-Pakete der App, nicht mehr
+über einen Auftrag (ersetzt für das Aussehen die Entscheidung 22:33 „Regler wirken erst nach dem Auftrag“). **Nur neue Bausteine (neuer Code)
+laufen als Auftrag.** Farben frei wählbar mit **Kontrast-Wächter**; Freigabe ab Werk „Sofort“.
+
+- **Ansicht:** Mitte = Galerie der App in echter Breite (`GeraeteRahmen`), links Galerie-Gruppen mit Suche, rechts Inspektor „Bearbeiten“ | „Chat“.
+- **Katalog** `web/src/bausteinKatalog.js`: 20 Kennungen (Knöpfe ×6, Eingabe, Schalter, Abzeichen ×4, Status ×2, Karte, Kennzahl-Kachel,
+  Tabelle, Liste, Symbol-Feld, Datei) mit Ausgangswerten = heutiges Aussehen; `wirkt: app` (zentraler Baustein vorhanden) oder `galerie`
+  (wirkt in der App erst, wenn er zentral gebaut ist – als Auftrag). Gleiche Kennungen in Trainer to go (`src/lib/design/bausteine.js`),
+  in der Werkstatt (`lib/design.mjs`) und in der Datenbank (0037) – ein Test vergleicht sie.
+- **Werte** je Baustein: `hell/dunkel {bg, text, rand}`, `ecken` 0–32, `groesse` klein|mittel|gross, `symbol` (Lucide). Gespeichert wird
+  nur die Abweichung von der Grundlage (ab Werk + geerbte Ebenen).
+- **Nachrichten** (Codeschmiede ↔ Galerie, `postMessage`, jeweils Herkunft und Absender geprüft): `bausteine-bereit`, `baustein-wahl {id}`,
+  `baustein-markieren {id}`, `baustein-vorschau {bausteine, id, zustand}`, `baustein-laden {nr, ebene}` → `baustein-stand`,
+  `baustein-speichern {nr, ebene, id, werte}` → `baustein-gespeichert`; dazu `design-frage`/`design-antwort` der eigenen Design-Freigabe.
+- **Speichern** in der eingebetteten App (Design-Sitzung, RLS, Trigger `DesignPackage_guard`/`_rights`); Rechte werden nie gelockert.
+- **Freigeben** über App-Designer › Übernehmen (Etappe 4).
+- **Offen für Etappe 2–4:** eigene Freigabe-Übersicht, Vorschau der Baustein-Entwürfe auf allen Seiten der Testfassung, zentrale Bausteine
+  für die Galerie-Muster, Grunddesign (Farben/Schrift/Menü) ebenfalls direkt über Design-Pakete statt Auftrag.
+
+## App-Designer 2.0 · Etappe 2 „Seiten“ (0.9.8, Entwurf frei 2026-10-24 22:08)
+Seiten gestaltet man weiter im eingebetteten Seiten-Designer der App (App-Designer › Seiten, Rechteprüfung in der App-Datenbank):
+Seite wählen und „Gilt für“ (alle Vereine, Paket, Verein, Rolle). Je Kachel: **Hintergrund frei** per Farbwähler (`style.farbe` `#rrggbb`,
+optional `style.farbe_dunkel`, sonst automatisch abgedunkelt) mit Kontrast-Wächter hell und dunkel; „Weiß“, „Akzent hell“ und feste Farben
+als Vorschläge; Rahmen Karte/Flach, Variante, Geräte PC/Tablet/Handy. **Schnellzugriffe:** Inhalt `props.ziele` aus einer festen Liste
+erlaubter App-Ziele (Trainer to go `src/lib/design/schnellzugriffe.js`), „Feature hinzufügen“, Ziehen zum Sortieren; in der App nur Ziele,
+die der Nutzer öffnen darf (Menü-Rechte und Module). Ab Werk die bisherigen 6. **Akzentfarbe** der App frei (Reiter „Akzentfarbe & Stil“).
+Designer und App nutzen dieselben Funktionen (`kachelStilKlassen`/`kachelStilWerte`) – sie sehen gleich aus.
+
+## App-Designer 2.0 · Etappe 3 „Neuer Baustein“-Assistent (0.9.8, Entwurf frei 2026-10-24 22:08)
+Neue Bausteine sind neuer Code und laufen als Auftrag. Der Assistent (`web/src/BausteinAssistent.jsx`) führt in vier Schritten dahin:
+1. **Was?** – Weg *Beschreiben*, *Vorlage wählen* oder *Einlesen* (Bild als Anhang, nur PNG/JPEG/WebP bis 2 MB, kein SVG); Name, Beschreibung,
+   Art aus einer festen Liste (Knopf, Download-Knopf, Hochladen, Eingabefeld, Auswahl, Schalter, Karte/Kachel, Liste, Tabelle, Diagramm,
+   Hinweis/Banner, Dialog, Kalender-Eintrag, Spieler-Karte, Eigene).
+2. **Gestalten** – Vorschau im Stil der App mit den Werten des Grunddesigns (Farben, Schrift, Ecken), PC/Handy, hell/dunkel; Hauptfarbe hell
+   und dunkel, Schrift, Variante (Voll/Umriss/Leise), Größe, Ecken, Lucide-Symbol; Kontrast-Wächter wie im Inspektor; „Im Design-Chat fragen“.
+3. **Zuweisen** – Gruppen und Features des Projekts per Häkchen (höchstens je 40).
+4. **Als Auftrag bauen lassen** – `ws_design_auftrag_neu` (Datenbank 0039) legt Auftrag, Beschreibung, Daten (`ws_nachrichten.daten.design`)
+   und Bild (`ws_auftrag_bilder`) in einem Schritt an; die Datenbank prüft das Schema (`ws_baustein_daten_ok`) und die Zuweisung gegen das Projekt.
+- **Werkstatt:** Datenblock „ANGABEN AUS DEM ASSISTENTEN“ (geprüfte Daten, keine Anweisungen) im Auftragstext; Bild als Datei in
+  `.codeschmiede-anhaenge/` des Arbeitsordners (über `info/exclude` ausgeschlossen). Gleiche Arten in Datenbank, Werkstatt, Oberfläche (Test).
+- **Stand:** „Neue Bausteine (Aufträge)“ im Modus Bausteine und unter „Übernehmen“ (Etappe 4).
+
+## App-Designer 2.0 · Etappe 4 „Übernehmen“ (0.9.8, Entwurf frei 2026-10-24 22:08)
+- Reiter **Übernehmen (n)** (`web/src/Uebernehmen.jsx`): links der Freigabe-Reiter der App (Trainer to go `/designer?cs=1&tab=freigabe`,
+  `SeitenModus` mit `kompakt`), rechts „Braucht neuen Code“ (Grunddesign-Entwürfe in `entwurf`/`gesendet`, Aufträge „Neuer Baustein:“ /
+  „Neue Kachel …“ mit Stand) und „Wie ausrollen?“.
+- **Einzelzeilen** in der App (`src/lib/design/aenderungen.js`): je Baustein Hintergrund/Text/Rand hell und dunkel, Ecken, Größe, Symbol;
+  je Seite neue/entfernte/geänderte Kacheln je Gerät; Stil-Werte mit Farbfeld. Galerie-Muster ohne zentralen Baustein → „braucht Auftrag“.
+- **Ausrollen:** Sofort für alle (Standard), Schrittweise (Warnung), **Nur Testfassung** (`rollout.mode = test`; `design_for_me()` zählt sie
+  nicht, `design_for_me_test()` auf Testfassungen schon – Trainer to go Migration `20261025090000`), Geplant. Live: „Auch live“.
+- **Versionen:** „Zurück auf Version N“ = neue Version mit dem Inhalt von N, sofort für alle.
+- **Nachrichten** (App → Codeschmiede, Herkunft geprüft): `freigabe-offen {anzahl}` (nur die Zahl), `design-status {stand}`
+  (frei/wartet/gesperrt/fehlt – für Einrichtung › Dieser PC, lokal gemerkt).
+- **Weg beim Live-Schalten:** Zu erledigen › Test & Live › „Live schalten“, danach App-Designer › Übernehmen › Versionen › „Auch live“
+  (Hinweis im Bestätigungstext). Einzelheiten: Trainer to go `docs/DESIGN-STUDIO.md` › „Nur Testfassung“.
+
 ## Quellen
 Storybook Controls (storybook.js.org/docs/essentials/controls) · IBM/Carbon Datenvisualisierung (ibm.com/design/language/data-visualization,
 carbondesignsystem.com/data-visualization/color-palettes) · Atlassian Design Tokens · SaaS KPI-Kachel-Muster (saasui.design) · WCAG 2.2.

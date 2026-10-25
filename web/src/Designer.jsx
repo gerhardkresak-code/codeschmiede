@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Palette, Shapes, Stamp, Save, Send, Copy, Plus, Trash2, Undo2, Redo2, History, GitCompareArrows, Monitor, Tablet, Smartphone,
-  Sun, Moon, LayoutGrid, CircleCheck, CircleAlert, TriangleAlert, Loader2, Bot, ShieldCheck, Sparkles, Check, X, ExternalLink, LayoutTemplate, Home, Users, Calendar, Trophy, Settings, Bell, Search,
+  Sun, Moon, LayoutGrid, CheckCheck, CircleCheck, CircleAlert, TriangleAlert, Loader2, Bot, ShieldCheck, Sparkles, Check, X, ExternalLink, LayoutTemplate, Home, Users, Calendar, Trophy, Settings, Bell, Search,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { useKiName } from "./kiName";
@@ -11,6 +11,9 @@ import { MARKE_BASIS, Logo as MarkeLogo, LogoZeichen } from "./Logo";
 import GeraeteRahmen, { geraetVonBreite } from "./GeraeteRahmen";
 import { Markdown } from "./Markdown";
 const SeitenModus = lazy(() => import("./SeitenModus"));
+const Uebernehmen = lazy(() => import("./Uebernehmen"));   // App-Designer 2.0 · Etappe 4
+import { useBausteinDesigner, BausteinInspektor } from "./BausteinInspektor";
+import { designFrageBeantworten } from "./designFrage";
 import { APP_ARTEN, ART_BASIS, ArtEinstellungen, ArtMuster, beispieleBereinigen, beispieleFuer, menueSymbol } from "./DesignerArten";
 
 // App-Designer · Etappe 1 (Entwurf 0.9, freigegeben von Gerhard 2026-10-22 22:40) · Etappe 2: Chat mit Claude + erweiterte Prüfungen (2026-10-23)
@@ -153,7 +156,14 @@ export default function Designer({ d, ich, toast }) {
   const [rechts, setRechts] = useState("chat");
   const ki = useKiName(d.projektId, "design");   // eingestellter Anbieter für den Design-Chat
   const [chatText, setChatText] = useState("");
-  const [bausteinEntwurf, setBausteinEntwurf] = useState({ name: "", text: "", art: "zusammen" });   // Dialog „Neuer Baustein“ behält die Eingaben
+  const [bausteinEntwurf, setBausteinEntwurf] = useState(null);   // Assistent „Neuer Baustein“ behält die Eingaben (auch nach „Im Design-Chat fragen“)
+  // App-Designer 2.0 (Entwurf 2026-10-24 22:08): Bausteine wirken sofort über die Design-Pakete der App (BausteinInspektor.jsx)
+  const bs = useBausteinDesigner({ dunkel });
+  const [seitenTab, setSeitenTab] = useState(null);
+  const [bsSeite, setBsSeite] = useState("inspektor");   // Modus „Bausteine“: rechts Inspektor oder Design-Chat
+  const zumChat = (t) => { setRechts("chat"); setBsSeite("chat"); setChatText(t); };
+  const zurFreigabe = (tab) => { if (tab === "freigabe") { setModus("uebernehmen"); return; } setSeitenTab(tab); setModus("seiten"); };
+  const [sofortAnzahl, setSofortAnzahl] = useState(null);   // offene Änderungen im Design-Paket (meldet der Freigabe-Reiter der App)
 
   const darf = useMemo(() => {
     if (ich.rolle === "admin") return true;
@@ -241,6 +251,10 @@ export default function Designer({ d, ich, toast }) {
   if (!projekt) return null;
   // Design ist eines der ersten Dinge, die man plant (Gerhard 2026-10-23 17:49): ohne Design-Gruppe richtet sich der Designer selbst ein
   if (!projekt.design_gruppe_id) return <DesignerEinrichten projekt={projekt} d={d} ich={ich} toast={toast} />;
+  // „Übernehmen (n)“: offene Grunddesign-Entwürfe + laufende Baustein-/Kachel-Aufträge + offene Änderungen im Design-Paket
+  const auftragsPunkte = entwuerfe.filter((e) => e.stand === "entwurf" || e.stand === "gesendet").length
+    + d.auftraege.filter((a) => a.gruppe_id === projekt.design_gruppe_id && /^(Neuer Baustein: |Neue Kachel für den Seiten-Designer: )/.test(String(a.titel || "")) && !["wissen", "erledigt"].includes(a.stand)).length;
+  const offenGesamt = auftragsPunkte + (sofortAnzahl || 0);
   const befunde = pruefungen(werte);
   const rot = befunde.filter((b) => !b.ok && b.stufe === "rot").length;
   const hinweise = befunde.filter((b) => !b.ok && b.stufe !== "rot").length;
@@ -253,6 +267,9 @@ export default function Designer({ d, ich, toast }) {
           {[["grund", "Grunddesign", Palette], ["bausteine", "Bausteine", Shapes], ["marke", "Marke", Stamp], ["seiten", "Seiten", LayoutGrid]].map(([id, t, I]) => (
             <button key={id} type="button" role="tab" aria-selected={modus === id} onClick={() => setModus(id)}
               className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-semibold ${modus === id ? "bg-white dark:bg-slate-900 shadow-sm text-emerald-800 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300"}`}><I className="w-4 h-4" />{t}</button>))}
+          <button type="button" role="tab" aria-selected={modus === "uebernehmen"} onClick={() => setModus("uebernehmen")} title="Alle offenen Design-Änderungen übernehmen und freigeben"
+            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-semibold ${modus === "uebernehmen" ? "bg-white dark:bg-slate-900 shadow-sm text-emerald-800 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300"}`}>
+            <CheckCheck className="w-4 h-4" />Übernehmen{offenGesamt > 0 && <span className="text-[11px] font-bold bg-emerald-700 text-white rounded-full px-1.5">{offenGesamt}</span>}</button>
         </div>
         <label className="flex items-center gap-1.5 text-sm text-slate-500" title={APP_ARTEN.find(([k]) => k === art)?.[2]}>App-Art
           <select id="ds-app-art" value={art} disabled={!darf} onChange={(e) => artSetzen(e.target.value)} className={`${input} w-auto`}>
@@ -283,9 +300,11 @@ export default function Designer({ d, ich, toast }) {
       {!darf && <p className="text-sm text-slate-500">Nur ansehen: Gestalten dürfen Entwickler mit dem Recht „Aufträge geben“ im Bereich der Design-Gruppe.</p>}
       {fest && <p className="text-sm text-slate-600 dark:text-slate-300">Dieser Entwurf ist {STAND_TXT[aktiv.stand].toLowerCase()} und damit fest{aktiv.auftrag_id ? ` (Auftrag #${aktiv.auftrag_id})` : ""}. Für Änderungen eine Kopie anlegen.</p>}
 
-      {modus === "seiten" ? <Suspense fallback={<p className="text-sm text-slate-500 p-4">Lädt …</p>}><SeitenModus projekt={projekt} d={d} ich={ich} werte={werte} dunkel={dunkel} darf={darf} toast={toast} /></Suspense> : (
+      {modus === "uebernehmen" ? <Suspense fallback={<p className="text-sm text-slate-500 p-4">Lädt …</p>}><Uebernehmen projekt={projekt} d={d} ich={ich} werte={werte} dunkel={dunkel} darf={darf} toast={toast}
+          entwuerfe={entwuerfe} sofortAnzahl={sofortAnzahl} onFreigabeOffen={setSofortAnzahl} onGrunddesign={(e) => { setModus("grund"); oeffne(e); }} /></Suspense>
+      : modus === "seiten" ? <Suspense fallback={<p className="text-sm text-slate-500 p-4">Lädt …</p>}><SeitenModus key={seitenTab || "start"} tab={seitenTab} projekt={projekt} d={d} ich={ich} werte={werte} dunkel={dunkel} darf={darf} toast={toast} /></Suspense> : (
         <div className="grid gap-3 grid-cols-[minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_280px] lg:grid-cols-[300px_minmax(0,1fr)]">
-          {modus === "bausteine" ? <BausteineModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} darf={darf} projekt={projekt} d={d} ich={ich} toast={toast} dunkel={dunkel} Testseite={Testseite} breite={GERAETE[geraet][0]} onChat={(t) => { setRechts("chat"); setChatText(t); }} bausteinEntwurf={bausteinEntwurf} setBausteinEntwurf={setBausteinEntwurf} />
+          {modus === "bausteine" ? <BausteineModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} darf={darf} projekt={projekt} d={d} ich={ich} toast={toast} dunkel={dunkel} Testseite={Testseite} breite={GERAETE[geraet][0]} onChat={zumChat} bausteinEntwurf={bausteinEntwurf} setBausteinEntwurf={setBausteinEntwurf} bs={bs} />
             : modus === "marke" ? <MarkeModus w={werte} aendere={aendere} bearbeitbar={bearbeitbar} projekt={projekt} ich={ich} toast={toast} />
             : <><Einstellungen w={werte} aendere={aendere} bearbeitbar={bearbeitbar} art={art}
               onBeispiele={() => { setRechts("chat"); setChatText(`[Beispiele] Passe die Beispiele der Vorschau (${APP_ARTEN.find(([k]) => k === art)?.[1]}) an unser Konzept an: Menüpunkte, Kennzahlen und Beispieltexte.`); }} />
@@ -308,16 +327,24 @@ export default function Designer({ d, ich, toast }) {
             </div>
           </section></>}
           <aside className={`${card} lg:col-span-2 xl:col-span-1 self-start flex flex-col min-h-[520px] max-h-[calc(100vh-140px)]`}>
-            <div role="tablist" aria-label="Seitenleiste" className="flex gap-1 p-2 border-b border-slate-200 dark:border-slate-800">
+            {/* Prüfbefund Etappe 1: im Modus „Bausteine“ gibt es neben dem Inspektor weiter den Design-Chat (Neuer Baustein, [Bausteine]-Fragen) */}
+            {modus === "bausteine" && <div role="tablist" aria-label="Seitenleiste Bausteine" className="flex gap-1 p-2 border-b border-slate-200 dark:border-slate-800">
+              {[["inspektor", "Baustein", Shapes], ["chat", `Design-Chat mit ${ki.name}`, Bot]].map(([id, t, I]) => (
+                <button key={id} type="button" role="tab" aria-selected={bsSeite === id} onClick={() => setBsSeite(id)}
+                  className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-sm font-semibold ${bsSeite === id ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"}`}><I className="w-4 h-4" />{t}</button>))}
+            </div>}
+            {modus === "bausteine" && bsSeite === "inspektor" ? <BausteinInspektor bs={bs} d={d} ich={ich} projekt={projekt} darf={darf} toast={toast} dunkel={dunkel} onFreigabe={zurFreigabe} /> : <>
+            {modus !== "bausteine" && <div role="tablist" aria-label="Seitenleiste" className="flex gap-1 p-2 border-b border-slate-200 dark:border-slate-800">
               {[["chat", `Chat mit ${ki.name}`, Bot], ["pruef", "Prüfungen", ShieldCheck]].map(([id, t, I]) => (
                 <button key={id} type="button" role="tab" aria-selected={rechts === id} onClick={() => setRechts(id)}
                   className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-sm font-semibold ${rechts === id ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"}`}>
                   <I className="w-4 h-4" />{t}{id === "pruef" && (rot ? <span className="text-[11px] font-bold bg-red-600 text-white rounded-full px-1.5">{rot}</span> : hinweise ? <span className="text-[11px] font-bold bg-amber-500 text-amber-950 rounded-full px-1.5">{hinweise}</span> : null)}</button>))}
-            </div>
-            {rechts === "pruef" ? <Pruefliste befunde={befunde} rot={rot} hinweise={hinweise} kiName={ki.name} onFragen={() => setRechts("chat")} />
+            </div>}
+            {rechts === "pruef" && modus !== "bausteine" ? <Pruefliste befunde={befunde} rot={rot} hinweise={hinweise} kiName={ki.name} onFragen={() => setRechts("chat")} />
               : <DesignChat d={d} ich={ich} projekt={projekt} entwurf={aktiv} werte={werte} befunde={befunde} darf={darf} toast={toast} modus={modus} text={chatText} setText={setChatText} start={!laden && !live && !entwuerfe.length}
                   onUebernehmen={(v) => { if (!bearbeitbar) { toast(fest ? "Dieser Entwurf ist fest – lege eine Kopie an" : "Kein Recht zum Gestalten"); return false; }
                     setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, v)); setGeaendert(true); if (modus === "grund") setMitte("geruest"); return true; }} />}
+            </>}
           </aside>
         </div>)}
 
@@ -454,7 +481,7 @@ function Geruest({ w, modus, geraet, name, art = "verwaltung", bsp = beispieleFu
     </div>);
 }
 
-function Testseite({ projekt, breite, werte, modus, onUmdesign }) {
+function Testseite({ projekt, breite, werte, modus, onUmdesign, bruecke, onBaustein }) {
   const geraet = geraetVonBreite(breite);
   // Etappe 3: Entwurf sofort in der echten Testseite zeigen – die App (vorschauHelfer.js) übernimmt die Werte nur dort, nichts wird gespeichert
   // Nur echte https-Adressen; eine ungültige Adresse darf den Designer nicht abstürzen lassen
@@ -466,15 +493,30 @@ function Testseite({ projekt, breite, werte, modus, onUmdesign }) {
   const ziel = (() => { try { return url ? new URL(url).origin : null; } catch { return null; } })();
   const senden = useCallback(() => { try { rahmen.current?.contentWindow?.postMessage({ cs: "design", werte, modus }, ziel); } catch { /* egal */ } }, [werte, modus, ziel]);
   useEffect(() => { senden(); }, [senden]);
+  // App-Designer 2.0: Brücke zur Baustein-Galerie (nur Testfassungen auf *.pages.dev) – Nachrichten an genau diese Herkunft
+  const galerie = !!bruecke && /^https:\/\/([a-z0-9-]+\.)*pages\.dev$/i.test(ziel || "");
+  useEffect(() => {
+    if (!galerie) return undefined;
+    bruecke.current = (n) => rahmen.current?.contentWindow?.postMessage(n, ziel);
+    return () => { bruecke.current = null; };
+  }, [galerie, bruecke, ziel]);
   useEffect(() => {
     const h = (e) => {
       if (e.origin !== ziel || e.source !== rahmen.current?.contentWindow || !e.data || typeof e.data !== "object") return;
       if (e.data.cs === "design-ok") setBereit(true);
+      // Design-Freigabe (Speichern der Bausteine in der App) – gleiche Regeln wie im Seiten-Designer
+      if (e.data.cs === "design-frage" && galerie) designFrageBeantworten(e.data, ziel, (x) => rahmen.current?.contentWindow?.postMessage(x, ziel));
+      // Galerie meldet: bereit, Baustein gewählt (Linksklick), Antworten auf Laden/Speichern – Inhalt prüft useBausteinDesigner
+      if (galerie && onBaustein) {
+        if (e.data.cs === "bausteine-bereit") onBaustein({ cs: "geladen" });
+        else if (e.data.cs === "baustein-wahl" && /^[a-z0-9-]{1,40}$/.test(String(e.data.id || ""))) onBaustein({ cs: "baustein-wahl", id: e.data.id });
+        else if (e.data.cs === "baustein-stand" || e.data.cs === "baustein-gespeichert") onBaustein(e.data);
+      }
       // Rechtsklick in der Galerie: Symbol bzw. Grundbaustein umdesignen (Datenbank 0027) – nur Art und Name, beides streng geprüft
       if (e.data.cs === "umdesign" && onUmdesign && ["symbol", "baustein"].includes(e.data.art) && /^[A-Za-z0-9-]{1,60}$/.test(String(e.data.name || ""))) onUmdesign({ art: e.data.art, name: e.data.name });
     };
     window.addEventListener("message", h); return () => window.removeEventListener("message", h);
-  }, [ziel, onUmdesign]);
+  }, [ziel, onUmdesign, galerie, onBaustein]);
   if (!url) return <p className="text-sm text-slate-500 p-4">Die App gibt es noch nicht als Testseite – gestalte im „Gerüst“: dort siehst du das Design schon jetzt an einer Muster-App. Sobald die App eine Adresse hat, erscheint sie hier.</p>;
   return (
     <div className="min-w-0">
@@ -572,7 +614,8 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
     q = entwurf ? q.eq("entwurf_id", entwurf.id) : q.is("entwurf_id", null);
     const { data } = await q;
     // Gespräche zum Umdesignen (Rechtsklick in der Galerie) stehen im Umdesign-Entwurf, nicht hier
-    const um = new Set((data || []).filter((m) => !m.frage_id && String(m.text).startsWith("[Umdesign ")).map((m) => m.id));
+    // ebenso Gespräche zu einem Baustein (App-Designer 2.0) – die stehen im Inspektor
+    const um = new Set((data || []).filter((m) => !m.frage_id && (String(m.text).startsWith("[Umdesign ") || String(m.text).startsWith("[Baustein "))).map((m) => m.id));
     setListe((data || []).filter((m) => !um.has(m.id) && !um.has(m.frage_id)).reverse());
   }, [projekt.id, entwurf]);
   useEffect(() => {

@@ -2,6 +2,8 @@ import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "rea
 import { Search, Table2, Shapes, ListTree, ExternalLink, Plus, Loader2, Send, Calendar, Users, Trophy, Bell, ShieldCheck, Settings, Download, Check, CircleAlert, CircleCheck, Stamp, Upload, RefreshCw, ArrowRight } from "lucide-react";
 import { supabase } from "./supabase";
 import { Logo, LogoZeichen, ZEICHEN, marke as markeAus } from "./Logo";
+import { BausteinListe } from "./BausteinInspektor";
+import { useVerzeichnis } from "./verzeichnis";
 
 // App-Designer · Etappe 4 (Baustein-Bibliothek) und Etappe 5 (Marke) – KONZEPT-BAUSTEINE.md, Entscheidungen Gerhard 2026-10-22 22:33,
 // 2026-10-23 10:34 (Tabellen-Varianten, Zuweisung je Tabelle über eine Liste, ein Icon-Stil für alle, Chat beim Anlegen), 15:53 („fertig machen“).
@@ -9,6 +11,9 @@ import { Logo, LogoZeichen, ZEICHEN, marke as markeAus } from "./Logo";
 
 // Umdesign-Entwurf erst bei Bedarf laden (enthält alle Lucide-Symbole für die Auswahl)
 const Umdesign = lazy(() => import("./Umdesign"));
+// App-Designer 2.0 · Etappe 3: Assistent „Neuer Baustein“ (Was? → Gestalten → Zuweisen → Als Auftrag), erst bei Bedarf geladen
+const BausteinAssistent = lazy(() => import("./BausteinAssistent"));
+const BausteinAuftraege = lazy(() => import("./BausteinAssistent").then((m) => ({ default: m.BausteinAuftraege })));
 const card = "rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900";
 const btn = "inline-flex items-center justify-center gap-2 h-9 px-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-display font-bold tracking-wide transition text-sm";
 const ghost = "inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-xl border border-slate-300 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50";
@@ -43,17 +48,8 @@ function Abschnitt({ titel, children, offen = true }) {
   return <details open={offen} className="group border-b border-slate-200 dark:border-slate-800 last:border-0 py-2"><summary className="cursor-pointer font-display font-bold text-[15px] list-none flex items-center justify-between">{titel}<span className="text-slate-400 group-open:rotate-90 transition">›</span></summary><div className="space-y-2 pt-2">{children}</div></details>;
 }
 
-// Baustein-Verzeichnis aus docs/BAUSTEINE.md (JSON-Block) – kommt über den Projekt-Abgleich
-function useVerzeichnis(projektId) {
-  const [v, setV] = useState(null);
-  useEffect(() => {
-    supabase.from("ws_dokumente").select("inhalt, aktualisiert").eq("projekt_id", projektId).eq("pfad", "docs/BAUSTEINE.md").maybeSingle().then(({ data }) => {
-      const m = /```json\s*([\s\S]+?)```/.exec(data?.inhalt || "");
-      try { setV(m ? { ...JSON.parse(m[1]), aktualisiert: data.aktualisiert } : { fehlt: true }); } catch { setV({ fehlt: true }); }
-    });
-  }, [projektId]);
-  return v;
-}
+// Baustein-Verzeichnis: verzeichnis.js (auch für den Inspektor, App-Designer 2.0)
+export { useVerzeichnis };
 
 const DICHTE_PX = { kompakt: 5, normal: 9, luftig: 14 };
 function TabellenMuster({ v, f, name }) {
@@ -71,11 +67,12 @@ function TabellenMuster({ v, f, name }) {
 }
 
 /** Linke Seite + Mitte im Modus „Bausteine“. */
-export function BausteineModus({ w, aendere, bearbeitbar, darf = false, projekt, d, ich, toast, dunkel, Testseite, breite, onChat, bausteinEntwurf, setBausteinEntwurf }) {
+export function BausteineModus({ w, aendere, bearbeitbar, darf = false, projekt, d, ich, toast, dunkel, Testseite, breite, onChat, bausteinEntwurf, setBausteinEntwurf, bs = null }) {
   const verz = useVerzeichnis(projekt.id);
-  const [mitte, setMitte] = useState("vorschau"); const [vari, setVari] = useState("klar"); const [q, setQ] = useState(""); const [neu, setNeu] = useState(false);
+  // App-Designer 2.0 (Etappe 1): Ansicht „Bausteine“ startet mit der Galerie (Testseite in echter Breite)
+  const [mitte, setMitte] = useState(bs ? "galerie" : "vorschau"); const [vari, setVari] = useState("klar"); const [q, setQ] = useState(""); const [neu, setNeu] = useState(false);
   // Eingaben des Dialogs „Neuer Baustein“ bleiben erhalten (auch nach „Erst mit Claude ausarbeiten“) – liegen im Designer, falls er sie mitgibt
-  const [eigenerEntwurf, setEigenerEntwurf] = useState({ name: "", text: "", art: "zusammen" });
+  const [eigenerEntwurf, setEigenerEntwurf] = useState(null);   // Zustand des Assistenten (null = leer)
   const bsEntwurf = bausteinEntwurf || eigenerEntwurf; const setBsEntwurf = setBausteinEntwurf || setEigenerEntwurf;
   const [umdesign, setUmdesign] = useState(null);   // { art: "symbol"|"baustein", name } – Rechtsklick in Galerie oder Verzeichnis
   const kannUmdesign = bearbeitbar;
@@ -88,7 +85,11 @@ export function BausteineModus({ w, aendere, bearbeitbar, darf = false, projekt,
   return (
     <>
       <section className={`${card} p-3 self-start`} aria-label="Einstellungen Bausteine">
-        <Abschnitt titel="Tabellen">
+        {bs && <Abschnitt titel="Galerie">
+          <BausteinListe bs={bs} />
+          {mitte !== "galerie" && <button type="button" className={`${ghost} w-full`} onClick={() => setMitte("galerie")}><ExternalLink className="w-4 h-4" />Galerie zeigen</button>}
+        </Abschnitt>}
+        <Abschnitt titel={bs ? "Tabellen-Varianten (Grunddesign-Auftrag)" : "Tabellen"} offen={!bs}>
           <Feld label="Standard für alle Listen">{wahl(["tabellen", "standard"], VARIANTEN.map((x) => [x, x]), t.standard)}</Feld>
           <div className="flex flex-wrap gap-1 pt-1" role="tablist" aria-label="Variante bearbeiten">{VARIANTEN.map((x) => <button key={x} type="button" role="tab" aria-selected={vari === x} onClick={() => setVari(x)} className={`px-2.5 py-1 rounded-md text-xs font-semibold ${vari === x ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "bg-slate-100 dark:bg-slate-800"}`}>{x}</button>)}</div>
           <Feld label="Zeilenhöhe">{wahl(["tabellen", vari, "dichte"], [["kompakt", "Kompakt"], ["normal", "Normal"], ["luftig", "Luftig"]], v.dichte)}</Feld>
@@ -105,15 +106,18 @@ export function BausteineModus({ w, aendere, bearbeitbar, darf = false, projekt,
                 <select value={t.zuweisung[x.id] || ""} disabled={dis} onChange={(e) => zuweisen(x.id, e.target.value)} className={`${input} w-28`}><option value="">Standard</option>{VARIANTEN.map((y) => <option key={y} value={y}>{y}</option>)}</select>
               </Feld>))}</div>}
         </Abschnitt>
-        <Abschnitt titel="Symbole (Icon-Stil)" offen={false}>
+        <Abschnitt titel={bs ? "Symbole (Icon-Stil, Grunddesign-Auftrag)" : "Symbole (Icon-Stil)"} offen={false}>
           <Feld label="Strichstärke"><span className="flex items-center gap-2"><input type="range" min={1.25} max={2.5} step={0.25} value={w.icons.strich} disabled={dis} onChange={(e) => aendere(["icons", "strich"], Number(e.target.value))} className="w-28 accent-emerald-700" /><span className="w-10 text-right tabular-nums text-xs">{w.icons.strich}</span></span></Feld>
           <Feld label="Ecken">{wahl(["icons", "ecken"], [["rund", "Rund"], ["eckig", "Eckig"]], w.icons.ecken)}</Feld>
           <p className="text-xs text-slate-500">Gilt für alle Lucide-Symbole der App.</p>
         </Abschnitt>
         {darf && <div className="pt-2 flex flex-col gap-1.5">
-          <button type="button" className={ghost} onClick={() => setNeu(true)}><Plus className="w-4 h-4" />{bsEntwurf.name.trim() || bsEntwurf.text.trim() ? "Neuer Baustein (Entwurf) …" : "Neuer Baustein …"}</button>
-          <p className="text-xs text-slate-500">Mit Chat: beschreib den Baustein, Claude hilft beim Ausarbeiten; gebaut wird er über einen Auftrag.</p>
+          <button type="button" className={ghost} onClick={() => setNeu(true)}><Plus className="w-4 h-4" />{bsEntwurf?.name?.trim() || bsEntwurf?.text?.trim() ? "Neuer Baustein (angefangen) …" : "Neuer Baustein …"}</button>
+          <p className="text-xs text-slate-500">Assistent in 4 Schritten: Was? · Gestalten · Zuweisen · Als Auftrag bauen lassen. Neuer Code läuft immer über einen Auftrag mit Prüfungen.</p>
         </div>}
+        <Abschnitt titel="Neue Bausteine (Aufträge)" offen={false}>
+          <Suspense fallback={<Loader2 className="w-4 h-4 animate-spin text-emerald-700" />}><BausteinAuftraege d={d} projekt={projekt} max={8} /></Suspense>
+        </Abschnitt>
       </section>
       <section className={`${card} min-w-0 flex flex-col`}>
         <div className="flex flex-wrap items-center gap-1 p-2 border-b border-slate-200 dark:border-slate-800" role="tablist" aria-label="Ansicht">
@@ -130,8 +134,8 @@ export function BausteineModus({ w, aendere, bearbeitbar, darf = false, projekt,
                 <div className="flex flex-wrap gap-4">{[Calendar, Users, Trophy, Bell, ShieldCheck, Settings, Download, Check].map((I, i) => <I key={i} className="w-6 h-6" strokeWidth={w.icons.strich} strokeLinejoin={w.icons.ecken === "eckig" ? "miter" : "round"} strokeLinecap={w.icons.ecken === "eckig" ? "square" : "round"} />)}</div></div>
             </div>)}
           {mitte === "galerie" && <>
-            <p className="text-xs text-slate-500">{kannUmdesign ? "Tipp: Rechtsklick auf ein Symbol oder einen Grundbaustein (Verzeichnis unten in der Galerie) öffnet den Umdesign-Entwurf." : "Umdesignen dürfen Admin und Entwickler."}</p>
-            <Testseite projekt={{ ...projekt, vorschau_pfad: "/bausteine" }} breite={breite} werte={w} modus={dunkel ? "dunkel" : "hell"} onUmdesign={kannUmdesign ? setUmdesign : undefined} /></>}
+            <p className="text-xs text-slate-500">{bs ? "Linksklick auf ein Muster wählt es aus (rechts bearbeiten – wirkt sofort in der Vorschau, gespeichert als Entwurf des Design-Pakets). " : ""}{kannUmdesign ? "Rechtsklick auf ein Symbol oder einen Baustein öffnet den Umdesign-Entwurf (neuer Code als Auftrag)." : "Umdesignen dürfen Admin und Entwickler."}</p>
+            <Testseite projekt={{ ...projekt, vorschau_pfad: "/bausteine" }} breite={breite} werte={w} modus={dunkel ? "dunkel" : "hell"} onUmdesign={kannUmdesign ? setUmdesign : undefined} bruecke={bs?.bruecke} onBaustein={bs?.onNachricht} /></>}
           {mitte === "verzeichnis" && (
             <div className={`${card} overflow-hidden`}>
               <div className="p-2 flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800"><label className="relative flex-1 min-w-[200px]"><Search className="w-4 h-4 absolute left-2.5 top-2 text-slate-400" /><input className={`${input} pl-8`} placeholder="Baustein suchen" value={q} onChange={(e) => setQ(e.target.value)} /></label>
@@ -144,38 +148,9 @@ export function BausteineModus({ w, aendere, bearbeitbar, darf = false, projekt,
             </div>)}
         </div>
       </section>
-      {neu && darf && <NeuerBaustein projekt={projekt} d={d} toast={toast} wert={bsEntwurf} setWert={setBsEntwurf} onClose={() => setNeu(false)} onChat={onChat} />}
+      {neu && darf && <Suspense fallback={<div className="fixed inset-0 z-40 grid place-items-center bg-black/30"><Loader2 className="w-6 h-6 animate-spin text-white" /></div>}>
+        <BausteinAssistent projekt={projekt} d={d} toast={toast} werte={w} dunkel={dunkel} wert={bsEntwurf} setWert={setBsEntwurf} onClose={() => setNeu(false)} onChat={onChat} /></Suspense>}
     </>);
-}
-
-function NeuerBaustein({ projekt, d, toast, wert, setWert, onClose, onChat }) {
-  const { name, text, art } = wert; const [busy, setBusy] = useState(false);
-  const setze = (k, v) => setWert((alt) => ({ ...alt, [k]: v }));
-  const g = d.gruppen.find((x) => x.id === projekt.design_gruppe_id);
-  // Auftrag und Beschreibung in EINEM Schritt (Datenbank 0036, ws_design_auftrag) – die Werkstatt startet nie ohne Beschreibung
-  const senden = async () => {
-    if (!name.trim() || !g) return; setBusy(true);
-    try {
-      const t = `Neuen Baustein bauen: ${name.trim()} (${art === "grund" ? "Grundbaustein" : art === "diagramm" ? "Diagramm" : art === "fach" ? "Fachbaustein" : "zusammengesetzter Baustein"}).\n${text.trim()}\n\nRegeln (Baustein-Bibliothek): erst prüfen, ob es schon einen passenden Baustein gibt (docs/BAUSTEINE.md); nur Grundwerte aus dem Grunddesign verwenden (keine eigenen Farben/Abstände); Varianten und Zustände (laden, leer, Fehler) vorsehen; in die Galerie /bausteine aufnehmen; danach \`node tools/bausteine.mjs\` ausführen und docs/BAUSTEINE.md mit einchecken.`;
-      const { data, error } = await supabase.rpc("ws_design_auftrag", { p_projekt: projekt.id, p_art: "baustein", p_titel: name.trim(), p_text: t });
-      if (error) throw error;
-      toast(`Auftrag #${data} angelegt – Baustein „${name.trim()}“`); setWert({ name: "", text: "", art: "zusammen" }); onClose();
-    } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
-  };
-  return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-black/45 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="Neuer Baustein" className={`${card} w-full max-w-lg p-5 flex flex-col gap-3`}>
-        <h3 className="font-display font-bold text-xl flex items-center gap-2"><Shapes className="w-5 h-5 text-emerald-700" />Neuer Baustein</h3>
-        <label className="flex flex-col gap-1 text-sm text-slate-500">Name<input id="cs-bs-name" className={input} value={name} maxLength={60} onChange={(e) => setze("name", e.target.value)} placeholder="z. B. Spieltag-Karte" autoFocus /></label>
-        <label className="flex flex-col gap-1 text-sm text-slate-500">Art<select className={input} value={art} onChange={(e) => setze("art", e.target.value)}><option value="grund">Grundbaustein</option><option value="zusammen">Zusammengesetzt (Karte, Kachel …)</option><option value="diagramm">Diagramm</option><option value="fach">Fachbaustein</option></select></label>
-        <label className="flex flex-col gap-1 text-sm text-slate-500">Was soll er zeigen und können?<textarea id="cs-bs-text" className={`${input} min-h-[90px]`} value={text} maxLength={6000} onChange={(e) => setze("text", e.target.value)} /></label>
-        <div className="flex flex-wrap justify-end gap-2">
-          <button type="button" className={ghost} onClick={() => { onChat(`Ich möchte einen neuen Baustein „${name || "…"}“ anlegen: ${text || "…"} Hilf mir, ihn auszuarbeiten (Varianten, Zustände, wo er verwendet wird).`); onClose(); }}
-            title="Deine Eingaben bleiben erhalten – „Neuer Baustein“ öffnet sie wieder">Erst mit Claude ausarbeiten</button>
-          <button type="button" className={btn} disabled={busy || !name.trim() || !g} onClick={senden}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}Als Auftrag senden</button>
-        </div>
-      </div>
-    </div>);
 }
 
 /** Linke Seite + Mitte im Modus „Marke“ (Logo-Designer, Projektlogo). */

@@ -6,8 +6,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutGrid, Send, Loader2, RefreshCw, ExternalLink } from "lucide-react";
 import { supabase } from "./supabase";
-import { isDesktop, tauri } from "./desktop";
 import GeraeteRahmen from "./GeraeteRahmen";
+import { designFrageBeantworten, designFreigabeMerken } from "./designFrage";
 
 const card = "rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900";
 const ghost = "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-semibold disabled:opacity-50";
@@ -19,9 +19,12 @@ export function seitenBasis(projekt) {
   return /^https:\/\/[^/\s]+$/i.test(String(b || "").replace(/\/$/, "")) ? String(b).replace(/\/$/, "") : null;
 }
 
-export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toast }) {
+// titel/kompakt: eingebettet unter „Übernehmen“ (App-Designer 2.0 · Etappe 4) – nur Freigabe & Versionen, ohne Kachel-Wunsch
+// onFreigabeOffen(n): Zahl der offenen Änderungen, die der Freigabe-Reiter der App meldet (nur die Zahl)
+export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toast, tab = null, titel = "Seiten", kompakt = false, onFreigabeOffen }) {
   const basis = seitenBasis(projekt);
-  const url = basis ? `${basis}/designer?cs=1` : null;
+  // tab: Reiter des Seiten-Designers beim Öffnen (z. B. „freigabe“ aus dem Baustein-Inspektor) – nur feste Namen
+  const url = basis ? `${basis}/designer?cs=1${tab && /^(designer|stil|seiten|freigabe)$/.test(tab) ? `&tab=${tab}` : ""}` : null;
   const ziel = (() => { try { return url ? new URL(url).origin : null; } catch { return null; } })();
   const rahmen = useRef(null);
   const [schluessel, setSchluessel] = useState(0);
@@ -35,24 +38,13 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
     const h = (e) => {
       if (e.origin !== ziel || e.source !== rahmen.current?.contentWindow || !e.data || typeof e.data !== "object") return;
       if (e.data.cs === "bereit" || e.data.cs === "design-ok") setBereit(true);
-      // Eigene Design-Freigabe (Entscheidung Gerhard 2026-10-24): Der Seiten-Designer fragt nach dem Design-Geräteschlüssel
-      // der Codeschmiede bzw. lässt eine Nachricht „ttg-design|…“ signieren. Nur für die eingebettete Testfassung von Trainer to go (trainer-to-go.pages.dev und deren Zweige),
-      // nur im Programm; was signiert werden darf, prüft zusätzlich das Programm selbst (Rust, design.rs).
-      if (e.data.cs === "design-frage") {
-        const id = Number(e.data.id);
-        const antwort = (x) => { try { rahmen.current?.contentWindow?.postMessage({ cs: "design-antwort", id, ...x }, ziel); } catch { /* egal */ } };
-        if (!Number.isSafeInteger(id)) return;
-        if (!/^https:\/\/([a-z0-9-]+\.)?trainer-to-go\.pages\.dev$/i.test(ziel || "")) { antwort({ fehler: "Design-Freigabe gibt es nur für die Testfassungen von Trainer to go." }); return; }
-        if (!isDesktop()) { antwort({ fehler: "Die Design-Freigabe gibt es nur im Programm Codeschmiede (nicht im Browser)." }); return; }
-        const n = typeof e.data.nachricht === "string" ? e.data.nachricht : "";
-        const auftrag = e.data.art === "geraet" ? tauri("ws_design_geraet")
-          : e.data.art === "signieren" && n.length <= 512 && /^ttg-design\|(register|verify|code)\|/.test(n) ? tauri("ws_design_signieren", { nachricht: n })
-          : Promise.reject(new Error("Diese Anfrage ist nicht erlaubt."));
-        auftrag.then((ergebnis) => antwort({ ergebnis }), (f) => antwort({ fehler: String(f?.message || f || "Fehler").slice(0, 200) }));
-      }
+      // Eigene Design-Freigabe (Entscheidung Gerhard 2026-10-24): Regeln gemeinsam mit der Baustein-Galerie in designFrage.js
+      if (e.data.cs === "design-frage") designFrageBeantworten(e.data, ziel, (x) => rahmen.current?.contentWindow?.postMessage(x, ziel));
+      if (e.data.cs === "design-status") designFreigabeMerken(e.data.stand, ziel);
+      if (e.data.cs === "freigabe-offen" && Number.isSafeInteger(e.data.anzahl) && e.data.anzahl >= 0 && e.data.anzahl < 10000) onFreigabeOffen?.(e.data.anzahl);
     };
     window.addEventListener("message", h); return () => window.removeEventListener("message", h);
-  }, [ziel]);
+  }, [ziel, onFreigabeOffen]);
 
   // Neue Kachel-Art: als Auftrag in die Design-Gruppe (läuft wie jeder Auftrag: Freigabe, Prüfungen, Test, Live)
   const g = d.gruppen.find((x) => x.id === projekt.design_gruppe_id);
@@ -72,8 +64,9 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
     <section className={`${card} p-3 flex flex-col gap-3`} aria-label="Seiten-Designer">
       <div className="flex flex-wrap items-center gap-2">
         <LayoutGrid className="w-4 h-4 text-emerald-700" />
-        <h2 className="font-display font-bold">Seiten</h2>
-        <span className="text-xs text-slate-500">Startseiten je Rolle, Übersichten, Arbeitsseiten · PC/Tablet/Handy · für alle Vereine oder einzelne (Individualdesign). Freigeben mit „Sofort“ wirkt sofort in der App; „Schrittweise“ erst ab der ersten Stufe.</span>
+        <h2 className="font-display font-bold">{titel}</h2>
+        {kompakt ? <span className="text-xs text-slate-500">Bausteine, Seiten und Akzentfarbe aus dem Design-Paket der App – Einzelzeilen mit Vorher/Nachher, Ausrollen und Versionen. Gespeichert und freigegeben wird in der App mit deinen Design-Rechten.</span>
+        : <span className="text-xs text-slate-500">Seite wählen, „Gilt für“ (alle Vereine, Paket, Verein, Rolle) · je Kachel Hintergrund frei (Kontrast-Wächter), Rahmen, Variante, Geräte · Schnellzugriffe zusammenstellen · Akzentfarbe der App. Freigeben mit „Sofort“ wirkt sofort in der App.</span>}
         <span className="flex-1" />
         <button type="button" className={ghost} title="Neu laden" onClick={() => { setBereit(false); setSchluessel((k) => k + 1); }}><RefreshCw className="w-4 h-4" /></button>
         <a className={ghost} href={url} target="_blank" rel="noopener noreferrer" title="Nur eingebettet nutzbar – außerhalb zeigt die App „Seite nicht gefunden“"><ExternalLink className="w-4 h-4" /></a>
@@ -83,11 +76,11 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
           : "Der Seiten-Designer lädt aus der Testfassung der App. Beim ersten Mal dort mit deinem Betreiber-Konto anmelden; der Inhaber gibt diesen PC einmal für das Design frei."}
       </p>
       {/* Echte PC-Breite (1280 px), eingepasst in die Spalte – sonst klappt das Menü der App auf Symbole zusammen (Fehlerkorrektur 0.9.5) */}
-      <GeraeteRahmen geraet="pc" hoehe="fuellen" className="h-[calc(100vh-260px)] min-h-[620px]" rahmenClass="rounded-xl bg-white ring-1 ring-black/10">
+      <GeraeteRahmen geraet="pc" hoehe="fuellen" className={kompakt ? "h-[calc(100vh-320px)] min-h-[560px]" : "h-[calc(100vh-260px)] min-h-[620px]"} rahmenClass="rounded-xl bg-white ring-1 ring-black/10">
         <iframe key={schluessel} ref={rahmen} title="Seiten-Designer der App" src={url} onLoad={() => setTimeout(senden, 400)}
           className="block w-full h-full bg-white" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" />
       </GeraeteRahmen>
-      {darf && g && (
+      {darf && g && !kompakt && (
         <div className="flex flex-wrap items-center gap-2">
           <label htmlFor="sd-wunsch" className="text-sm text-slate-600 dark:text-slate-300">Eine Kachel-Art fehlt?</label>
           <input id="sd-wunsch" className={`${input} flex-1 min-w-[220px]`} maxLength={300} placeholder="z. B. Geburtstage der Woche, Wetter am Platz …" value={wunsch} onChange={(e) => setWunsch(e.target.value)} />

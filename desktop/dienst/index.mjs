@@ -22,7 +22,7 @@ import { waehleModell } from "./lib/modell.mjs";
 import { werteAus, zweigName } from "./lib/ergebnis.mjs";
 import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
 import { pruefErgebnis } from "./lib/pruefung.mjs";
-import { designPrompt, designAntwort } from "./lib/design.mjs";
+import { designPrompt, designAntwort, bausteinAusFrage, bausteinVorschlag } from "./lib/design.mjs";
 import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
 import { repoAnlegen, repoSichtbarkeit, repoIstPrivat } from "./lib/repo.mjs";
 import { liveAusfuehren, pruefPrompt, enthalten } from "./lib/live.mjs";
@@ -30,10 +30,11 @@ import { katalogFuer, einrichten, einrichtUmgebung, findeKatalogProgramm, angeme
 import { bildAusDataUrl, markePrompt, markeAntwort } from "./lib/marke.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen, codexBauen, codexLimits } from "./lib/ki.mjs";
 import { uebernehmen, prText } from "./lib/ersatz.mjs";
-import { ampelPruefen, sandboxStarten, testlaufStarten } from "./lib/anbindungen.mjs";
+import { ampelPruefen, sandboxStarten, testlaufStarten, sandboxPfad } from "./lib/anbindungen.mjs";
 import { zweigStand, codeBaum, codeDatei, handSchreiben } from "./lib/code.mjs";
 import { dbEinrichten, dbAmpel, dbOffen, dbLiveEinspielen, ablaeufeGeaendert } from "./lib/datenbank.mjs";
 import { fehlerBlock } from "./lib/fehler.mjs";
+import { bausteinDatenBlock, anhangBild } from "./lib/bausteinAuftrag.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -147,6 +148,17 @@ async function pcAnmelden() {
   if (error) throw new Error("Werkstatt-PC konnte nicht angemeldet werden: " + error.message);
   pcId = data.id;
   await writeFile(datei, JSON.stringify({ id: pcId }));
+}
+// Einrichtung › Dieser PC (Datenbank 0040): was die Werkstatt hier kann – nur feste Werte, keine Pfade oder Namen
+async function faehigkeitenMelden() {
+  if (!pcId) return;
+  let dienst = null;
+  try { dienst = JSON.parse(await readFile(path.join(HIER, "package.json"), "utf8")).version; } catch { /* egal */ }
+  const f = { windows_sandbox: !!sandboxPfad(), os_sandbox: sandboxArt() || null };
+  if (["win32", "darwin", "linux"].includes(process.platform)) f.plattform = process.platform;
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(String(dienst || ""))) f.dienst = dienst;
+  const { error } = await db.from("ws_werkstatt_pcs").update({ faehigkeiten: f }).eq("id", pcId);
+  if (error && !/faehigkeiten|schema cache|does not exist/i.test(error.message)) melde("fehler", `Fähigkeiten dieses PCs: ${kuerzen(ohneGeheimnisse(error.message), 200)}`);
 }
 async function lebenszeichen(an = true) {
   if (pcId) await db.from("ws_werkstatt_pcs").update({ an, zuletzt: new Date().toISOString() }).eq("id", pcId);
@@ -304,7 +316,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
       ? `Nacharbeit aus der Prüfung (nichts ist live gegangen):\n${nachrichten.slice(-1)[0]?.text || ""}\n\nBehebe die Befunde auf demselben Zweig ${zweig}, prüfe, committe, \`git push origin HEAD\` und antworte wieder mit „ERGEBNIS-PR: #${auftrag.pr_nummer || "<Nummer>"} ${zweig}“ (denselben Pull Request weiterverwenden).`
       : fortsetzen && merk.sitzung
       ? `Antwort von Gerhard/Team auf deine Rückfrage:\n${nachrichten.filter((n) => n.von).slice(-1)[0]?.text || ""}\n\nArbeite weiter nach denselben Regeln.`
-      : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature), await holeWissen(projekt.id), await fehlerDatenFuer(nachrichten, projekt.id));
+      : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature), await holeWissen(projekt.id), [await fehlerDatenFuer(nachrichten, projekt.id), await bausteinDatenFuer(auftrag, nachrichten, projekt.id, ordner)].filter(Boolean).join("\n"));
 
     let r;
     if (auftrag.hand && (fortsetzen || nacharbeit)) {
@@ -362,6 +374,8 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
     if (!ende || ende.subtype !== "success") throw new Error(ende?.subtype ? `Lauf beendet: ${ende.subtype}` : "Lauf ohne Ergebnis beendet");
     r = werteAus(ende.result);
     }
+    // Bild-Vorlagen aus dem Assistenten nach dem Lauf vom PC löschen (Datenschutz: „mit Abschluss gelöscht“, Prüfung M1)
+    await rm(path.join(ordner, ".codeschmiede-anhaenge"), { recursive: true, force: true }).catch(() => {});
     if (r.art === "warten") {   // Ersatz nicht möglich (Limit): zurück in die Warteschlange
       await db.from("ws_auftraege").update({ stand: "wartet", werkstatt_pc: null }).eq("id", auftrag.id);
       await log(auftrag.id, "info", r.text); return;
@@ -439,6 +453,42 @@ async function fehlerDatenFuer(nachrichten, projektId) {
   if (!id) return "";
   const { data: f } = await db.from("ws_fehler").select("id, nachricht, stelle, seite, ablauf, version, umgebung, anzahl, projekt_id").eq("id", id).maybeSingle();
   return f && f.projekt_id === projektId ? fehlerBlock(f) : "(Die Fehlermeldung ist nicht mehr vorhanden – nach 30 Tagen gelöscht.)";
+}
+
+// Assistent „Neuer Baustein“ (Datenbank 0039): geprüfte Angaben als Datenblock; Bild-Anhänge in den Git-Ordner des Arbeitsordners
+// (Ordner .codeschmiede-anhaenge/, von Git ausgeschlossen). Nur Bilder dieses Auftrags, nur echte PNG/JPEG/WebP.
+async function bausteinDatenFuer(auftrag, nachrichten, projektId, ordner) {
+  // Nur die ALLERERSTE Nachricht des Auftrags zählt, und nur wenn sie vom Auftraggeber stammt (aus ws_design_auftrag_neu) – Prüfung M2
+  const n = (nachrichten || [])[0];
+  if (!n || !n.von || n.von !== auftrag.erstellt_von || n.art !== "text" || !n.daten?.design) return "";
+  const ids = [...new Set([...(n.daten.design?.zuweisung?.gruppen || []), ...(n.daten.design?.zuweisung?.features || [])])].filter((x) => typeof x === "string").slice(0, 80);
+  const namen = { gruppen: new Map(), features: new Map() };
+  try {
+    const { data: gs } = await db.from("ws_gruppen").select("id, name, ws_bereiche!inner(projekt_id)").in("id", ids).eq("ws_bereiche.projekt_id", projektId);
+    (gs || []).forEach((g) => namen.gruppen.set(g.id, g.name));
+    const { data: fs } = await db.from("ws_features").select("id, name, ws_gruppen!inner(ws_bereiche!inner(projekt_id))").in("id", ids).eq("ws_gruppen.ws_bereiche.projekt_id", projektId);
+    (fs || []).forEach((f) => namen.features.set(f.id, f.name));
+  } catch { /* nur Namen */ }
+  const bilder = [];
+  try {
+    const { data: bs } = await db.from("ws_auftrag_bilder").select("id, dateiname, bild").eq("auftrag_id", auftrag.id).order("id").limit(3);
+    // Im Arbeitsordner (Claude liest ohne Rückfrage), aber über info/exclude von Git ausgeschlossen – wird nie eingecheckt
+    const ziel = path.join(ordner, ".codeschmiede-anhaenge");
+    await rm(ziel, { recursive: true, force: true }).catch(() => {});   // Reste früherer, abgebrochener Läufe
+    if ((bs || []).length) {
+      const exclude = path.join(path.resolve(ordner, await git(ordner, "rev-parse", "--git-common-dir")), "info", "exclude");
+      const alt = await readFile(exclude, "utf8").catch(() => "");
+      if (!alt.split(/\r?\n/).includes("/.codeschmiede-anhaenge/")) { await mkdir(path.dirname(exclude), { recursive: true }); await writeFile(exclude, `${alt}${alt && !alt.endsWith("\n") ? "\n" : ""}/.codeschmiede-anhaenge/\n`); }
+    }
+    for (const b of bs || []) {
+      const bild = anhangBild(b.bild); if (!bild) { await log(auftrag.id, "info", `Bild-Anhang ${b.id} übersprungen (kein gültiges PNG/JPEG/WebP bis 2 MB)`); continue; }
+      await mkdir(ziel, { recursive: true });
+      const datei = path.join(ziel, `auftrag-${auftrag.id}-bild-${b.id}.${bild.endung}`);
+      await writeFile(datei, bild.daten);
+      bilder.push({ pfad: datei, dateiname: b.dateiname });
+    }
+  } catch (e) { await log(auftrag.id, "info", `Bild-Anhang nicht lesbar: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 200)}`); }
+  return bausteinDatenBlock(n.daten.design, namen, bilder);
 }
 
 // ---------- Hand-Änderung aus dem Code-Editor (Datenbank 0031) ----------
@@ -1036,12 +1086,17 @@ async function designChat() {
     let q = db.from("ws_design_chat").select("id, von, text, frage_id").eq("projekt_id", f.projekt_id).lt("id", f.id).order("id", { ascending: false }).limit(40);
     q = f.entwurf_id ? q.eq("entwurf_id", f.entwurf_id) : q.is("entwurf_id", null);
     const { data: alle } = await q;
-    const eigene = new Set((alle || []).filter((m) => !m.frage_id && m.von === cfg.user_id).map((m) => m.id));
+    // Baustein-Fragen (App-Designer 2.0): nur das Gespräch zu genau diesem Baustein als Verlauf; sonst ohne Baustein-Gespräche
+    const bsVorher = bausteinAusFrage(f.text);
+    const eigene = new Set((alle || []).filter((m) => !m.frage_id && m.von === cfg.user_id
+      && (bsVorher ? String(m.text).startsWith(`[Baustein ${bsVorher}]`) : !String(m.text).startsWith("[Baustein "))).map((m) => m.id));
     const verlauf = (alle || []).filter((m) => eigene.has(m.id) || eigene.has(m.frage_id)).slice(0, 8);
     const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, /^\[Marke\]/.test(f.text) ? "bilder" : "design", designPrompt({ projektName: pj?.name || f.projekt_id, projektId: f.projekt_id, appArt: pj?.app_art || "verwaltung", wissen: wissenText((await holeWissen(f.projekt_id)).filter((w) => ["ziel", "design", "funktionen"].includes(w.kapitel))), beschreibung: pj?.beschreibung || "", anfang: !eD && !designs, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
     const { text, vorschlag: v0 } = designAntwort(ohneGeheimnisse(roh));
     const vorschlag = /^\[Umdesign (Symbol|Baustein) /.test(f.text) ? null : v0;   // Umdesign-Gespräche: Vorschlag nur als UMDESIGN-Zeile (Prüfung 0.8.7)
-    const { error: e2 } = await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
+    // App-Designer 2.0: Bei einer Baustein-Frage gilt nur ein Vorschlag für genau diesen Baustein (Rest wird verworfen)
+    const bsId = bausteinAusFrage(f.text);
+    const { error: e2 } = await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: bsId ? bausteinVorschlag(vorschlag, bsId) : vorschlag });
     if (e2) throw e2;
     await kiVermerken("design", f.id, ki);
   } catch (e) {
@@ -1428,6 +1483,7 @@ async function start() {
   verbinde();
   await tokenSchreiben();
   await pcAnmelden();
+  await faehigkeitenMelden().catch(() => {});
   try { const { data } = await db.from("ws_abo_limits").select("*").eq("benutzer_id", cfg.user_id).maybeSingle(); if (data) aboStand = data; } catch { /* noch keine Werte */ }
   try { const { data } = await db.from("ws_ki_kopplung").select("anbieter, anfragen_heute, anfragen_tag").eq("pc_id", pcId); for (const z of data || []) if (z.anfragen_tag) anfragen[z.anbieter] = { tag: z.anfragen_tag, n: z.anfragen_heute || 0 }; } catch { /* Spalten erst ab Datenbank 0029 */ }
   setInterval(() => aboAusStatuszeile().catch(() => {}), 60 * 1000);
