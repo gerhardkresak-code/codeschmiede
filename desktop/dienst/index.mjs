@@ -374,6 +374,8 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
     if (!ende || ende.subtype !== "success") throw new Error(ende?.subtype ? `Lauf beendet: ${ende.subtype}` : "Lauf ohne Ergebnis beendet");
     r = werteAus(ende.result);
     }
+    // Bild-Vorlagen aus dem Assistenten nach dem Lauf vom PC löschen (Datenschutz: „mit Abschluss gelöscht“, Prüfung M1)
+    await rm(path.join(ordner, ".codeschmiede-anhaenge"), { recursive: true, force: true }).catch(() => {});
     if (r.art === "warten") {   // Ersatz nicht möglich (Limit): zurück in die Warteschlange
       await db.from("ws_auftraege").update({ stand: "wartet", werkstatt_pc: null }).eq("id", auftrag.id);
       await log(auftrag.id, "info", r.text); return;
@@ -456,15 +458,15 @@ async function fehlerDatenFuer(nachrichten, projektId) {
 // Assistent „Neuer Baustein“ (Datenbank 0039): geprüfte Angaben als Datenblock; Bild-Anhänge in den Git-Ordner des Arbeitsordners
 // (Ordner .codeschmiede-anhaenge/, von Git ausgeschlossen). Nur Bilder dieses Auftrags, nur echte PNG/JPEG/WebP.
 async function bausteinDatenFuer(auftrag, nachrichten, projektId, ordner) {
-  // Nur die erste Nachricht des Auftraggebers (aus ws_design_auftrag_neu) zählt – nie spätere Nachrichten anderer
-  const n = (nachrichten || []).find((x) => x.von && x.von === auftrag.erstellt_von && x.daten?.design);
-  if (!n) return "";
+  // Nur die ALLERERSTE Nachricht des Auftrags zählt, und nur wenn sie vom Auftraggeber stammt (aus ws_design_auftrag_neu) – Prüfung M2
+  const n = (nachrichten || [])[0];
+  if (!n || !n.von || n.von !== auftrag.erstellt_von || n.art !== "text" || !n.daten?.design) return "";
   const ids = [...new Set([...(n.daten.design?.zuweisung?.gruppen || []), ...(n.daten.design?.zuweisung?.features || [])])].filter((x) => typeof x === "string").slice(0, 80);
   const namen = { gruppen: new Map(), features: new Map() };
   try {
     const { data: gs } = await db.from("ws_gruppen").select("id, name, ws_bereiche!inner(projekt_id)").in("id", ids).eq("ws_bereiche.projekt_id", projektId);
     (gs || []).forEach((g) => namen.gruppen.set(g.id, g.name));
-    const { data: fs } = await db.from("ws_features").select("id, name").in("id", ids);
+    const { data: fs } = await db.from("ws_features").select("id, name, ws_gruppen!inner(ws_bereiche!inner(projekt_id))").in("id", ids).eq("ws_gruppen.ws_bereiche.projekt_id", projektId);
     (fs || []).forEach((f) => namen.features.set(f.id, f.name));
   } catch { /* nur Namen */ }
   const bilder = [];
@@ -472,13 +474,14 @@ async function bausteinDatenFuer(auftrag, nachrichten, projektId, ordner) {
     const { data: bs } = await db.from("ws_auftrag_bilder").select("id, dateiname, bild").eq("auftrag_id", auftrag.id).order("id").limit(3);
     // Im Arbeitsordner (Claude liest ohne Rückfrage), aber über info/exclude von Git ausgeschlossen – wird nie eingecheckt
     const ziel = path.join(ordner, ".codeschmiede-anhaenge");
+    await rm(ziel, { recursive: true, force: true }).catch(() => {});   // Reste früherer, abgebrochener Läufe
     if ((bs || []).length) {
       const exclude = path.join(path.resolve(ordner, await git(ordner, "rev-parse", "--git-common-dir")), "info", "exclude");
       const alt = await readFile(exclude, "utf8").catch(() => "");
       if (!alt.split(/\r?\n/).includes("/.codeschmiede-anhaenge/")) { await mkdir(path.dirname(exclude), { recursive: true }); await writeFile(exclude, `${alt}${alt && !alt.endsWith("\n") ? "\n" : ""}/.codeschmiede-anhaenge/\n`); }
     }
     for (const b of bs || []) {
-      const bild = anhangBild(b.bild); if (!bild) continue;
+      const bild = anhangBild(b.bild); if (!bild) { await log(auftrag.id, "info", `Bild-Anhang ${b.id} übersprungen (kein gültiges PNG/JPEG/WebP bis 2 MB)`); continue; }
       await mkdir(ziel, { recursive: true });
       const datei = path.join(ziel, `auftrag-${auftrag.id}-bild-${b.id}.${bild.endung}`);
       await writeFile(datei, bild.daten);
