@@ -7,7 +7,8 @@
 --                              Ablauf: ws_aufgabe_anhang_neu reserviert (prüft Typ, Größe, Anzahl, erzeugt den Pfad) → die Oberfläche lädt
 --                              genau dorthin hoch (Regel: nur reservierte Pfade, kein Überschreiben) → ws_aufgabe_anhang_bestaetigen vergleicht
 --                              Größe und Typ der angekommenen Datei mit der Reservierung und setzt „fertig“ (nur fertige Anhänge werden gezeigt,
---                              geschickt und an die Werkstatt gegeben; unfertige verfallen nach 1 Stunde) → Anzeige über signierte Adressen.
+--                              geschickt und an die Werkstatt gegeben; unfertige verfallen nach 1 Stunde – aufgeräumt beim Reservieren,
+--                              Bestätigen und beim Öffnen der Aufgaben, ws_aufgaben_aufraeumen) → Anzeige über signierte Adressen.
 --   * ws_aufgabe_dateien_weg – Lösch-Warteschlange: jeder gelöschte Anhang (auch über Aufgabe/Projekt) hinterlässt seinen Pfad; die Oberfläche
 --                              löscht die Datei im Speicher (Regel: nur Pfade aus der Warteschlange) und meldet sie mit ws_aufgabe_dateien_erledigt.
 --   * ws_aufgabe_sendungen   – „In den Chat schicken“: Ziel Feature oder Gruppe; die Sendung erscheint im Chat dieses Features bzw. dieser Gruppe
@@ -21,10 +22,12 @@
 begin;
 
 -- ---------- Wer darf? ----------
--- Sehen: jedes Mitglied des Projekts (ws_sieht_projekt). Anlegen/Bearbeiten/Senden: Admin, Entwickler, Texter des Projekts.
+-- Sehen: jedes Mitglied des Projekts (ws_sieht_projekt). Anlegen/Bearbeiten/Senden/Anhänge: Admin, Entwickler, Texter des Projekts –
+-- nur solange das Projekt besteht und nicht archiviert ist (Nachprüfung 1: im Archiv ändert niemand etwas).
 create or replace function public.ws_darf_aufgaben(p_projekt text) returns boolean
 language sql stable security definer set search_path = public as $$
   select coalesce(public.ws_rolle_im_projekt(p_projekt) in ('admin','entwickler','texter'), false)
+     and exists (select 1 from public.ws_projekte where id = p_projekt and not coalesce(archiviert, false))
 $$;
 revoke execute on function public.ws_darf_aufgaben(text) from public, anon;
 grant execute on function public.ws_darf_aufgaben(text) to authenticated;
@@ -201,7 +204,20 @@ create policy ws_aufgabe_anhaenge_lesen on public.ws_aufgabe_anhaenge for select
 alter table public.ws_aufgabe_dateien_weg enable row level security;
 drop policy if exists ws_aufgabe_dateien_weg_lesen on public.ws_aufgabe_dateien_weg;
 create policy ws_aufgabe_dateien_weg_lesen on public.ws_aufgabe_dateien_weg for select to authenticated
-  using (public.ws_ist_admin() or public.ws_darf_aufgaben(projekt_id));
+  using (public.ws_ist_admin() or (exists (select 1 from public.ws_projekte p where p.id = projekt_id) and public.ws_darf_aufgaben(projekt_id)));
+
+-- Projekt-Kennungen sind frei wählbar (ws_projekt_anlegen): eine Kennung, unter der noch Dateien auf das Löschen warten, wird nicht neu vergeben –
+-- sonst bekämen Mitglieder des neuen Projekts Zugriff auf diese Dateien (Nachprüfung 3)
+create or replace function public.ws_projekt_id_frei() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from public.ws_aufgabe_dateien_weg w where w.projekt_id = new.id or w.pfad like new.id || '/%') then
+    raise exception 'Diese Projekt-Kennung wird noch aufgeräumt (Dateien eines gelöschten Projekts) – bitte eine andere wählen oder später nochmal'; end if;
+  return new;
+end $$;
+revoke execute on function public.ws_projekt_id_frei() from public, anon, authenticated;
+drop trigger if exists ws_projekt_id_frei on public.ws_projekte;
+create trigger ws_projekt_id_frei before insert on public.ws_projekte for each row execute function public.ws_projekt_id_frei();
 drop policy if exists ws_aufgabe_sendungen_lesen on public.ws_aufgabe_sendungen;
 create policy ws_aufgabe_sendungen_lesen on public.ws_aufgabe_sendungen for select to authenticated using (public.ws_sieht_projekt(projekt_id));
 
@@ -252,6 +268,13 @@ begin
   update public.ws_aufgabe_anhaenge set fertig = true where id = r.id;
   update public.ws_aufgaben set geaendert = now() where id = r.aufgabe_id;
   return true;
+end $$;
+
+-- Beim Öffnen der Aufgaben: unfertige Reservierungen älter als 1 Stunde verwerfen (ihre Dateien kommen in die Lösch-Warteschlange)
+create or replace function public.ws_aufgaben_aufraeumen(p_projekt text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if public.ws_darf_aufgaben(p_projekt) then perform public.ws_aufgabe_reste_verwerfen(p_projekt); end if;
 end $$;
 
 -- Dateien aus der Warteschlange, die im Speicher nicht mehr da sind, austragen (die Oberfläche ruft das nach remove() auf)
@@ -415,15 +438,16 @@ end $$;
 
 revoke execute on function public.ws_aufgabe_anhang_neu(bigint, text, text, bigint), public.ws_aufgabe_anhang_loeschen(bigint),
   public.ws_aufgabe_loeschen(bigint), public.ws_aufgabe_senden(bigint, text, text), public.ws_aufgabe_sendung_zurueckziehen(bigint),
-  public.ws_aufgabe_als_auftrag(bigint), public.ws_aufgabe_anhang_bestaetigen(bigint), public.ws_aufgabe_dateien_erledigt(text[]) from public, anon;
+  public.ws_aufgabe_als_auftrag(bigint), public.ws_aufgabe_anhang_bestaetigen(bigint), public.ws_aufgabe_dateien_erledigt(text[]), public.ws_aufgaben_aufraeumen(text) from public, anon;
 grant execute on function public.ws_aufgabe_anhang_neu(bigint, text, text, bigint), public.ws_aufgabe_anhang_loeschen(bigint),
   public.ws_aufgabe_loeschen(bigint), public.ws_aufgabe_senden(bigint, text, text), public.ws_aufgabe_sendung_zurueckziehen(bigint),
-  public.ws_aufgabe_als_auftrag(bigint), public.ws_aufgabe_anhang_bestaetigen(bigint), public.ws_aufgabe_dateien_erledigt(text[]) to authenticated;
+  public.ws_aufgabe_als_auftrag(bigint), public.ws_aufgabe_anhang_bestaetigen(bigint), public.ws_aufgabe_dateien_erledigt(text[]), public.ws_aufgaben_aufraeumen(text) to authenticated;
 
 -- ---------- Privater Speicher „ws-aufgaben“ ----------
 create or replace function public.ws_aufgabe_datei_loeschbar(p_name text) returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.ws_aufgabe_dateien_weg w where w.pfad = p_name and (public.ws_ist_admin() or public.ws_darf_aufgaben(w.projekt_id)))
+  select exists (select 1 from public.ws_aufgabe_dateien_weg w where w.pfad = p_name and w.pfad like w.projekt_id || '/%'
+                   and (public.ws_ist_admin() or (exists (select 1 from public.ws_projekte p where p.id = w.projekt_id) and public.ws_darf_aufgaben(w.projekt_id))))
 $$;
 -- Nicht öffentlich; Größe ≤ 10 MB und nur die erlaubten Typen (prüft der Speicher selbst). Regeln nach Projekt:
 --   lesen      – Mitglieder des Projekts für FERTIGE Anhänge; wer reserviert hat, für die eigene unfertige Datei; für Pfade in der

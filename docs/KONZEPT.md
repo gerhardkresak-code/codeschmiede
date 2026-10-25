@@ -89,7 +89,7 @@ und Anhänge (≤ 20: Bilder PNG/JPG/WebP ≤ 5 MB, Dateien PDF/TXT/CSV/DOCX/XLS
 Sehen: alle Mitglieder des Projekts. Anlegen/Bearbeiten/Senden: Admin, Entwickler, Texter (Leser nur lesen). Löschen: wer angelegt hat, oder der Admin.
 Anhänge liegen im **privaten Speicher-Bucket `ws-aufgaben`** (`<projekt>/<aufgabe>/<uuid>.<endung>`): Pfad wird zuerst reserviert
 (`ws_aufgabe_anhang_neu`), dann genau dorthin hochgeladen (kein Überschreiben) und bestätigt (`ws_aufgabe_anhang_bestaetigen`: Größe und Typ im Speicher
-müssen zur Reservierung passen; nur „fertige“ Anhänge werden gezeigt, geschickt und weitergegeben, unfertige verfallen nach 1 Stunde); angezeigt nur über
+müssen zur Reservierung passen; nur „fertige“ Anhänge werden gezeigt, geschickt und weitergegeben, unfertige verfallen nach 1 Stunde und werden beim Reservieren, Bestätigen und Öffnen der Aufgaben verworfen); angezeigt nur über
 signierte Adressen (10 Minuten, beim Anzeigen erzeugt). Gelöschte Anhänge (einzeln, mit Aufgabe oder Projekt) landen in der Lösch-Warteschlange
 `ws_aufgabe_dateien_weg`; die Oberfläche löscht die Dateien und trägt sie aus (beim Öffnen der Aufgaben werden Reste nachgeholt).
 **In den Chat schicken** (`ws_aufgabe_senden`): Ziel Feature oder Gruppe desselben Projekts (nicht „Konzept“) → Sendung mit dem gespeicherten Stand

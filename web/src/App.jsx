@@ -18,7 +18,7 @@ import Regelwerk from "./Regelwerk";
 import Anbindungen, { NeuesProjektAssistent } from "./ProjektArten";
 import CodeEditor from "./CodeEditor";
 import Fehler from "./Fehler";
-import Aufgaben, { AufgabenImChat, AufgabeBeilagen, useMeineAufgaben } from "./Aufgaben";
+import Aufgaben, { AufgabenImChat, AufgabeBeilagen, AufgabePlakette, useMeineAufgaben } from "./Aufgaben";
 import { LogoZeichen } from "./Logo";
 import CodeschmiedeZeichen from "./Zeichen";
 import GeraeteRahmen from "./GeraeteRahmen";
@@ -475,6 +475,7 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
   const zahlBeantwortet = nachrichten.filter(beantwortet).length;
   const erlauben = async (e, s) => { const { error } = await supabase.rpc("ws_erlaubnis_entscheiden", { p_id: e.id, p_status: s }); toast(error ? fehler(error) : s === "abgelehnt" ? "Abgelehnt" : "Erlaubt"); };
   const offeneErl = erlaubnisse.filter((e) => e.status === "offen");
+  const ersteId = useMemo(() => { const e = {}; nachrichten.forEach((m) => { if (!(m.auftrag_id in e) || m.id < e[m.auftrag_id]) e[m.auftrag_id] = m.id; }); return e; }, [nachrichten]);
 
   return (
     <aside className={`${card} flex flex-col min-h-0 ${eingebettet ? "h-full" : "lg:col-span-2 xl:col-span-1 xl:sticky xl:top-3 xl:max-h-[calc(100vh-24px)]"}`} aria-label="Auftrags-Chat">
@@ -511,10 +512,10 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
                   {m.art !== "system" && <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5 flex-wrap">{m.von ? name(m.von) : `Werkstatt ${g.name}`} · {fmt(m.erstellt)}{m.art === "frage" ? " · Rückfrage" : ""}
                     {m.kanal === "gruppe" && f && <span className="px-1.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">aus Gruppe</span>}
                     {m.kanal === "claude-chat" && <span className="px-1.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">aus Claude-Chat</span>}
-                    {m.daten?.aufgabe && m.von && <span className="px-1.5 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300">aus Aufgabe</span>}
+                    {m.daten?.aufgabe && m.von && <AufgabePlakette m={m} erste={ersteId[m.auftrag_id] === m.id} />}
                     {zu && <span className="text-green-700 dark:text-green-400 inline-flex items-center gap-1"><CircleCheck className="w-3 h-3" />abgeschlossen</span>}</div>}
                   {m.daten?.aufgabe && m.von ? <p className="whitespace-pre-wrap break-words">{m.text}</p> : <Markdown text={m.text} klein />}
-                  {m.daten?.aufgabe && m.von && <AufgabeBeilagen daten={m.daten.aufgabe} toast={toast} />}
+                  {m.daten?.aufgabe && m.von && <AufgabeBeilagen m={m} erste={ersteId[m.auftrag_id] === m.id} toast={toast} />}
                 </div>); })}
               <PruefBefunde a={a} />
               {offeneErl.filter((e) => e.auftrag_id === a.id).map((e) => <ErlaubnisKarte key={e.id} e={e} g={g} kann={kannFrei} onEntscheid={erlauben} />)}

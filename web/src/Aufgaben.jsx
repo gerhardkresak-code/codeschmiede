@@ -110,7 +110,8 @@ function useVorschau(pfade) {
 
 // Lösch-Warteschlange abarbeiten (Datenbank 0042): Dateien gelöschter Anhänge im Speicher entfernen und austragen.
 // Läuft nach jedem Löschen und beim Öffnen der Aufgaben (holt auch liegengebliebene nach). Fehler werden gemeldet.
-export async function dateienAufraeumen(toast) {
+export async function dateienAufraeumen(toast, projektId) {
+  if (projektId) await supabase.rpc("ws_aufgaben_aufraeumen", { p_projekt: projektId });   // unfertige Reservierungen > 1 Stunde verwerfen
   const { data, error } = await supabase.from("ws_aufgabe_dateien_weg").select("pfad").order("erstellt").limit(200);
   if (error || !data?.length) return;
   const pfade = data.map((x) => x.pfad);
@@ -207,7 +208,7 @@ const rolleVon = (d, ich) => (ich.rolle === "admin" ? "admin" : d.mitglieder.fin
 // ---------- Seite „Aufgaben“ ----------
 export default function Aufgaben({ d, ich, toast, onOeffneChat }) {
   const daten = useAufgabenDaten(d.projektId);
-  useEffect(() => { dateienAufraeumen(toast); }, [d.projektId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { dateienAufraeumen(toast, d.projektId); }, [d.projektId]); // eslint-disable-line react-hooks/exhaustive-deps
   const rolle = rolleVon(d, ich);
   const kann = ["admin", "entwickler", "texter"].includes(rolle);
   const [filter, setFilter] = useState("offen"); const [wer, setWer] = useState("alle");
@@ -335,7 +336,9 @@ function Detail({ a, d, ich, kann, toast, leute, gruppen, features, anhaenge, se
       const { data, error } = await supabase.rpc("ws_aufgabe_anhang_neu", { p_aufgabe: a.id, p_dateiname: datei.name, p_mime: p.mime, p_groesse: datei.size });
       const res = data?.[0];
       if (error || !res) { toast(error ? fehler(error) : "Anhang nicht angelegt"); continue; }
-      const up = await supabase.storage.from(BUCKET).upload(res.pfad, datei, { contentType: p.mime, upsert: false, cacheControl: "60" });
+      // Typ immer aus der geprüften Endung/Kennung, nie File.type (z. B. CSV unter Windows: application/vnd.ms-excel)
+      const blob = datei.slice(0, datei.size, p.mime);
+      const up = await supabase.storage.from(BUCKET).upload(res.pfad, blob, { contentType: p.mime, upsert: false, cacheControl: "60" });
       if (up.error) { await supabase.rpc("ws_aufgabe_anhang_loeschen", { p_id: res.id }); toast(`„${datei.name}“ nicht hochgeladen: ${fehler(up.error)}`); continue; }
       // Datenbank vergleicht Größe und Typ der angekommenen Datei mit der Reservierung; erst dann ist der Anhang sichtbar
       const best = await supabase.rpc("ws_aufgabe_anhang_bestaetigen", { p_id: res.id });
@@ -343,14 +346,14 @@ function Detail({ a, d, ich, kann, toast, leute, gruppen, features, anhaenge, se
       ok++;
     }
     setBusy(""); if (dateiRef.current) dateiRef.current.value = "";
-    if (ok < dateien.length) await dateienAufraeumen(toast);
+    if (ok < dateien.length) await dateienAufraeumen(toast, d.projektId);
     if (ok) { toast(ok === 1 ? "Anhang hochgeladen" : `${ok} Anhänge hochgeladen`); onAenderung(); }
   };
   const entfernen = async (x) => {
     const { error } = await supabase.rpc("ws_aufgabe_anhang_loeschen", { p_id: x.id });
     if (error) return toast(fehler(error));
     toast(`„${x.dateiname}“ entfernt`); onAenderung();
-    await dateienAufraeumen(toast);
+    await dateienAufraeumen(toast, d.projektId);
   };
   const loeschen = async () => {
     if (!loeschenSicher) { setLoeschenSicher(true); setTimeout(() => setLoeschenSicher(false), 6000); return; }
@@ -358,7 +361,7 @@ function Detail({ a, d, ich, kann, toast, leute, gruppen, features, anhaenge, se
     const { error } = await supabase.rpc("ws_aufgabe_loeschen", { p_aufgabe: a.id });
     setBusy(""); if (error) return toast(fehler(error));
     toast("Aufgabe gelöscht"); onWeg();
-    await dateienAufraeumen(toast);
+    await dateienAufraeumen(toast, d.projektId);
   };
   const senden = async () => {
     if (geaendert) return toast("Bitte zuerst speichern – geschickt wird der gespeicherte Stand");
@@ -511,16 +514,42 @@ export function AufgabenImChat({ g, f, d, ich, kannAuftrag, toast }) {
     </div>));
 }
 
-/** Unter der ersten Nachricht eines Auftrags „aus Aufgabe“: Links und Anhänge (signierte Adressen erst beim Anzeigen). */
-export function AufgabeBeilagen({ daten, toast }) {
-  const ids = Array.isArray(daten?.anhaenge) ? daten.anhaenge.filter((x) => Number.isSafeInteger(x)).slice(0, 20) : [];
-  const links = Array.isArray(daten?.links) ? daten.links.filter((l) => l && typeof l.titel === "string" && typeof l.url === "string").slice(0, 20) : [];
+// Sendung zu einem Auftrag (gesetzt von ws_aufgabe_als_auftrag) – Quelle für Plakette, Links und Anhänge im Chat, nicht die Nachricht
+// (daten der Nachricht sind frei setzbar, Nachprüfung 2). Einmal je Auftrag geladen.
+const sendungZuAuftrag = new Map();
+function useSendungZuAuftrag(auftragId) {
+  const [s, setS] = useState(null);
+  useEffect(() => {
+    if (!auftragId) { setS(null); return undefined; }
+    let aus = false;
+    if (!sendungZuAuftrag.has(auftragId)) sendungZuAuftrag.set(auftragId, supabase.from("ws_aufgabe_sendungen").select("id, aufgabe_id, projekt_id, auftrag_id, als_auftrag_von, links, anhaenge")
+      .eq("auftrag_id", auftragId).maybeSingle().then(({ data }) => data || null, () => null));
+    sendungZuAuftrag.get(auftragId).then((x) => { if (!aus) setS(x); });
+    return () => { aus = true; };
+  }, [auftragId]);
+  return s;
+}
+const passt = (s, m) => !!s && s.auftrag_id === m.auftrag_id && !!m.von && s.als_auftrag_von === m.von;
+
+/** Plakette „aus Aufgabe“ – nur wenn es zu diesem Auftrag wirklich eine Sendung gibt und die Nachricht die erste ihres Auftraggebers ist. */
+export function AufgabePlakette({ m, erste }) {
+  const s = useSendungZuAuftrag(erste ? m.auftrag_id : null);
+  return passt(s, m) ? <span className="px-1.5 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300">aus Aufgabe</span> : null;
+}
+
+/** Unter der ersten Nachricht eines Auftrags aus einer Aufgabe: Links und Anhänge der SENDUNG (signierte Adressen erst beim Anzeigen). */
+export function AufgabeBeilagen({ m, erste, toast }) {
+  const s = useSendungZuAuftrag(erste ? m.auftrag_id : null);
+  const ok = passt(s, m);
+  const ids = ok && Array.isArray(s.anhaenge) ? s.anhaenge.filter((x) => Number.isSafeInteger(x)).slice(0, 20) : [];
+  const links = ok && Array.isArray(s.links) ? s.links.filter((l) => l && typeof l.titel === "string" && typeof l.url === "string").slice(0, 20) : [];
   const [anh, setAnh] = useState([]);
-  const key = ids.join(",");
+  const key = `${s?.aufgabe_id}:${ids.join(",")}`;
   useEffect(() => {
     if (!ids.length) { setAnh([]); return undefined; }
     let aus = false;
-    supabase.from("ws_aufgabe_anhaenge").select("*").in("id", ids).eq("fertig", true).then(({ data }) => { if (!aus) setAnh(data || []); });
+    supabase.from("ws_aufgabe_anhaenge").select("*").in("id", ids).eq("aufgabe_id", s.aufgabe_id).eq("projekt_id", s.projekt_id).eq("fertig", true)
+      .then(({ data }) => { if (!aus) setAnh(data || []); });
     return () => { aus = true; };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!links.length && !ids.length) return null;

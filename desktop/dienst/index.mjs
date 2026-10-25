@@ -37,7 +37,7 @@ import { fehlerBlock } from "./lib/fehler.mjs";
 import { bausteinDatenBlock, anhangBild } from "./lib/bausteinAuftrag.mjs";
 import { kachelAusFrage, kachelPrompt, kachelAntwort, kiZuerst } from "./lib/kachelChat.mjs";
 import { aufgabeDatenBereinigen, aufgabeDatenBlock, anhangDateiOk, MAX_GESAMT } from "./lib/aufgabeAuftrag.mjs";
-import { rm, readdir } from "node:fs/promises";
+import { rm, readdir, lstat } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 // Claude Code finden. Windows: nativer Installer (claude.exe in %USERPROFILE%\.local\bin) oder npm (cli.js) – immer OHNE Shell
@@ -501,13 +501,23 @@ async function bausteinDatenFuer(auftrag, nachrichten, projektId, ordner) {
     }
     for (const b of bs || []) {
       const bild = anhangBild(b.bild); if (!bild) { await log(auftrag.id, "info", `Bild-Anhang ${b.id} übersprungen (kein gültiges PNG/JPEG/WebP bis 2 MB)`); continue; }
-      await mkdir(ziel, { recursive: true });
+      await anhangOrdnerSicher(ziel);
       const datei = path.join(ziel, `auftrag-${auftrag.id}-bild-${b.id}.${bild.endung}`);
-      await writeFile(datei, bild.daten);
+      await rm(datei, { force: true }); await writeFile(datei, bild.daten, { flag: "wx" });
       bilder.push({ pfad: datei, dateiname: b.dateiname });
     }
   } catch (e) { await log(auftrag.id, "info", `Bild-Anhang nicht lesbar: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 200)}`); }
   return bausteinDatenBlock(n.daten.design, namen, bilder);
+}
+
+// Anhang-Ordner sicher anlegen (Nachprüfung 5): ein symbolischer Link oder eine Datei an seiner Stelle (z. B. von einem früheren Lauf
+// angelegt) wird entfernt – nie hindurchschreiben. Danach muss es ein echter, eigener Ordner sein; Dateien werden nur neu angelegt („wx“).
+async function anhangOrdnerSicher(ziel) {
+  const st = await lstat(ziel).catch(() => null);
+  if (st && (st.isSymbolicLink() || !st.isDirectory())) await rm(ziel, { force: true, recursive: !st.isSymbolicLink() });
+  await mkdir(ziel, { recursive: true });
+  const nach = await lstat(ziel);
+  if (nach.isSymbolicLink() || !nach.isDirectory()) throw new Error("Anhang-Ordner ist kein echter Ordner – abgebrochen");
 }
 
 // Auftrag aus einer Aufgabe (Datenbank 0042): Anhänge aus dem privaten Speicher „ws-aufgaben“ in den Arbeitsordner (.codeschmiede-anhaenge/,
@@ -542,9 +552,9 @@ async function aufgabeDatenFuer(auftrag, nachrichten, projektId, ordner) {
         const endung = buf && buf.length === Number(r.groesse) ? anhangDateiOk(buf, r.mime) : null;
         if (!endung) { fehlend++; await log(auftrag.id, "info", `Anhang ${r.id} übersprungen (nicht lesbar oder keine echte Datei des Typs)`); continue; }
         summe += buf.length;
-        await mkdir(ziel, { recursive: true });
+        await anhangOrdnerSicher(ziel);
         const datei = path.join(ziel, `auftrag-${auftrag.id}-aufgabe-${r.id}.${endung}`);
-        await writeFile(datei, buf);
+        await rm(datei, { force: true }); await writeFile(datei, buf, { flag: "wx" });
         dateien.push({ pfad: datei, dateiname: r.dateiname, art: r.art });
       }
     }

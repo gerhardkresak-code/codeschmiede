@@ -159,13 +159,15 @@ select ws_aufgabe_loeschen(:a);
 select count(*) as pfade from ws_aufgabe_loeschen(:a);
 select count(*) as weg from ws_aufgaben where id = :a;
 select count(*) as warteschlange from ws_aufgabe_dateien_weg;
-\echo [18] Archiviertes Projekt: Aufgabe anlegen -> FEHLER; Senden -> FEHLER
+\echo [18] Archiviertes Projekt: Aufgabe anlegen -> FEHLER; Senden -> FEHLER; Anhang reservieren -> FEHLER; Ändern -> 0 Zeilen
 reset role;
 update ws_projekte set archiviert = true where id = 'trainer-to-go';
 set role authenticated;
 :D1
 insert into ws_aufgaben(projekt_id,titel) values ('trainer-to-go','Im Archiv');
 select ws_aufgabe_senden(:b, null, 'training');
+select * from ws_aufgabe_anhang_neu(:b, 'x.pdf', 'application/pdf', 10);
+with u as (update ws_aufgaben set titel = 'Geändert im Archiv' where id = :b returning 1) select count(*) as geaendert from u;
 \echo [19] Als Auftrag: Nachricht ohne klickbare Markdown-Links (] ( statt ]()
 reset role;
 update ws_projekte set archiviert = false where id = 'trainer-to-go';
@@ -174,4 +176,21 @@ set role authenticated;
 insert into ws_aufgaben(projekt_id,titel,beschreibung) values ('trainer-to-go','Link im Text','Siehe [hier](https://example.org) bitte ändern.') returning id as c \gset
 select ws_aufgabe_als_auftrag(ws_aufgabe_senden(:c, null, 'training')) as auf2 \gset
 select text like '%[hier] (https://example.org)%' as entschaerft from ws_nachrichten where auftrag_id = :auf2;
+\echo [20] Aufräumen beim Öffnen: unfertige Reservierung älter als 1 Stunde -> verworfen (0), Pfad in der Warteschlange (1)
+select pfad as p4, id as anh4 from ws_aufgabe_anhang_neu(:c, 'alt.pdf', 'application/pdf', 10) \gset
+reset role;
+update ws_aufgabe_anhaenge set erstellt = now() - interval '2 hours' where id = :anh4;
+set role authenticated;
+:D1
+select ws_aufgaben_aufraeumen('trainer-to-go') \g /dev/null
+select (select count(*) from ws_aufgabe_anhaenge where id = :anh4) as eintrag, (select count(*) from ws_aufgabe_dateien_weg where pfad = :'p4') as warteschlange;
+\echo [21] Lösch-Liste eines gelöschten Projekts: D1 sieht sie nicht (0), Admin schon (1); Projekt-Kennung neu anlegen -> FEHLER
+reset role;
+insert into ws_aufgabe_dateien_weg(pfad, projekt_id) values ('altprojekt/1/00000000-0000-0000-0000-000000000009.png', 'altprojekt');
+set role authenticated;
+:D1
+select count(*) as d1_sieht from ws_aufgabe_dateien_weg where projekt_id = 'altprojekt';
+:ADM
+select count(*) as admin_sieht from ws_aufgabe_dateien_weg where projekt_id = 'altprojekt';
+select ws_projekt_anlegen('altprojekt','Alt','', '', 'layers');
 rollback;
