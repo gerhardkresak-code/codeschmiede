@@ -155,7 +155,7 @@ export default function Designer({ d, ich, toast }) {
   const [rechts, setRechts] = useState("chat");
   const ki = useKiName(d.projektId, "design");   // eingestellter Anbieter für den Design-Chat
   const [chatText, setChatText] = useState("");
-  const [bausteinEntwurf, setBausteinEntwurf] = useState({ name: "", text: "", art: "zusammen" });   // Dialog „Neuer Baustein“ behält die Eingaben
+  const [bausteinEntwurf, setBausteinEntwurf] = useState(null);   // Assistent „Neuer Baustein“ behält die Eingaben (auch nach „Im Design-Chat fragen“)
   // App-Designer 2.0 (Entwurf 2026-10-24 22:08): Bausteine wirken sofort über die Design-Pakete der App (BausteinInspektor.jsx)
   const bs = useBausteinDesigner({ dunkel });
   const [seitenTab, setSeitenTab] = useState(null);

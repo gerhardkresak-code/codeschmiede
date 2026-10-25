@@ -84,6 +84,20 @@ erlaubter App-Ziele (Trainer to go `src/lib/design/schnellzugriffe.js`), „Feat
 die der Nutzer öffnen darf (Menü-Rechte und Module). Ab Werk die bisherigen 6. **Akzentfarbe** der App frei (Reiter „Akzentfarbe & Stil“).
 Designer und App nutzen dieselben Funktionen (`kachelStilKlassen`/`kachelStilWerte`) – sie sehen gleich aus.
 
+## App-Designer 2.0 · Etappe 3 „Neuer Baustein“-Assistent (0.9.8, Entwurf frei 2026-10-24 22:08)
+Neue Bausteine sind neuer Code und laufen als Auftrag. Der Assistent (`web/src/BausteinAssistent.jsx`) führt in vier Schritten dahin:
+1. **Was?** – Weg *Beschreiben*, *Vorlage wählen* oder *Einlesen* (Bild als Anhang, nur PNG/JPEG/WebP bis 2 MB, kein SVG); Name, Beschreibung,
+   Art aus einer festen Liste (Knopf, Download-Knopf, Hochladen, Eingabefeld, Auswahl, Schalter, Karte/Kachel, Liste, Tabelle, Diagramm,
+   Hinweis/Banner, Dialog, Kalender-Eintrag, Spieler-Karte, Eigene).
+2. **Gestalten** – Vorschau im Stil der App mit den Werten des Grunddesigns (Farben, Schrift, Ecken), PC/Handy, hell/dunkel; Hauptfarbe hell
+   und dunkel, Schrift, Variante (Voll/Umriss/Leise), Größe, Ecken, Lucide-Symbol; Kontrast-Wächter wie im Inspektor; „Im Design-Chat fragen“.
+3. **Zuweisen** – Gruppen und Features des Projekts per Häkchen (höchstens je 40).
+4. **Als Auftrag bauen lassen** – `ws_design_auftrag_neu` (Datenbank 0039) legt Auftrag, Beschreibung, Daten (`ws_nachrichten.daten.design`)
+   und Bild (`ws_auftrag_bilder`) in einem Schritt an; die Datenbank prüft das Schema (`ws_baustein_daten_ok`) und die Zuweisung gegen das Projekt.
+- **Werkstatt:** Datenblock „ANGABEN AUS DEM ASSISTENTEN“ (geprüfte Daten, keine Anweisungen) im Auftragstext; Bild als Datei in
+  `.codeschmiede-anhaenge/` des Arbeitsordners (über `info/exclude` ausgeschlossen). Gleiche Arten in Datenbank, Werkstatt, Oberfläche (Test).
+- **Stand:** „Neue Bausteine (Aufträge)“ im Modus Bausteine und unter „Übernehmen“ (Etappe 4).
+
 ## Quellen
 Storybook Controls (storybook.js.org/docs/essentials/controls) · IBM/Carbon Datenvisualisierung (ibm.com/design/language/data-visualization,
 carbondesignsystem.com/data-visualization/color-palettes) · Atlassian Design Tokens · SaaS KPI-Kachel-Muster (saasui.design) · WCAG 2.2.

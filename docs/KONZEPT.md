@@ -75,6 +75,8 @@ Ein Designer, der sofort wirkt: Aussehen geht über die Design-Pakete der App (T
 Auftrag, Farben frei mit Kontrast-Wächter (`web/src/kontrast.js`). Etappe 1 „Bausteine“: Galerie in der Mitte, Linksklick wählt,
 Inspektor rechts (Bearbeiten | Chat), Sofort-Vorschau und Entwurf im Design-Paket; Freigabe über App-Designer › Seiten. Einzelheiten:
 `docs/KONZEPT-BAUSTEINE.md` (Abschnitt „App-Designer 2.0“).
+Etappe 3 „Neuer Baustein“: Assistent (Was? → Gestalten → Zuweisen → Als Auftrag), strukturierte geprüfte Daten und optional ein Bild am Auftrag
+(Datenbank 0039, `web/src/BausteinAssistent.jsx`, `desktop/dienst/lib/bausteinAuftrag.mjs`).
 
 ## Rollen und Rechte
 | Rolle | Aufträge | Freigeben / Erlauben | Löschen | Claude | GitHub |

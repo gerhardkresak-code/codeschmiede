@@ -34,6 +34,7 @@ import { ampelPruefen, sandboxStarten, testlaufStarten } from "./lib/anbindungen
 import { zweigStand, codeBaum, codeDatei, handSchreiben } from "./lib/code.mjs";
 import { dbEinrichten, dbAmpel, dbOffen, dbLiveEinspielen, ablaeufeGeaendert } from "./lib/datenbank.mjs";
 import { fehlerBlock } from "./lib/fehler.mjs";
+import { bausteinDatenBlock, anhangBild } from "./lib/bausteinAuftrag.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -304,7 +305,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
       ? `Nacharbeit aus der Prüfung (nichts ist live gegangen):\n${nachrichten.slice(-1)[0]?.text || ""}\n\nBehebe die Befunde auf demselben Zweig ${zweig}, prüfe, committe, \`git push origin HEAD\` und antworte wieder mit „ERGEBNIS-PR: #${auftrag.pr_nummer || "<Nummer>"} ${zweig}“ (denselben Pull Request weiterverwenden).`
       : fortsetzen && merk.sitzung
       ? `Antwort von Gerhard/Team auf deine Rückfrage:\n${nachrichten.filter((n) => n.von).slice(-1)[0]?.text || ""}\n\nArbeite weiter nach denselben Regeln.`
-      : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature), await holeWissen(projekt.id), await fehlerDatenFuer(nachrichten, projekt.id));
+      : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature), await holeWissen(projekt.id), [await fehlerDatenFuer(nachrichten, projekt.id), await bausteinDatenFuer(auftrag, nachrichten, projekt.id, ordner)].filter(Boolean).join("\n"));
 
     let r;
     if (auftrag.hand && (fortsetzen || nacharbeit)) {
@@ -439,6 +440,41 @@ async function fehlerDatenFuer(nachrichten, projektId) {
   if (!id) return "";
   const { data: f } = await db.from("ws_fehler").select("id, nachricht, stelle, seite, ablauf, version, umgebung, anzahl, projekt_id").eq("id", id).maybeSingle();
   return f && f.projekt_id === projektId ? fehlerBlock(f) : "(Die Fehlermeldung ist nicht mehr vorhanden – nach 30 Tagen gelöscht.)";
+}
+
+// Assistent „Neuer Baustein“ (Datenbank 0039): geprüfte Angaben als Datenblock; Bild-Anhänge in den Git-Ordner des Arbeitsordners
+// (Ordner .codeschmiede-anhaenge/, von Git ausgeschlossen). Nur Bilder dieses Auftrags, nur echte PNG/JPEG/WebP.
+async function bausteinDatenFuer(auftrag, nachrichten, projektId, ordner) {
+  // Nur die erste Nachricht des Auftraggebers (aus ws_design_auftrag_neu) zählt – nie spätere Nachrichten anderer
+  const n = (nachrichten || []).find((x) => x.von && x.von === auftrag.erstellt_von && x.daten?.design);
+  if (!n) return "";
+  const ids = [...new Set([...(n.daten.design?.zuweisung?.gruppen || []), ...(n.daten.design?.zuweisung?.features || [])])].filter((x) => typeof x === "string").slice(0, 80);
+  const namen = { gruppen: new Map(), features: new Map() };
+  try {
+    const { data: gs } = await db.from("ws_gruppen").select("id, name, ws_bereiche!inner(projekt_id)").in("id", ids).eq("ws_bereiche.projekt_id", projektId);
+    (gs || []).forEach((g) => namen.gruppen.set(g.id, g.name));
+    const { data: fs } = await db.from("ws_features").select("id, name").in("id", ids);
+    (fs || []).forEach((f) => namen.features.set(f.id, f.name));
+  } catch { /* nur Namen */ }
+  const bilder = [];
+  try {
+    const { data: bs } = await db.from("ws_auftrag_bilder").select("id, dateiname, bild").eq("auftrag_id", auftrag.id).order("id").limit(3);
+    // Im Arbeitsordner (Claude liest ohne Rückfrage), aber über info/exclude von Git ausgeschlossen – wird nie eingecheckt
+    const ziel = path.join(ordner, ".codeschmiede-anhaenge");
+    if ((bs || []).length) {
+      const exclude = path.join(path.resolve(ordner, await git(ordner, "rev-parse", "--git-common-dir")), "info", "exclude");
+      const alt = await readFile(exclude, "utf8").catch(() => "");
+      if (!alt.split(/\r?\n/).includes("/.codeschmiede-anhaenge/")) { await mkdir(path.dirname(exclude), { recursive: true }); await writeFile(exclude, `${alt}${alt && !alt.endsWith("\n") ? "\n" : ""}/.codeschmiede-anhaenge/\n`); }
+    }
+    for (const b of bs || []) {
+      const bild = anhangBild(b.bild); if (!bild) continue;
+      await mkdir(ziel, { recursive: true });
+      const datei = path.join(ziel, `auftrag-${auftrag.id}-bild-${b.id}.${bild.endung}`);
+      await writeFile(datei, bild.daten);
+      bilder.push({ pfad: datei, dateiname: b.dateiname });
+    }
+  } catch (e) { await log(auftrag.id, "info", `Bild-Anhang nicht lesbar: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 200)}`); }
+  return bausteinDatenBlock(n.daten.design, namen, bilder);
 }
 
 // ---------- Hand-Änderung aus dem Code-Editor (Datenbank 0031) ----------
