@@ -614,8 +614,8 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
     q = entwurf ? q.eq("entwurf_id", entwurf.id) : q.is("entwurf_id", null);
     const { data } = await q;
     // Gespräche zum Umdesignen (Rechtsklick in der Galerie) stehen im Umdesign-Entwurf, nicht hier
-    // ebenso Gespräche zu einem Baustein (App-Designer 2.0) – die stehen im Inspektor
-    const um = new Set((data || []).filter((m) => !m.frage_id && (String(m.text).startsWith("[Umdesign ") || String(m.text).startsWith("[Baustein "))).map((m) => m.id));
+    // ebenso Gespräche zu einem Baustein (App-Designer 2.0) – die stehen im Inspektor – und zu einer Kachel (Chat zur Kachel im Seiten-Designer, 0041)
+    const um = new Set((data || []).filter((m) => !m.frage_id && ["[Umdesign ", "[Baustein ", "[Kachel "].some((p) => String(m.text).startsWith(p))).map((m) => m.id));
     setListe((data || []).filter((m) => !um.has(m.id) && !um.has(m.frage_id)).reverse());
   }, [projekt.id, entwurf]);
   useEffect(() => {
