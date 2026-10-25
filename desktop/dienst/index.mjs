@@ -25,7 +25,7 @@ import { pruefErgebnis } from "./lib/pruefung.mjs";
 import { designPrompt, designAntwort, bausteinAusFrage, bausteinVorschlag } from "./lib/design.mjs";
 import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
 import { repoAnlegen, repoSichtbarkeit, repoIstPrivat } from "./lib/repo.mjs";
-import { liveAusfuehren, pruefPrompt, enthalten } from "./lib/live.mjs";
+import { liveAusfuehren, pruefPrompt, enthalten, cloudBauLaeufe } from "./lib/live.mjs";
 import { katalogFuer, einrichten, einrichtUmgebung, findeKatalogProgramm, angemeldet } from "./lib/einrichten.mjs";
 import { bildAusDataUrl, markePrompt, markeAntwort } from "./lib/marke.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen, codexBauen, codexLimits } from "./lib/ki.mjs";
@@ -775,10 +775,8 @@ async function cloudBau(projekt, zweig, sha, auftragId) {
       try { const r = await fetch(`${testseite}/version.json?t=${Date.now()}`, { cache: "no-store" }); if (r.ok && (await r.json())?.commit === sha) return { ok: true, text: `Cloudflare hat ${sha.slice(0, 7)} gebaut (${testseite})` }; } catch { /* noch nicht da */ }
     }
     try {
-      const { stdout } = await sh("gh", ["api", `repos/${projekt.repo}/commits/${sha}/check-runs`, "--jq", ".check_runs[] | select(.app.slug == \"cloudflare-workers-and-pages\") | [.name, .status, (.conclusion // \"\")] | @tsv"]);
-      // nur Prüfläufe der echten Cloudflare-App zählen, nicht gleichnamige aus eigenen Abläufen (Prüfung O-a)
-      for (const z of stdout.trim().split("\n").filter(Boolean)) {
-        const [name, status, ergebnis] = z.split("\t");
+      // nur die echte Cloudflare-App und genau der Ablauf cloudflare-pages.yml zählen, nie gleichnamige Jobs (Prüfung O-a, lib/live.mjs)
+      for (const [name, status, ergebnis] of await cloudBauLaeufe(sh, projekt.repo, sha)) {
         if (status !== "completed") continue;
         if (ergebnis === "success") return { ok: true, text: `Prüflauf „${name}“ grün für ${sha.slice(0, 7)}` };
         return { ok: false, text: `Prüflauf „${name}“: ${ergebnis} für ${sha.slice(0, 7)}` };
