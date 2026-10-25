@@ -20,7 +20,9 @@ export const bereichName = (b) => (b?.app_teil === "erp" ? `ERP · ${b.name}` : 
 export const ohneMenue = (g, b) => !g.app_key && (b?.app_teil === "app" || b?.app_teil === "erp");
 
 const reihe = (a, b) => (a.reihenfolge ?? 0) - (b.reihenfolge ?? 0) || String(a.name).localeCompare(String(b.name), "de");
-const fz = (f) => ({ id: f.id, name: f.name, ...(f.beschreibung ? { beschreibung: f.beschreibung } : {}), ...(f.stand && f.stand !== "live" ? { stand: f.stand } : {}) });
+// stunden = geschätzt + gemessen (Werkstatt-Laufzeit), verkauf = Verkaufs-Feature der Preiskalkulation (0.9.13)
+const stunden = (f) => Math.round(((Number(f.stunden_schaetzung) || 0) + (Number(f.stunden_gemessen) || 0)) * 10) / 10;
+const fz = (f) => ({ id: f.id, name: f.name, ...(f.beschreibung ? { beschreibung: f.beschreibung } : {}), ...(f.stand && f.stand !== "live" ? { stand: f.stand } : {}), ...(stunden(f) ? { stunden: stunden(f) } : {}), ...(f.verkauf_key ? { verkauf: f.verkauf_key } : {}) });
 
 /** Neuer Stand beider Dateien aus der Datenbank (nur Gruppen mit Menüpunkt; ausgebaute Features fallen weg). */
 export function aufbauAusDaten(d) {

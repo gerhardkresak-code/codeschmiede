@@ -467,7 +467,8 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
                   <div className="mt-auto text-xs text-slate-500 flex items-center gap-1.5">
                     {arbeitet ? <span className="inline-flex items-center gap-1.5 font-semibold text-blue-600"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />Hier wird gerade gearbeitet</span>
                       : js.length ? <span>Auftrag #{js[js.length - 1].id}: {STEPS[STEP_IDX[js[js.length - 1].stand]]?.[1]}</span> : <><MessageSquare className="w-3.5 h-3.5" />Auftrag geben</>}
-                    <span className="ml-auto font-mono text-[10px] text-slate-400">{x.id}</span>
+                    {stundenGesamt(x) > 0 && <span className="ml-auto text-[11px] tabular-nums text-slate-500" title="Programmierstunden (geschätzt + gemessen)">{stundenGesamt(x).toLocaleString("de-AT")} h</span>}
+                    <span className={`${stundenGesamt(x) > 0 ? "" : "ml-auto "}font-mono text-[10px] text-slate-400`}>{x.id}</span>
                   </div>
                 </button>);
             })}
@@ -697,6 +698,14 @@ function Verschieben({ f, d, onClose, onWahl }) {
     </Dialog>);
 }
 
+/** Programmierstunden eines Features: geschätzt + gemessen (Werkstatt-Laufzeit der Aufträge). */
+const stundenGesamt = (f) => Math.round(((Number(f?.stunden_schaetzung) || 0) + (Number(f?.stunden_gemessen) || 0)) * 10) / 10;
+function StundenText({ f }) {
+  const s = Number(f.stunden_schaetzung) || 0; const m = Number(f.stunden_gemessen) || 0;
+  if (!s && !m) return <span className="text-slate-400">–</span>;
+  return <span><b>{stundenGesamt(f).toLocaleString("de-AT")} h</b><span className="text-slate-500 text-xs"> ({s.toLocaleString("de-AT")} geschätzt{m ? ` + ${(Math.round(m * 10) / 10).toLocaleString("de-AT")} gemessen` : ""})</span></span>;
+}
+
 function FeatureKurzinfo({ f, g, d, ich, toast, darfAuftrag, onOeffnen, onGruppe, onVerschieben }) {
   const js = d.auftraege.filter((a) => a.feature_id === f.id);
   const letzter = js[js.length - 1];
@@ -712,6 +721,9 @@ function FeatureKurzinfo({ f, g, d, ich, toast, darfAuftrag, onOeffnen, onGruppe
         {js.some((a) => a.offeneFrage) && <><dt className="text-amber-700 font-semibold">Rückfrage</dt><dd className="text-amber-700 font-semibold">wartet auf deine Antwort – Öffnen</dd></>}
         <dt className="text-slate-500">Gerade</dt><dd>{laufend ? <span className="inline-flex items-center gap-1.5 text-blue-600 font-semibold"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />Werkstatt {pc?.name || ""} arbeitet</span> : "niemand"}</dd>
         <dt className="text-slate-500">Aufträge</dt><dd>{js.length} ({js.filter((a) => ABGESCHLOSSEN.includes(a.stand)).length} abgeschlossen)</dd>
+        {/* Programmierstunden (0.9.13): Schätzung + gemessene Werkstatt-Laufzeit – gehen in die ERP-Kalkulation der App */}
+        <dt className="text-slate-500">Programmierstunden</dt><dd><StundenText f={f} /></dd>
+        {f.verkauf_key && <><dt className="text-slate-500">Verkaufs-Feature</dt><dd><code className="text-xs">{f.verkauf_key}</code></dd></>}
       </dl>
       <FeatureBezuege f={f} d={d} ich={ich} toast={toast} darfAuftrag={darfAuftrag} />
       <button type="button" className={btn} onClick={onOeffnen}><Layers className="w-4 h-4" />Öffnen: Chat & Live-Vorschau</button>
