@@ -113,15 +113,22 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
   }, [kcAbo, kcTick, projekt.id, ich?.id, kcKi, kcBereit, kcHinweis, anRahmen]);
   const [kcBestaetigung, setKcBestaetigung] = useState(null);   // { schluessel, titel, text } – Dialog „Auftrag stellen?“
   const [kcStellt, setKcStellt] = useState(false);
+  const [kcFrei, setKcFrei] = useState(false);   // „Auftrag stellen“ erst nach 1 s (kein versehentlicher Klick)
+  const kcRuheBis = useRef(0);
+  useEffect(() => {
+    if (!kcBestaetigung) return undefined;
+    setKcFrei(false); const t = setTimeout(() => setKcFrei(true), 1000);
+    return () => clearTimeout(t);
+  }, [kcBestaetigung]);
   const auftragStellen = async () => {
-    const b = kcBestaetigung; if (!b || !g) return; setKcStellt(true);
+    const b = kcBestaetigung; if (!b || !g || !kcFrei) return; setKcStellt(true);
     const { data, error } = await supabase.rpc("ws_design_auftrag", { p_projekt: projekt.id, p_art: "kachel", p_titel: b.titel, p_text: b.text });
     setKcStellt(false); setKcBestaetigung(null);
     if (error) { toast(fehlerText(error)); anRahmen({ cs: "kachel-chat-auftrag-stand", ok: false, text: fehlerText(error) }); return; }
     toast(`Auftrag #${data} an Werkstatt ${g.name} gestellt`);
     anRahmen({ cs: "kachel-chat-auftrag-stand", ok: true, nr: Number(data) || null });
   };
-  const auftragAbbrechen = () => { setKcBestaetigung(null); anRahmen({ cs: "kachel-chat-auftrag-stand", ok: false, text: "Abgebrochen – kein Auftrag gestellt." }); };
+  const auftragAbbrechen = () => { kcRuheBis.current = Date.now() + 30000; setKcBestaetigung(null); anRahmen({ cs: "kachel-chat-auftrag-stand", ok: false, text: "Abgebrochen – kein Auftrag gestellt." }); };
   const kc = useRef({});
   kc.current = {
     senden: async (n) => {
@@ -150,9 +157,12 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
       const sl = n.schluessel; const id = Number(n.antwortId);
       if (typeof sl !== "string" || sl !== kcAbo || !Number.isSafeInteger(id)) return;
       const nein = (text) => anRahmen({ cs: "kachel-chat-auftrag-stand", ok: false, text });
+      // Nur ein Dialog zur Zeit; nach „Abbrechen“ 30 s keine neue Anfrage (kein Bedrängen durch den eingebetteten Rahmen)
+      if (kcBestaetigung) return;
+      if (Date.now() < kcRuheBis.current) { nein("Gerade abgebrochen – in einer halben Minute wieder möglich."); return; }
       if (!darf || !g) { nein(!g ? "Der App-Designer ist für dieses Projekt noch nicht eingerichtet." : "Aufträge stellen Entwickler mit Design-Recht."); return; }
       const antwort = kcListe.current.find((x) => x.id === id && x.frage_id);
-      const frage = antwort && kcListe.current.find((x) => x.id === antwort.frage_id && !x.frage_id && x.von === ich?.id);
+      const frage = antwort && kcListe.current.find((x) => x.id === antwort.frage_id && !x.frage_id && x.von === ich?.id && String(x.text).startsWith(praefixVon(sl)));
       if (!antwort || !frage || !brauchtNeuenCode(antwort)) { nein("Zu dieser Antwort gibt es keinen Auftrag."); return; }
       setKcBestaetigung({ schluessel: sl, ...auftragText({ schluessel: sl, frage, antwort }) });
     },
@@ -210,8 +220,8 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
               <pre className="whitespace-pre-wrap break-words rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3 text-xs font-mono">{kcBestaetigung.text}</pre>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-slate-200 dark:border-slate-800">
-              <button type="button" className={ghost} disabled={kcStellt} onClick={auftragAbbrechen}>Abbrechen</button>
-              <button type="button" className={btn} disabled={kcStellt} autoFocus onClick={auftragStellen}>{kcStellt ? <Loader2 className="w-4 h-4 animate-spin" /> : <Hammer className="w-4 h-4" />}Auftrag stellen</button>
+              <button type="button" className={ghost} disabled={kcStellt} autoFocus onClick={auftragAbbrechen}>Abbrechen</button>
+              <button type="button" className={btn} disabled={kcStellt || !kcFrei} onClick={auftragStellen}>{kcStellt ? <Loader2 className="w-4 h-4 animate-spin" /> : <Hammer className="w-4 h-4" />}Auftrag stellen</button>
             </div>
           </div>
         </div>)}

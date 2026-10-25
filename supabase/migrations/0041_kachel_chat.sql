@@ -10,7 +10,7 @@
 --   * ws_design_chat.ki darf beim Fragen als WUNSCH mitgegeben werden (Format-Prüfung aus 0018). Die Werkstatt nutzt den Wunsch nur,
 --     wenn der Anbieter in der Zuständigkeit „design“ des Projekts steht; sonst gilt die normale Reihe.
 --   * ws_design_chat_nehmen liefert die ganze Zeile (setof ws_design_chat) – die Spalte ki ist damit schon dabei, keine Änderung nötig.
---   * ws_design_auftrag (Stand 0036) mit Mengengrenze: höchstens 10 Design-Aufträge je Person und Stunde (alle bisherigen Prüfungen
+--   * ws_design_auftrag (Stand 0036) mit Mengengrenze: höchstens 10 Design-Aufträge je Person und Stunde – für ALLE Design-Aufträge zusammen (Kachel, Baustein, Assistent; alle bisherigen Prüfungen
 --     unverändert; gilt auch für ws_design_auftrag_neu aus 0039, die diese Funktion aufruft). Befund M1 der Sicherheitsprüfung.
 -- Keine Personendaten, keine neuen Rechte (Fragen weiter nur mit Design-Recht, Regel ws_design_chat_frage). Mehrfach ausführbar.
 -- Reihenfolge 0001 → … → 0041.
@@ -165,6 +165,8 @@ begin
   if p_art is null or p_art not in ('baustein','kachel') then raise exception 'Unbekannte Auftragsart'; end if;
   if not public.ws_darf_design(p_projekt) then raise exception 'Keine Berechtigung für das Design dieses Projekts'; end if;
   -- Mengengrenze (Sicherheitsprüfung Chat zur Kachel, 0041): höchstens 10 Design-Aufträge je Person und Stunde
+  -- gleichzeitige Aufrufe derselben Person nacheinander zählen (sonst ließe sich die Grenze mit parallelen Aufrufen überlaufen)
+  perform pg_advisory_xact_lock(hashtext('design_auftrag:' || auth.uid()::text));
   if (select count(*) from public.ws_protokoll where wer = auth.uid() and was = 'design_auftrag' and wann > now() - interval '1 hour') >= 10 then
     raise exception 'Höchstens 10 Design-Aufträge je Stunde – bitte später noch einmal'; end if;
   t := btrim(coalesce(p_titel, '')); x := btrim(coalesce(p_text, ''));
