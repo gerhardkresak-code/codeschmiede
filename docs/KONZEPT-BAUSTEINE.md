@@ -84,6 +84,17 @@ erlaubter App-Ziele (Trainer to go `src/lib/design/schnellzugriffe.js`), „Feat
 die der Nutzer öffnen darf (Menü-Rechte und Module). Ab Werk die bisherigen 6. **Akzentfarbe** der App frei (Reiter „Akzentfarbe & Stil“).
 Designer und App nutzen dieselben Funktionen (`kachelStilKlassen`/`kachelStilWerte`) – sie sehen gleich aus.
 
+### Chat zur Kachel (0.9.9, Entwurf frei 2026-10-25 13:31, Datenbank 0041)
+- Im Seiten-Designer rechts bei der gewählten Kachel **„Mit KI besprechen“** (nur eingebettet in der Codeschmiede). Voreingestellt die für
+  „design“ zuständige KI; wählbar aus der Zuständigkeit, soweit auf der eigenen Werkstatt verfügbar. Antworten kann nur das Programm (eigene Werkstatt).
+- Die KI sieht **nur diese Kachel**: `{ seite, geraet, block, w, h, variant, auto, style{flat,soft,farbe,farbe_dunkel}, props{ziele,anzahl,title,text} }`
+  (Schema `ws_kachel_ok`, `web/src/kachelChat.js`, `desktop/dienst/lib/kachelChat.mjs`) – keine Personendaten.
+- Vorschlag als Zeile `KACHEL: {…}` mit nur den geänderten Feldern; in der App Vorher → Nachher, **„Übernehmen“** schreibt bereinigt
+  (`sanitizeTiles`) in den Entwurf, danach wie immer „Zur Freigabe“; **„Ablehnen“** verwirft. Neuer Code nötig → **„Als Auftrag“** (`ws_design_auftrag`, Art „kachel“).
+- **Nachrichten** (Herkunft und Fenster geprüft): App → Codeschmiede `kachel-chat-abo {schluessel}`, `kachel-chat-senden {schluessel, text, ki, kachel, info}`,
+  `kachel-chat-entscheiden {id, entscheidung}`, `kachel-chat-auftrag {schluessel, antwortId}` (Auftragstext baut die Codeschmiede selbst – Frage, Kachelwerte, KI-Antwort als Datenblöcke, Arbeitsauftrag fest im Code –, zufällige Grenzkennung je Auftrag, Bestätigungsdialog im Codeschmiede-Fenster mit Fokus auf „Abbrechen“ und 1 s Sperre, nach Abbruch 30 s Ruhe; höchstens 10 Design-Aufträge je Person und Stunde – die Grenze gilt für ALLE Design-Aufträge zusammen: Kachel-Wünsche, „Als Auftrag wünschen“ und „Neuer Baustein“); Codeschmiede → App `kachel-chat {schluessel, nachrichten, kis, standard, bereit, hinweis}`,
+  `kachel-chat-fehler {schluessel, text}`, `kachel-chat-auftrag-stand {ok, nr|text}`. Schlüssel `<seite>/<gerät>/<kachelId>` (`^[a-z_]{2,30}/(pc|tablet|handy)/[A-Za-z0-9_-]{1,40}$`).
+
 ## App-Designer 2.0 · Etappe 3 „Neuer Baustein“-Assistent (0.9.8, Entwurf frei 2026-10-24 22:08)
 Neue Bausteine sind neuer Code und laufen als Auftrag. Der Assistent (`web/src/BausteinAssistent.jsx`) führt in vier Schritten dahin:
 1. **Was?** – Weg *Beschreiben*, *Vorlage wählen* oder *Einlesen* (Bild als Anhang, nur PNG/JPEG/WebP bis 2 MB, kein SVG); Name, Beschreibung,

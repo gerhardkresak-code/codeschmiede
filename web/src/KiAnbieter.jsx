@@ -203,7 +203,8 @@ export function KiProtokoll() {
     (async () => {
       const [c, dz] = await Promise.all([
         supabase.from("ws_claude_chat").select("id, ort, text, ki, erstellt").not("ki", "is", null).order("id", { ascending: false }).limit(60),
-        supabase.from("ws_design_chat").select("id, text, ki, erstellt").not("ki", "is", null).order("id", { ascending: false }).limit(30),
+        // nur Antworten (frage_id gesetzt) – bei Fragen ist ki seit 0041 der Wunsch der Person (Chat zur Kachel), kein Vermerk
+        supabase.from("ws_design_chat").select("id, text, ki, erstellt").not("ki", "is", null).not("frage_id", "is", null).order("id", { ascending: false }).limit(30),
       ]);
       setListe([...(c.data || []).map((x) => ({ ...x, wo: `Chat · ${x.ort}` })), ...(dz.data || []).map((x) => ({ ...x, wo: "Design-Chat" }))].sort((a, b) => Date.parse(b.erstellt) - Date.parse(a.erstellt)));
     })();

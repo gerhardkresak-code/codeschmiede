@@ -1,6 +1,3 @@
 # Dateien, die beim nächsten Push in die Codeschmiede-Datenbank eingespielt werden (Reihenfolge!). Alle sind mehrfach ausführbar.
-# 2026-10-25: App-Designer 2.0 (0.9.8), nach der Sicherheitsprüfung (GRÜN)
-migrations/0037_baustein_designer.sql
-migrations/0038_designer_pruefbefunde.sql
-migrations/0039_baustein_assistent.sql
-migrations/0040_dieser_pc.sql
+# 2026-10-25: Chat zur Kachel (0.9.9), nach der Sicherheitsprüfung (Nachprüfung GELB → vier niedrige Befunde geschlossen)
+migrations/0041_kachel_chat.sql

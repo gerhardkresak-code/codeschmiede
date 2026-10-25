@@ -35,6 +35,7 @@ import { zweigStand, codeBaum, codeDatei, handSchreiben } from "./lib/code.mjs";
 import { dbEinrichten, dbAmpel, dbOffen, dbLiveEinspielen, ablaeufeGeaendert } from "./lib/datenbank.mjs";
 import { fehlerBlock } from "./lib/fehler.mjs";
 import { bausteinDatenBlock, anhangBild } from "./lib/bausteinAuftrag.mjs";
+import { kachelAusFrage, kachelPrompt, kachelAntwort, kiZuerst } from "./lib/kachelChat.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -885,8 +886,10 @@ async function dokuText(projekt, frage = "") {
   }
   return text.slice(0, 90000);
 }
-async function kiAntwort(projekt, aufgabe, prompt, { claudeLesenIn = null, dokuLesen = false, frage = "" } = {}) {
-  const { reihe, ab } = await kiReihe(projekt.id, aufgabe);
+async function kiAntwort(projekt, aufgabe, prompt, { claudeLesenIn = null, dokuLesen = false, frage = "", wunsch = null } = {}) {
+  const { reihe: r0, ab } = await kiReihe(projekt.id, aufgabe);
+  // KI-Wunsch der Person (Chat zur Kachel, 0041): nur ein Anbieter aus der Zuständigkeit kommt vor – sonst die normale Reihe
+  const reihe = kiZuerst(r0, wunsch, kiKennung);
   const fehler = [];
   let doku = null;
   for (const e of reihe) {
@@ -1086,12 +1089,26 @@ async function designChat() {
     let q = db.from("ws_design_chat").select("id, von, text, frage_id").eq("projekt_id", f.projekt_id).lt("id", f.id).order("id", { ascending: false }).limit(40);
     q = f.entwurf_id ? q.eq("entwurf_id", f.entwurf_id) : q.is("entwurf_id", null);
     const { data: alle } = await q;
-    // Baustein-Fragen (App-Designer 2.0): nur das Gespräch zu genau diesem Baustein als Verlauf; sonst ohne Baustein-Gespräche
+    // Baustein-Fragen (App-Designer 2.0) und Kachel-Fragen (Seiten-Designer, 0041): nur das Gespräch zu genau diesem Baustein bzw.
+    // dieser Kachel als Verlauf; sonst ohne Baustein- und Kachel-Gespräche
     const bsVorher = bausteinAusFrage(f.text);
+    const kachel = kachelAusFrage(f.text);
+    const praefix = kachel ? `[Kachel ${kachel}]` : bsVorher ? `[Baustein ${bsVorher}]` : null;
     const eigene = new Set((alle || []).filter((m) => !m.frage_id && m.von === cfg.user_id
-      && (bsVorher ? String(m.text).startsWith(`[Baustein ${bsVorher}]`) : !String(m.text).startsWith("[Baustein "))).map((m) => m.id));
+      && (praefix ? String(m.text).startsWith(praefix) : !String(m.text).startsWith("[Baustein ") && !String(m.text).startsWith("[Kachel "))).map((m) => m.id));
     const verlauf = (alle || []).filter((m) => eigene.has(m.id) || eigene.has(m.frage_id)).slice(0, 8);
-    const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, /^\[Marke\]/.test(f.text) ? "bilder" : "design", designPrompt({ projektName: pj?.name || f.projekt_id, projektId: f.projekt_id, appArt: pj?.app_art || "verwaltung", wissen: wissenText((await holeWissen(f.projekt_id)).filter((w) => ["ziel", "design", "funktionen"].includes(w.kapitel))), beschreibung: pj?.beschreibung || "", anfang: !eD && !designs, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }));
+    if (kachel) {
+      // Eigener Prompt: nur die Werte dieser Kachel, keine Werkzeuge, kein Projektwissen; Vorschlag streng auf die Kachel-Felder gefiltert
+      const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, "design",
+        kachelPrompt({ projektName: pj?.name || f.projekt_id, frage: f.text, werte: f.werte || {}, verlauf: verlauf.reverse() }), { wunsch: f.ki || null });
+      const { text, vorschlag } = kachelAntwort(ohneGeheimnisse(roh));
+      const { error: e2 } = await db.rpc("ws_design_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
+      if (e2) throw e2;
+      await kiVermerken("design", f.id, ki);
+      melde("status", "Werkstatt bereit");
+      return true;
+    }
+    const { roh, ki } = await kiAntwort({ id: f.projekt_id, name: pj?.name || f.projekt_id }, /^\[Marke\]/.test(f.text) ? "bilder" : "design", designPrompt({ projektName: pj?.name || f.projekt_id, projektId: f.projekt_id, appArt: pj?.app_art || "verwaltung", wissen: wissenText((await holeWissen(f.projekt_id)).filter((w) => ["ziel", "design", "funktionen"].includes(w.kapitel))), beschreibung: pj?.beschreibung || "", anfang: !eD && !designs, frage: f.text, werte: f.werte || {}, verlauf: (verlauf || []).reverse() }), { wunsch: f.ki || null });
     const { text, vorschlag: v0 } = designAntwort(ohneGeheimnisse(roh));
     const vorschlag = /^\[Umdesign (Symbol|Baustein) /.test(f.text) ? null : v0;   // Umdesign-Gespräche: Vorschlag nur als UMDESIGN-Zeile (Prüfung 0.8.7)
     // App-Designer 2.0: Bei einer Baustein-Frage gilt nur ein Vorschlag für genau diesen Baustein (Rest wird verworfen)

@@ -343,7 +343,7 @@ export default function Designer({ d, ich, toast }) {
             {rechts === "pruef" && modus !== "bausteine" ? <Pruefliste befunde={befunde} rot={rot} hinweise={hinweise} kiName={ki.name} onFragen={() => setRechts("chat")} />
               : <DesignChat d={d} ich={ich} projekt={projekt} entwurf={aktiv} werte={werte} befunde={befunde} darf={darf} toast={toast} modus={modus} text={chatText} setText={setChatText} start={!laden && !live && !entwuerfe.length}
                   onUebernehmen={(v) => { if (!bearbeitbar) { toast(fest ? "Dieser Entwurf ist fest – lege eine Kopie an" : "Kein Recht zum Gestalten"); return false; }
-                    setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, v)); setGeaendert(true); if (modus === "grund") setMitte("geruest"); return true; }} />}
+                    setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, nurGrunddesign(v))); setGeaendert(true); if (modus === "grund") setMitte("geruest"); return true; }} />}
             </>}
           </aside>
         </div>)}
@@ -599,6 +599,10 @@ function Pruefliste({ befunde, rot, hinweise, onFragen, kiName = "Claude" }) {
     </div>);
 }
 
+// Nur Grunddesign-Schlüssel übernehmen – „kachel“ (Chat zur Kachel, 0041) gehört nie in einen Grunddesign-Entwurf (Befund N1)
+const GRUNDDESIGN = ["farben", "schrift", "form", "menue", "logo", "tabellen", "icons", "marke", "spiel", "webseite", "shop", "beispiele", "bausteine"];
+const nurGrunddesign = (v) => Object.fromEntries(Object.entries(v && typeof v === "object" && !Array.isArray(v) ? v : {}).filter(([k]) => GRUNDDESIGN.includes(k)));
+
 // Chat mit Claude: läuft über die eigene Werkstatt (Abo), Claude bekommt nur die Werte, keine Werkzeuge.
 // Noch kein Design (neues Projekt): Gespräch von Grund auf – Claude fragt zuerst und schlägt dann ein ganzes Grunddesign vor
 const IDEEN_START = ["Lass uns das Design von Grund auf planen", "Schlag mir 3 Grundrichtungen vor", "Frag mich zu Zielgruppe und Stimmung", "Passende Farben zu meinem Logo"];
@@ -614,8 +618,8 @@ function DesignChat({ d, ich, projekt, entwurf, werte, befunde, darf, toast, onU
     q = entwurf ? q.eq("entwurf_id", entwurf.id) : q.is("entwurf_id", null);
     const { data } = await q;
     // Gespräche zum Umdesignen (Rechtsklick in der Galerie) stehen im Umdesign-Entwurf, nicht hier
-    // ebenso Gespräche zu einem Baustein (App-Designer 2.0) – die stehen im Inspektor
-    const um = new Set((data || []).filter((m) => !m.frage_id && (String(m.text).startsWith("[Umdesign ") || String(m.text).startsWith("[Baustein "))).map((m) => m.id));
+    // ebenso Gespräche zu einem Baustein (App-Designer 2.0) – die stehen im Inspektor – und zu einer Kachel (Chat zur Kachel im Seiten-Designer, 0041)
+    const um = new Set((data || []).filter((m) => !m.frage_id && ["[Umdesign ", "[Baustein ", "[Kachel "].some((p) => String(m.text).startsWith(p))).map((m) => m.id));
     setListe((data || []).filter((m) => !um.has(m.id) && !um.has(m.frage_id)).reverse());
   }, [projekt.id, entwurf]);
   useEffect(() => {

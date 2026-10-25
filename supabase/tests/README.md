@@ -11,3 +11,4 @@ Ab Datenbank v13: `t14_projekt_loeschen.sql` (Projekte archivieren/löschen: nur
 Ab Datenbank v15: `t15_bezuege.sql` (Feature-Bezüge: gleiches Projekt, Auftragsrecht, Nachziehen-Hinweis, Vorschläge feature_neu/bezug). v14/v16/v17 ändern nur Prüffunktionen (Schema), getestet über t13 und ws_design_werte_ok.
 Ab Datenbank v18: `t16_ki_frei.sql` (eigene KI-Anbieter: nur Admin, nur Programmname ohne Pfad/Shell-Zeichen, Zulassung je PC wird bei Änderung zurückgesetzt).
 Ab Datenbank v36: `t30_design_auftrag.sql` (Aufträge aus dem App-Designer: Auftrag + Nachricht in einem Schritt, nur mit Design-Recht, Eingaben begrenzt, nichts halb angelegt).
+Ab Datenbank 0041: `t35_kachel_chat.sql` (Chat zur Kachel: strenges Kachel-Schema, KI-Wunsch nur im erlaubten Format, Werkstatt bekommt den Wunsch mit, ungültiger Vorschlag wird verworfen).
