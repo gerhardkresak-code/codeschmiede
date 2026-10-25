@@ -45,12 +45,27 @@ export async function bezeichnungAm(sh, repo, sha) {
   return v ? `v${v} · ${sha.slice(0, 7)}` : `Stand ${sha.slice(0, 7)}`;
 }
 
-// Ist die Testfassung in der Cloud fertig gebaut? Alle Cloudflare-Prüfläufe müssen grün sein (Prüfung O4).
-// Baut das Projekt bei Cloudflare (mussLaufen), gilt „noch kein Prüflauf“ als „wird noch gebaut“.
-export async function testGebaut(sh, repo, sha, { mussLaufen = false } = {}) {
+// Bau in der Cloud für einen Stand: [Name, Status, Ergebnis] je Lauf.
+// Zählt (1) Prüfläufe der echten Cloudflare-App und (2) – seit dem Umzug nach kresak-it-solutions (2026-10-25), weil Cloudflare
+// Pages das umgezogene Repository nicht mehr selbst baut – Läufe GENAU des Ablaufs .github/workflows/cloudflare-pages.yml
+// (Erkennung über den Datei-Pfad des Ablaufs, nicht über den Namen: gleichnamige Jobs anderer Abläufe zählen nie, Prüfung O-a).
+export const CF_ABLAUF = ".github/workflows/cloudflare-pages.yml";
+export async function cloudBauLaeufe(sh, repo, sha) {
   repoPruefen(repo); if (!SHA.test(sha)) throw new Error("Ungültiger Stand");
-  const { stdout } = await sh("gh", ["api", `repos/${repo}/commits/${sha}/check-runs`, "--jq", ".check_runs[] | select(.app.slug == \"cloudflare-workers-and-pages\") | [.status, (.conclusion // \"\")] | @tsv"]);
-  const zeilen = stdout.trim().split("\n").filter(Boolean).map((z) => z.split("\t"));
+  const zeilen = [];
+  const { stdout } = await sh("gh", ["api", `repos/${repo}/commits/${sha}/check-runs`, "--jq", ".check_runs[] | select(.app.slug == \"cloudflare-workers-and-pages\") | [.name, .status, (.conclusion // \"\")] | @tsv"]);
+  zeilen.push(...stdout.trim().split("\n").filter(Boolean).map((z) => z.split("\t")));
+  try {
+    const r = await sh("gh", ["api", `repos/${repo}/actions/runs?head_sha=${sha}&per_page=50`, "--jq", `.workflow_runs[] | select(.path == "${CF_ABLAUF}") | ["Cloudflare Pages (GitHub)", .status, (.conclusion // "")] | @tsv`]);
+    zeilen.push(...r.stdout.trim().split("\n").filter(Boolean).map((z) => z.split("\t")));
+  } catch { /* ohne Ablauf-Liste nur die Cloudflare-App */ }
+  return zeilen;
+}
+
+// Ist die Testfassung in der Cloud fertig gebaut? Alle Cloud-Bauläufe müssen grün sein (Prüfung O4).
+// Baut das Projekt in der Cloud (mussLaufen), gilt „noch kein Lauf“ als „wird noch gebaut“.
+export async function testGebaut(sh, repo, sha, { mussLaufen = false } = {}) {
+  const zeilen = (await cloudBauLaeufe(sh, repo, sha)).map(([, s, e]) => [s, e]);
   if (!zeilen.length) return mussLaufen ? { ok: false, text: "Die Testfassung wird gerade noch gebaut – bitte in ein paar Minuten nochmal" } : { ok: true };
   if (zeilen.some(([s]) => s !== "completed")) return { ok: false, text: "Die Testfassung wird gerade noch gebaut – bitte in ein paar Minuten nochmal" };
   if (zeilen.every(([, e]) => e === "success")) return { ok: true };

@@ -7,7 +7,7 @@ set role authenticated;
 \set ADM 'select set_config(''request.jwt.claim.sub'',''00000000-0000-0000-0000-00000000000a'',false) \\g /dev/null'
 \set D1  'select set_config(''request.jwt.claim.sub'',''00000000-0000-0000-0000-0000000000d1'',false) \\g /dev/null'
 :ADM
-select ws_projekt_anlegen('prog','Prog','','gerhardkresak-code/prog','') \g /dev/null
+select ws_projekt_anlegen('prog','Prog','','kresak-it-solutions/prog','') \g /dev/null
 select ws_projekt_anlegen('tool','Tool','','','') \g /dev/null
 insert into ws_werkstatt_pcs(benutzer_id,name,an) values (auth.uid(),'PC-ADM',true);
 insert into ws_einladungen(email,rolle,eingeladen_von,projekt_id) values ('d1@x.at','entwickler',auth.uid(),'prog');

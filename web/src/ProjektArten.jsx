@@ -100,9 +100,9 @@ export function NeuesProjektAssistent({ toast, onClose, onFertig }) {
             <fieldset className="sm:col-span-2 rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex flex-col gap-2 text-sm">
               <legend className="px-1 text-slate-500">GitHub</legend>
               <label className="flex items-start gap-2"><input id="cs-prepo-neu" type="checkbox" className="mt-1 accent-emerald-700" checked={anlegen && !repo.trim()} disabled={!!repo.trim()} onChange={(e) => setAnlegen(e.target.checked)} />
-                <span>Repository mit Grundgerüst „{TECHNIK[technik].name}“ anlegen: <span className="font-mono text-xs">gerhardkresak-code/{id || "…"}</span><span className="block text-xs text-slate-500">Macht deine Werkstatt mit deiner GitHub-Anmeldung – Code, Prüfungen und Regelwerk, lauffähig ab dem ersten Tag.</span></span></label>
+                <span>Repository mit Grundgerüst „{TECHNIK[technik].name}“ anlegen: <span className="font-mono text-xs">kresak-it-solutions/{id || "…"}</span><span className="block text-xs text-slate-500">Macht deine Werkstatt mit deiner GitHub-Anmeldung – Code, Prüfungen und Regelwerk, lauffähig ab dem ersten Tag.</span></span></label>
               {anlegen && !repo.trim() && <label className="flex items-center gap-2 pl-6"><input id="cs-prepo-privat" type="checkbox" className="accent-emerald-700" checked={privat} onChange={(e) => setPrivat(e.target.checked)} />Privat <span className="text-xs text-slate-500">(sonst öffentlich; privat verbraucht GitHub-Minuten für Prüfungen und Builds)</span></label>}
-              <label className="flex flex-col gap-1 text-slate-500">Oder vorhandenes Repository eintragen (Besitzer/Name)<input id="cs-prepo" className={input} value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="gerhardkresak-code/neue-app" /></label>
+              <label className="flex flex-col gap-1 text-slate-500">Oder vorhandenes Repository eintragen (Besitzer/Name)<input id="cs-prepo" className={input} value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="kresak-it-solutions/neue-app" /></label>
             </fieldset>
           </div>)}
 
@@ -122,7 +122,7 @@ export function NeuesProjektAssistent({ toast, onClose, onFertig }) {
           <dl className="grid grid-cols-[150px_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
             <dt className="text-slate-500">Art</dt><dd>{TECHNIK[technik].name}</dd>
             <dt className="text-slate-500">Name</dt><dd>{name.trim() || "–"}</dd>
-            <dt className="text-slate-500">Repository</dt><dd className="font-mono text-xs break-all">{repo.trim() || (anlegen ? `gerhardkresak-code/${id} (${privat ? "privat" : "öffentlich"}, wird angelegt)` : "später")}</dd>
+            <dt className="text-slate-500">Repository</dt><dd className="font-mono text-xs break-all">{repo.trim() || (anlegen ? `kresak-it-solutions/${id} (${privat ? "privat" : "öffentlich"}, wird angelegt)` : "später")}</dd>
             <dt className="text-slate-500">Grundgerüst</dt><dd>{TECHNIK[technik].punkte.join(" · ")}</dd>
             <dt className="text-slate-500">Datenbank</dt><dd>{DATENBANK[db][0]}</dd>
             <dt className="text-slate-500">Regelwerk</dt><dd>AI-Dev-OS, Handbuch, CHANGELOG, Datenschutz</dd>

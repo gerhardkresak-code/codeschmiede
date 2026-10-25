@@ -9,14 +9,14 @@ import { geruestSchreiben, repoName, repoOk, vorlageFuellen } from "../lib/repo.
 test("Repository: Name und Prüfung", () => {
   assert.equal(repoName("isoki-aufmass"), "isoki-aufmass");
   assert.equal(repoName("..böse//x"), "b-se-x");
-  assert.ok(repoOk("gerhardkresak-code/neu")); assert.ok(!repoOk("x/..")); assert.ok(!repoOk("a/b/c")); assert.ok(!repoOk("-a/b"));
+  assert.ok(repoOk("kresak-it-solutions/neu")); assert.ok(!repoOk("x/..")); assert.ok(!repoOk("a/b/c")); assert.ok(!repoOk("-a/b"));
   assert.equal(vorlageFuellen("Name [PROJEKTNAME] · [OWNER/REPO] · [NAME]", { name: "Kasse", repo: "o/kasse", inhaber: "G" }), "Name Kasse · o/kasse · G");
 });
 
 test("Grundgerüst aus dem Regelwerk (falls Vorlage vorhanden) plus README/Konzept/Wissen", async () => {
   const ziel = await mkdtemp(path.join(os.tmpdir(), "cs-geruest-"));
   const vorlage = existsSync("/home/claude/ai-dev-os/project-template") ? "/home/claude/ai-dev-os/project-template" : null;
-  const d = await geruestSchreiben(ziel, vorlage, { name: "Kassenbuch", repo: "gerhardkresak-code/kassenbuch", beschreibung: "Für Vereine", inhaber: "Gerhard", konzeptMd: "# Konzept – Kassenbuch\n" });
+  const d = await geruestSchreiben(ziel, vorlage, { name: "Kassenbuch", repo: "kresak-it-solutions/kassenbuch", beschreibung: "Für Vereine", inhaber: "Gerhard", konzeptMd: "# Konzept – Kassenbuch\n" });
   assert.ok(d.includes("README.md") && d.includes("docs/KONZEPT.md") && d.includes("docs/WISSEN.md"));
   assert.match(await readFile(path.join(ziel, "README.md"), "utf8"), /Für Vereine/);
   if (vorlage) {
@@ -31,7 +31,7 @@ test("Grundgerüst aus dem Regelwerk (falls Vorlage vorhanden) plus README/Konze
 test("Grundgerüst je Technik-Art: Code, Abläufe, Platzhalter sicher gefüllt", async () => {
   for (const art of ["web", "programm", "handy", "werkzeug"]) {
     const ziel = await mkdtemp(path.join(os.tmpdir(), `cs-art-${art}-`));
-    const d = await geruestSchreiben(ziel, null, { name: 'Haus"buch <{x}>', repo: "gerhardkresak-code/haushaltsbuch", art });
+    const d = await geruestSchreiben(ziel, null, { name: 'Haus"buch <{x}>', repo: "kresak-it-solutions/haushaltsbuch", art });
     assert.ok(d.includes("README-ART.md") && d.includes("package.json"), art);
     assert.equal(d.includes(".github/workflows/datenbank.yml"), art !== "programm", `${art}: Datenbank-Station`);
     assert.equal(d.includes("src/lib/fehlerMelden.js"), art === "web" || art === "handy", `${art}: Fehler-Melder`);
@@ -58,7 +58,7 @@ test("Grundgerüst je Technik-Art: Code, Abläufe, Platzhalter sicher gefüllt",
 
 test("Programm-Kennungen auch bei schwierigen Repository-Namen gültig", async () => {
   const ziel = await mkdtemp(path.join(os.tmpdir(), "cs-art-kennung-"));
-  await geruestSchreiben(ziel, null, { name: "9 App", repo: "gerhardkresak-code/9a_b.c", art: "programm" });
+  await geruestSchreiben(ziel, null, { name: "9 App", repo: "kresak-it-solutions/9a_b.c", art: "programm" });
   const conf = JSON.parse(await readFile(path.join(ziel, "src-tauri/tauri.conf.json"), "utf8"));
   assert.equal(conf.identifier, "at.kresak.app-9a-b-c");
   assert.match(await readFile(path.join(ziel, "src-tauri/Cargo.toml"), "utf8"), /name = "app-9a_b-c"/);

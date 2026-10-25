@@ -26,7 +26,7 @@ select ws_repo_nehmen((select id from ws_werkstatt_pcs where name='PC-D1'));
 select projekt_id, aktion, privat from ws_repo_nehmen((select id from ws_werkstatt_pcs where name='PC-ADM'));
 \echo [3] Ergebnis: ungueltiges Repo -> FEHLER; gueltig -> repo gesetzt, fertig
 select ws_repo_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),'neu','boese/../x');
-select ws_repo_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),'neu','gerhardkresak-code/neu');
+select ws_repo_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),'neu','kresak-it-solutions/neu');
 select repo, repo_stand, repo_aktion from ws_projekte where id='neu';
 \echo [4] Sichtbarkeit privat: Admin -> angefragt; Entwickler -> FEHLER
 select ws_repo_sichtbarkeit('neu', true);
@@ -35,6 +35,6 @@ select repo_aktion, repo_privat, repo_stand from ws_projekte where id='neu';
 select ws_repo_sichtbarkeit('neu', false);
 \echo [5] Ergebnis ohne laufenden Auftrag -> FEHLER
 :ADM
-select ws_repo_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),'neu','gerhardkresak-code/neu');
+select ws_repo_ergebnis((select id from ws_werkstatt_pcs where name='PC-ADM'),'neu','kresak-it-solutions/neu');
 reset role;
 rollback;
