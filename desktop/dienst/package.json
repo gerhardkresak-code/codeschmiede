@@ -1,6 +1,6 @@
 {
   "name": "ttg-werkstatt-dienst",
-  "version": "0.9.11",
+  "version": "0.9.12",
   "private": true,
   "description": "Werkstatt-Dienst der Codeschmiede: holt Aufträge, arbeitet sie mit dem offiziellen Claude Code (eigener Abo-Login) ab und meldet Live-Log, Rückfragen, Erlaubnis-Anfragen und Abo-Limits.",
   "type": "module",
