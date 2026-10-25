@@ -30,7 +30,7 @@ import { katalogFuer, einrichten, einrichtUmgebung, findeKatalogProgramm, angeme
 import { bildAusDataUrl, markePrompt, markeAntwort } from "./lib/marke.mjs";
 import { ANBIETER, reiheFuer, istLimit, kiKennung, codexFrage, geminiFrage, kopplungPruefen, anmeldungStarten, sandboxArt, freiFrage, freiPruefen, codexBauen, codexLimits } from "./lib/ki.mjs";
 import { uebernehmen, prText } from "./lib/ersatz.mjs";
-import { ampelPruefen, sandboxStarten, testlaufStarten } from "./lib/anbindungen.mjs";
+import { ampelPruefen, sandboxStarten, testlaufStarten, sandboxPfad } from "./lib/anbindungen.mjs";
 import { zweigStand, codeBaum, codeDatei, handSchreiben } from "./lib/code.mjs";
 import { dbEinrichten, dbAmpel, dbOffen, dbLiveEinspielen, ablaeufeGeaendert } from "./lib/datenbank.mjs";
 import { fehlerBlock } from "./lib/fehler.mjs";
@@ -148,6 +148,17 @@ async function pcAnmelden() {
   if (error) throw new Error("Werkstatt-PC konnte nicht angemeldet werden: " + error.message);
   pcId = data.id;
   await writeFile(datei, JSON.stringify({ id: pcId }));
+}
+// Einrichtung › Dieser PC (Datenbank 0040): was die Werkstatt hier kann – nur feste Werte, keine Pfade oder Namen
+async function faehigkeitenMelden() {
+  if (!pcId) return;
+  let dienst = null;
+  try { dienst = JSON.parse(await readFile(path.join(HIER, "package.json"), "utf8")).version; } catch { /* egal */ }
+  const f = { windows_sandbox: !!sandboxPfad(), os_sandbox: sandboxArt() || null };
+  if (["win32", "darwin", "linux"].includes(process.platform)) f.plattform = process.platform;
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(String(dienst || ""))) f.dienst = dienst;
+  const { error } = await db.from("ws_werkstatt_pcs").update({ faehigkeiten: f }).eq("id", pcId);
+  if (error && !/faehigkeiten|schema cache|does not exist/i.test(error.message)) melde("fehler", `Fähigkeiten dieses PCs: ${kuerzen(ohneGeheimnisse(error.message), 200)}`);
 }
 async function lebenszeichen(an = true) {
   if (pcId) await db.from("ws_werkstatt_pcs").update({ an, zuletzt: new Date().toISOString() }).eq("id", pcId);
@@ -1469,6 +1480,7 @@ async function start() {
   verbinde();
   await tokenSchreiben();
   await pcAnmelden();
+  await faehigkeitenMelden().catch(() => {});
   try { const { data } = await db.from("ws_abo_limits").select("*").eq("benutzer_id", cfg.user_id).maybeSingle(); if (data) aboStand = data; } catch { /* noch keine Werte */ }
   try { const { data } = await db.from("ws_ki_kopplung").select("anbieter, anfragen_heute, anfragen_tag").eq("pc_id", pcId); for (const z of data || []) if (z.anfragen_tag) anfragen[z.anbieter] = { tag: z.anfragen_tag, n: z.anfragen_heute || 0 }; } catch { /* Spalten erst ab Datenbank 0029 */ }
   setInterval(() => aboAusStatuszeile().catch(() => {}), 60 * 1000);

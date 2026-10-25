@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutGrid, Send, Loader2, RefreshCw, ExternalLink } from "lucide-react";
 import { supabase } from "./supabase";
 import GeraeteRahmen from "./GeraeteRahmen";
-import { designFrageBeantworten } from "./designFrage";
+import { designFrageBeantworten, designFreigabeMerken } from "./designFrage";
 
 const card = "rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900";
 const ghost = "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-semibold disabled:opacity-50";
@@ -17,12 +17,6 @@ const input = "rounded-lg border border-slate-300 dark:border-slate-700 bg-slate
 export function seitenBasis(projekt) {
   const b = projekt?.live_zweig && /^https:\/\/[^/\s]+/i.test(projekt?.test_url || "") ? projekt.test_url : projekt?.live_url;
   return /^https:\/\/[^/\s]+$/i.test(String(b || "").replace(/\/$/, "")) ? String(b).replace(/\/$/, "") : null;
-}
-
-// Stand der Design-Freigabe dieses PCs (gemeldet vom Seiten-Designer der App, nur der Stand) – für Einrichtung › Dieser PC
-export const FREIGABE_SCHLUESSEL = "cs-design-freigabe";
-export function designFreigabeStand() {
-  try { const x = JSON.parse(localStorage.getItem(FREIGABE_SCHLUESSEL) || "null"); return x && ["frei", "wartet", "gesperrt", "fehlt"].includes(x.stand) ? x : null; } catch { return null; }
 }
 
 // titel/kompakt: eingebettet unter „Übernehmen“ (App-Designer 2.0 · Etappe 4) – nur Freigabe & Versionen, ohne Kachel-Wunsch
@@ -46,9 +40,7 @@ export default function SeitenModus({ projekt, d, ich, werte, dunkel, darf, toas
       if (e.data.cs === "bereit" || e.data.cs === "design-ok") setBereit(true);
       // Eigene Design-Freigabe (Entscheidung Gerhard 2026-10-24): Regeln gemeinsam mit der Baustein-Galerie in designFrage.js
       if (e.data.cs === "design-frage") designFrageBeantworten(e.data, ziel, (x) => rahmen.current?.contentWindow?.postMessage(x, ziel));
-      if (e.data.cs === "design-status" && ["frei", "wartet", "gesperrt", "fehlt"].includes(e.data.stand)) {
-        try { localStorage.setItem(FREIGABE_SCHLUESSEL, JSON.stringify({ stand: e.data.stand, zeit: new Date().toISOString(), adresse: ziel })); } catch { /* egal */ }
-      }
+      if (e.data.cs === "design-status") designFreigabeMerken(e.data.stand, ziel);
       if (e.data.cs === "freigabe-offen" && Number.isSafeInteger(e.data.anzahl) && e.data.anzahl >= 0 && e.data.anzahl < 10000) onFreigabeOffen?.(e.data.anzahl);
     };
     window.addEventListener("message", h); return () => window.removeEventListener("message", h);

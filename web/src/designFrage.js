@@ -20,3 +20,15 @@ export function designFrageBeantworten(daten, ziel, antworten) {
     : Promise.reject(new Error("Diese Anfrage ist nicht erlaubt."));
   auftrag.then((ergebnis) => antwort({ ergebnis }), (f) => antwort({ fehler: String(f?.message || f || "Fehler").slice(0, 200) }));
 }
+
+// Stand der Design-Freigabe dieses PCs (meldet der Seiten-Designer der App: nur frei/wartet/gesperrt/fehlt) – für Einrichtung › Dieser PC.
+// Nur eine Anzeige-Hilfe auf diesem PC (localStorage); entschieden wird immer in der App-Datenbank.
+const FREIGABE_SCHLUESSEL = "cs-design-freigabe";
+const STAENDE = ["frei", "wartet", "gesperrt", "fehlt"];
+export function designFreigabeMerken(stand, adresse) {
+  if (!STAENDE.includes(stand) || !TTG_TESTFASSUNG.test(adresse || "")) return;
+  try { localStorage.setItem(FREIGABE_SCHLUESSEL, JSON.stringify({ stand, zeit: new Date().toISOString(), adresse })); } catch { /* egal */ }
+}
+export function designFreigabeStand() {
+  try { const x = JSON.parse(localStorage.getItem(FREIGABE_SCHLUESSEL) || "null"); return x && STAENDE.includes(x.stand) ? x : null; } catch { return null; }
+}

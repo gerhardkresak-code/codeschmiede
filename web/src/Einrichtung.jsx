@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Wrench, CircleCheck, CircleAlert, Circle, Loader2, RefreshCw, Copy, ExternalLink, ArrowLeft, ArrowRight, Check, X, Monitor, Bot, GitBranch, Cpu, Power } from "lucide-react";
+import { Wrench, CircleCheck, CircleAlert, Circle, Loader2, RefreshCw, Copy, ExternalLink, ArrowLeft, ArrowRight, Check, X, Monitor, Bot, GitBranch, Cpu, Power, Laptop, ShieldCheck, Box, Trash2, KeyRound } from "lucide-react";
 import { supabase } from "./supabase";
 import { isDesktop, tauri } from "./desktop";
+import { designFreigabeStand } from "./designFrage";
+import { kiAnzeigename } from "./kiName";
 
 // Einrichtungs-Assistent (Gerhard 2026-10-22/23: „Anleitung, wie man Claude und die anderen Produkte koppeln muss“, Assistent mit Prüfung,
 // beim ersten Start und jederzeit, Statusleiste; 14:27: ChatGPT-Kopplung im Assistenten erklären). Prüft jeden Schritt echt auf diesem PC.
@@ -157,6 +159,7 @@ export default function Einrichtung({ ich, d, toast, onClose }) {
           <Befehl text={BEFEHL.gemini} toast={toast} /><Befehl text={BEFEHL.geminiLogin} toast={toast} />
           <button type="button" className={ghost} onClick={() => aktion("gemini", "pruefen")}>Prüfen</button></Zeile>
       </div>) },
+    { titel: "Dieser PC", icon: Laptop, inhalt: <DieserPc ich={ich} d={d} st={st} pc={pc} toast={toast} /> },
     { titel: "Fertig", icon: Check, inhalt: (
       <div className="text-sm flex flex-col gap-2">
         <p>Den Assistenten findest du jederzeit unter <b>Verwaltung › Einrichtung</b> und oben in der Statusleiste.</p>
@@ -178,6 +181,74 @@ export default function Einrichtung({ ich, d, toast, onClose }) {
           <span className="flex-1" />
           {schritt < SCHRITTE.length - 1 ? <button type="button" className={btn} onClick={() => setSchritt(schritt + 1)}>Weiter<ArrowRight className="w-4 h-4" /></button>
             : <button type="button" className={btn} onClick={schliessen}><Check className="w-4 h-4" />Fertig</button>}
+        </div>
+      </div>
+    </div>);
+}
+
+// Einrichtung › Dieser PC (App-Designer 2.0, Fertigstellung 2026-10-24 22:35/22:45): Seiten-Designer-Freigabe dieses PCs, weitere KI-Anbieter,
+// Sandbox und alte Werkstatt-PCs (Entfernen nur der Admin, Datenbank 0040 ws_werkstatt_pc_entfernen mit Rechteprüfung und Protokoll).
+const ALT_TAGE = 14;
+function DieserPc({ ich, d, st, pc, toast }) {
+  const [schluessel, setSchluessel] = useState(undefined);   // undefined = lädt, null = keiner/Browser
+  const [namen, setNamen] = useState({}); const [busy, setBusy] = useState(null);
+  const desk = !!st?.desk;
+  useEffect(() => {
+    let aus = false;
+    if (!isDesktop()) { setSchluessel(null); return undefined; }
+    tauri("ws_design_geraet").then((g) => { if (!aus) setSchluessel(/^[A-Za-z0-9+/]{43}=$/.test(String(g?.public_key || "")) ? g.public_key : null); }, () => { if (!aus) setSchluessel(null); });
+    supabase.from("ws_ki_anbieter").select("id, name").then(({ data }) => { if (!aus) setNamen(Object.fromEntries((data || []).map((a) => [a.id, a.name]))); }, () => {});
+    return () => { aus = true; };
+  }, []);
+  const freigabe = designFreigabeStand();
+  const meinPc = (d.pcs || []).find((p) => p.id === pc);
+  const f = meinPc?.faehigkeiten || null;
+  const weitere = (st?.kopp || []).filter((k) => k.pc_id === pc && !["claude", "github", "cloudflare"].includes(k.anbieter));
+  const grenze = Date.now() - ALT_TAGE * 24 * 3600 * 1000;
+  const alte = (d.pcs || []).filter((p) => p.id !== pc && (!p.an || Date.parse(p.zuletzt || 0) < grenze))
+    .sort((a, b) => Date.parse(a.zuletzt || 0) - Date.parse(b.zuletzt || 0));
+  const admin = ich.rolle === "admin";
+  const wer = (id) => (id === ich.id ? "du" : d.benutzer.find((u) => u.id === id)?.name || "Mitglied");
+  const datum = (x) => (x ? new Date(x).toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }) : "–");
+  const entfernen = async (p) => {
+    if (!window.confirm(`Werkstatt-PC „${p.name}“ (${wer(p.benutzer_id)}) entfernen? Seine KI-Kopplungen fallen weg; meldet er sich wieder an, erscheint er neu.`)) return;
+    setBusy(p.id);
+    const { error } = await supabase.rpc("ws_werkstatt_pc_entfernen", { p_pc: p.id });
+    setBusy(null);
+    if (error) toast(error.message.replace(/^.*?ERROR:\s*/, "")); else { toast(`„${p.name}“ entfernt`); d.holen?.(); }
+  };
+  const FREIGABE_TEXT = { frei: "freigegeben – der Seiten-Designer und die Baustein-Galerie öffnen sich auf diesem PC", wartet: "wartet auf die Freigabe durch den Inhaber (Plattform-Programm › Desktop-Geräte oder Code per E-Mail)",
+    gesperrt: "gesperrt – der Inhaber hat diesen PC für das Design gesperrt", fehlt: "noch nicht angemeldet – App-Designer › Seiten öffnen, dann meldet sich der PC an" };
+  return (
+    <div className="text-sm">
+      {!desk && <p className="text-xs text-slate-500 mb-2">Im Browser lässt sich nur ein Teil prüfen – die Werte dieses PCs zeigt das Programm Codeschmiede.</p>}
+      <Zeile ok={desk ? (schluessel === undefined ? undefined : freigabe?.stand === "frei") : undefined} titel="Seiten-Designer-Freigabe (Design-Gerät)"
+        text={!desk ? "Nur im Programm." : schluessel === undefined ? "Wird geprüft …" : !schluessel ? "Kein Design-Schlüssel auf diesem PC (Programm neu starten bzw. aktualisieren)."
+          : `Design-Schlüssel vorhanden (…${schluessel.slice(-10, -1)}). ${freigabe ? `Stand ${datum(freigabe.zeit)}: ${FREIGABE_TEXT[freigabe.stand]}.` : "Stand noch unbekannt – einmal App-Designer › Seiten öffnen."}`}>
+        <p className="text-xs flex items-center gap-1.5"><KeyRound className="w-3.5 h-3.5" aria-hidden="true" />Der Schlüssel öffnet nur das Design der App (Seiten, Bausteine) – nie die Plattform-Verwaltung. Freigeben kann nur der Inhaber.</p>
+      </Zeile>
+      <Zeile ok={desk ? weitere.some((k) => k.gekoppelt) || undefined : undefined} titel="Weitere KI-Anbieter auf diesem PC"
+        text={!desk ? "Nur im Programm." : weitere.length ? weitere.map((k) => `${kiAnzeigename(k.anbieter, namen)}: ${k.gekoppelt ? "angemeldet" : "nicht angemeldet"}`).join(" · ") : "Keine weiteren Anbieter gekoppelt (optional – gebaut wird immer mit Claude)."}>
+        <p className="text-xs">Hinzufügen und Anmelden unter <b>Verwaltung › KI-Anbieter</b> (Schritt „ChatGPT & Gemini“).</p>
+      </Zeile>
+      <Zeile ok={!desk || !f ? undefined : f.plattform === "win32" ? !!f.windows_sandbox : !!f.os_sandbox} titel={f?.plattform === "win32" || (!f && !mac) ? "Windows-Sandbox" : "Sandbox des Betriebssystems"}
+        text={!desk ? "Nur im Programm." : !f ? "Noch unbekannt – die Werkstatt meldet es beim nächsten Einschalten." : f.plattform === "win32"
+          ? (f.windows_sandbox ? "Verfügbar – Programme lassen sich gefahrlos in der Windows-Sandbox testen." : "Nicht eingeschaltet. Windows-Funktion „Windows-Sandbox“ aktivieren (Windows Pro/Enterprise), dann neu starten.")
+          : f.os_sandbox ? `Verfügbar (${f.os_sandbox === "macos" ? "macOS" : "Linux"}) – fremde KI-Programme laufen abgeschottet.` : "Keine Sandbox gefunden – fremde KI-Programme prüfen hier nicht, Claude übernimmt."}>
+        {f?.plattform === "win32" && <Befehl text="Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM" toast={toast} />}
+      </Zeile>
+      <div className="flex gap-3 py-2.5 border-t border-slate-100 dark:border-slate-800">
+        <Box className="w-5 h-5 shrink-0 mt-0.5 text-slate-400" aria-hidden="true" />
+        <div className="min-w-0 flex-1 flex flex-col gap-1.5">
+          <div className="font-semibold text-sm">Alte oder abgeschaltete Werkstatt-PCs</div>
+          {!alte.length ? <div className="text-xs text-slate-500">Keine – alle anderen PCs waren in den letzten {ALT_TAGE} Tagen aktiv.</div> : (
+            <ul className="flex flex-col gap-1">{alte.map((p) => (
+              <li key={p.id} className="flex items-center gap-2 text-xs rounded-lg border border-slate-200 dark:border-slate-800 px-2 py-1.5">
+                <Monitor className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                <span className="flex-1 min-w-0"><b className="font-semibold">{p.name}</b> · {wer(p.benutzer_id)} · {p.an ? "an" : "aus"} · zuletzt {datum(p.zuletzt)}{p.admin_pc ? " · Admin-PC" : ""}</span>
+                {admin && <button type="button" className={`${ghost} h-8 text-xs`} disabled={busy === p.id} onClick={() => entfernen(p)}>{busy === p.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}Entfernen</button>}
+              </li>))}</ul>)}
+          <p className="text-[11px] text-slate-500 flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />{admin ? "Entfernen geht nur bei PCs, die gerade nicht eingeschaltet sind; es steht im Änderungsprotokoll." : "Entfernen darf nur der Admin."}</p>
         </div>
       </div>
     </div>);
