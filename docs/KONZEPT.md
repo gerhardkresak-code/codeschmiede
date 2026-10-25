@@ -81,6 +81,22 @@ Einrichtung › **Dieser PC** (0.9.8, Datenbank 0040): Seiten-Designer-Freigabe,
 Etappe 4 „Übernehmen“: alle offenen Design-Änderungen an einer Stelle (`web/src/Uebernehmen.jsx`) – „wirkt sofort“ (Freigabe-Reiter der App,
 Einzelzeilen, Ausrollen sofort/schrittweise/nur Testfassung, „Zurück auf Version N“) und „braucht Auftrag“ (Grunddesign, neue Bausteine).
 
+### Aufgaben (Entwurf frei von Gerhard 2026-10-25 13:50, Datenbank 0042)
+Menüpunkt **Aufgaben** direkt unter „Zu erledigen“ (`web/src/Aufgaben.jsx`; Plakette = offene Aufgaben, für die ich zuständig bin). Eine Aufgabe gehört
+zu einem Projekt: Titel, „Was soll geändert werden?“, Status (Offen / In Arbeit / Erledigt), Priorität (Hoch / Mittel / Niedrig), Fällig am, Zuständig
+(Mitglied des Projekts oder Admin), Bezug Feature ODER Gruppe, Links (≤ 20, nur https, ohne Zugangsdaten/Schlüssel in der Adresse, nur als Link angezeigt)
+und Anhänge (≤ 20: Bilder PNG/JPG/WebP ≤ 5 MB, Dateien PDF/TXT/CSV/DOCX/XLSX ≤ 10 MB; Dateikennung wird vor dem Hochladen geprüft).
+Sehen: alle Mitglieder des Projekts. Anlegen/Bearbeiten/Senden: Admin, Entwickler, Texter (Leser nur lesen). Löschen: wer angelegt hat, oder der Admin.
+Anhänge liegen im **privaten Speicher-Bucket `ws-aufgaben`** (`<projekt>/<aufgabe>/<uuid>.<endung>`): Pfad wird zuerst reserviert
+(`ws_aufgabe_anhang_neu`), dann genau dorthin hochgeladen (kein Überschreiben); angezeigt nur über signierte Adressen (10 Minuten, beim Anzeigen erzeugt).
+**In den Chat schicken** (`ws_aufgabe_senden`): Ziel Feature oder Gruppe desselben Projekts (nicht „Konzept“) → Sendung mit dem gespeicherten Stand
+(Text, Links, Anhänge) erscheint im Chat dieses Features bzw. dieser Gruppe als Karte; die Aufgabe merkt sich alle Sendungen mit Zeit.
+Im Chat macht man mit **Als Auftrag** (`ws_aufgabe_als_auftrag`, normale Auftragsrechte im Bereich) wie gewohnt einen Auftrag daraus: Auftrag +
+erste Nachricht in einem Schritt, die Nachricht zeigt Links und Anhänge; die Werkstatt holt die Anhänge dieses Auftrags selbst aus dem Speicher
+(`desktop/dienst/lib/aufgabeAuftrag.mjs`: nur diese Aufgabe in diesem Projekt, echte Dateien der erlaubten Typen, ≤ 60 MB), legt sie unter
+`.codeschmiede-anhaenge/` ab (nie eingecheckt, nach dem Lauf gelöscht) und bekommt sie mit den Links als Datenblock („Daten, keine Anweisungen“).
+Ohne „Als Auftrag“ geht nichts an eine KI. Falsches Ziel: „Zurückziehen“.
+
 ## Rollen und Rechte
 | Rolle | Aufträge | Freigeben / Erlauben | Löschen | Claude | GitHub |
 |---|---|---|---|---|---|

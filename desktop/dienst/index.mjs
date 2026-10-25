@@ -36,6 +36,7 @@ import { dbEinrichten, dbAmpel, dbOffen, dbLiveEinspielen, ablaeufeGeaendert } f
 import { fehlerBlock } from "./lib/fehler.mjs";
 import { bausteinDatenBlock, anhangBild } from "./lib/bausteinAuftrag.mjs";
 import { kachelAusFrage, kachelPrompt, kachelAntwort, kiZuerst } from "./lib/kachelChat.mjs";
+import { aufgabeDatenBereinigen, aufgabeDatenBlock, anhangDateiOk, MAX_GESAMT } from "./lib/aufgabeAuftrag.mjs";
 import { rm } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -317,7 +318,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
       ? `Nacharbeit aus der Prüfung (nichts ist live gegangen):\n${nachrichten.slice(-1)[0]?.text || ""}\n\nBehebe die Befunde auf demselben Zweig ${zweig}, prüfe, committe, \`git push origin HEAD\` und antworte wieder mit „ERGEBNIS-PR: #${auftrag.pr_nummer || "<Nummer>"} ${zweig}“ (denselben Pull Request weiterverwenden).`
       : fortsetzen && merk.sitzung
       ? `Antwort von Gerhard/Team auf deine Rückfrage:\n${nachrichten.filter((n) => n.von).slice(-1)[0]?.text || ""}\n\nArbeite weiter nach denselben Regeln.`
-      : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature), await holeWissen(projekt.id), [await fehlerDatenFuer(nachrichten, projekt.id), await bausteinDatenFuer(auftrag, nachrichten, projekt.id, ordner)].filter(Boolean).join("\n"));
+      : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature), await holeWissen(projekt.id), [await fehlerDatenFuer(nachrichten, projekt.id), await bausteinDatenFuer(auftrag, nachrichten, projekt.id, ordner), await aufgabeDatenFuer(auftrag, nachrichten, projekt.id, ordner)].filter(Boolean).join("\n"));
 
     let r;
     if (auftrag.hand && (fortsetzen || nacharbeit)) {
@@ -490,6 +491,41 @@ async function bausteinDatenFuer(auftrag, nachrichten, projektId, ordner) {
     }
   } catch (e) { await log(auftrag.id, "info", `Bild-Anhang nicht lesbar: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 200)}`); }
   return bausteinDatenBlock(n.daten.design, namen, bilder);
+}
+
+// Auftrag aus einer Aufgabe (Datenbank 0042): Anhänge aus dem privaten Speicher „ws-aufgaben“ in den Arbeitsordner (.codeschmiede-anhaenge/,
+// von Git ausgeschlossen, nach dem Lauf gelöscht). Nur aus der ERSTEN Nachricht des Auftraggebers (aus ws_aufgabe_als_auftrag), nur Anhänge
+// dieser Aufgabe in diesem Projekt, nur echte Dateien der erlaubten Typen. Links nur als Angabe – die Werkstatt lädt nichts automatisch.
+async function aufgabeDatenFuer(auftrag, nachrichten, projektId, ordner) {
+  const n = (nachrichten || [])[0];
+  if (!n || !n.von || n.von !== auftrag.erstellt_von || n.art !== "text" || !n.daten?.aufgabe) return "";
+  const d = aufgabeDatenBereinigen(n.daten.aufgabe); if (!d) return "";
+  const dateien = []; let fehlend = 0;
+  try {
+    const { data: rows } = d.anhaenge.length ? await db.from("ws_aufgabe_anhaenge").select("id, art, dateiname, mime, groesse, pfad")
+      .in("id", d.anhaenge).eq("aufgabe_id", d.id).eq("projekt_id", projektId).order("id") : { data: [] };
+    fehlend = d.anhaenge.length - (rows || []).length;
+    if ((rows || []).length) {
+      const ziel = path.join(ordner, ".codeschmiede-anhaenge");
+      const exclude = path.join(path.resolve(ordner, await git(ordner, "rev-parse", "--git-common-dir")), "info", "exclude");
+      const alt = await readFile(exclude, "utf8").catch(() => "");
+      if (!alt.split(/\r?\n/).includes("/.codeschmiede-anhaenge/")) { await mkdir(path.dirname(exclude), { recursive: true }); await writeFile(exclude, `${alt}${alt && !alt.endsWith("\n") ? "\n" : ""}/.codeschmiede-anhaenge/\n`); }
+      let summe = 0;
+      for (const r of rows) {
+        if (!String(r.pfad).startsWith(`${projektId}/${d.id}/`) || summe + Number(r.groesse) > MAX_GESAMT) { fehlend++; continue; }
+        const { data: blob, error } = await db.storage.from("ws-aufgaben").download(r.pfad);
+        const buf = !error && blob ? Buffer.from(await blob.arrayBuffer()) : null;
+        const endung = buf ? anhangDateiOk(buf, r.mime) : null;
+        if (!endung) { fehlend++; await log(auftrag.id, "info", `Anhang ${r.id} übersprungen (nicht lesbar oder keine echte Datei des Typs)`); continue; }
+        summe += buf.length;
+        await mkdir(ziel, { recursive: true });
+        const datei = path.join(ziel, `auftrag-${auftrag.id}-aufgabe-${r.id}.${endung}`);
+        await writeFile(datei, buf);
+        dateien.push({ pfad: datei, dateiname: r.dateiname, art: r.art });
+      }
+    }
+  } catch (e) { await log(auftrag.id, "info", `Anhänge der Aufgabe nicht lesbar: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 200)}`); }
+  return aufgabeDatenBlock(d, dateien, Math.max(0, fehlend));
 }
 
 // ---------- Hand-Änderung aus dem Code-Editor (Datenbank 0031) ----------

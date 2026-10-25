@@ -9,7 +9,7 @@
     "node": ">=20.12.2"
   },
   "scripts": {
-    "test": "node --test test/lib.test.mjs test/assistent.test.mjs test/ki.test.mjs test/repo.test.mjs test/live.test.mjs test/einrichten.test.mjs test/marke.test.mjs test/ersatz.test.mjs test/anbindungen.test.mjs test/code.test.mjs test/datenbank.test.mjs test/fehler.test.mjs test/kontrast.test.mjs test/bausteinAuftrag.test.mjs test/kachelChat.test.mjs"
+    "test": "node --test test/lib.test.mjs test/assistent.test.mjs test/ki.test.mjs test/repo.test.mjs test/live.test.mjs test/einrichten.test.mjs test/marke.test.mjs test/ersatz.test.mjs test/anbindungen.test.mjs test/code.test.mjs test/datenbank.test.mjs test/fehler.test.mjs test/kontrast.test.mjs test/bausteinAuftrag.test.mjs test/kachelChat.test.mjs test/aufgabeAuftrag.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
