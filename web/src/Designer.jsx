@@ -343,7 +343,7 @@ export default function Designer({ d, ich, toast }) {
             {rechts === "pruef" && modus !== "bausteine" ? <Pruefliste befunde={befunde} rot={rot} hinweise={hinweise} kiName={ki.name} onFragen={() => setRechts("chat")} />
               : <DesignChat d={d} ich={ich} projekt={projekt} entwurf={aktiv} werte={werte} befunde={befunde} darf={darf} toast={toast} modus={modus} text={chatText} setText={setChatText} start={!laden && !live && !entwuerfe.length}
                   onUebernehmen={(v) => { if (!bearbeitbar) { toast(fest ? "Dieser Entwurf ist fest – lege eine Kopie an" : "Kein Recht zum Gestalten"); return false; }
-                    setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, v)); setGeaendert(true); if (modus === "grund") setMitte("geruest"); return true; }} />}
+                    setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, nurGrunddesign(v))); setGeaendert(true); if (modus === "grund") setMitte("geruest"); return true; }} />}
             </>}
           </aside>
         </div>)}
@@ -598,6 +598,10 @@ function Pruefliste({ befunde, rot, hinweise, onFragen, kiName = "Claude" }) {
       <p className="text-xs text-slate-500 border-t border-slate-200 dark:border-slate-800 pt-2">Rot = Pflicht (Barrierefreiheit WCAG 2.1 AA) · Gelb = Empfehlung</p>
     </div>);
 }
+
+// Nur Grunddesign-Schlüssel übernehmen – „kachel“ (Chat zur Kachel, 0041) gehört nie in einen Grunddesign-Entwurf (Befund N1)
+const GRUNDDESIGN = ["farben", "schrift", "form", "menue", "logo", "tabellen", "icons", "marke", "spiel", "webseite", "shop", "beispiele", "bausteine"];
+const nurGrunddesign = (v) => Object.fromEntries(Object.entries(v && typeof v === "object" && !Array.isArray(v) ? v : {}).filter(([k]) => GRUNDDESIGN.includes(k)));
 
 // Chat mit Claude: läuft über die eigene Werkstatt (Abo), Claude bekommt nur die Werte, keine Werkzeuge.
 // Noch kein Design (neues Projekt): Gespräch von Grund auf – Claude fragt zuerst und schlägt dann ein ganzes Grunddesign vor

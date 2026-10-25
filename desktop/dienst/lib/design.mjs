@@ -137,7 +137,12 @@ export function designAntwort(roh) {
   const i = zeilen.map((z) => z.trim()).findLastIndex((z) => /^\**VORSCHLAG:/i.test(z));
   if (i >= 0) {
     const json = zeilen[i].trim().replace(/^\**VORSCHLAG:\**\s*/i, "").replace(/^`+|`+$/g, "");
-    try { const v = JSON.parse(json); if (v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length) vorschlag = v; } catch { /* kein gültiges JSON */ }
+    try {
+      const v = JSON.parse(json);
+      // „kachel“ gibt es nur im Chat zur Kachel (eigener Weg, lib/kachelChat.mjs) – in normalen Design-Vorschlägen nie (Befund N1)
+      if (v && typeof v === "object" && !Array.isArray(v)) delete v.kachel;
+      if (v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length) vorschlag = v;
+    } catch { /* kein gültiges JSON */ }
     zeilen.splice(i, 1);
   }
   const text = zeilen.join("\n").trim().slice(0, 7900) || (vorschlag ? "Mein Vorschlag:" : "Ich habe dazu keine Antwort gefunden.");

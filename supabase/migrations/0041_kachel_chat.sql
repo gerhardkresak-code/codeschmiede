@@ -10,6 +10,8 @@
 --   * ws_design_chat.ki darf beim Fragen als WUNSCH mitgegeben werden (Format-Prüfung aus 0018). Die Werkstatt nutzt den Wunsch nur,
 --     wenn der Anbieter in der Zuständigkeit „design“ des Projekts steht; sonst gilt die normale Reihe.
 --   * ws_design_chat_nehmen liefert die ganze Zeile (setof ws_design_chat) – die Spalte ki ist damit schon dabei, keine Änderung nötig.
+--   * ws_design_auftrag (Stand 0036) mit Mengengrenze: höchstens 10 Design-Aufträge je Person und Stunde (alle bisherigen Prüfungen
+--     unverändert; gilt auch für ws_design_auftrag_neu aus 0039, die diese Funktion aufruft). Befund M1 der Sicherheitsprüfung.
 -- Keine Personendaten, keine neuen Rechte (Fragen weiter nur mit Design-Recht, Regel ws_design_chat_frage). Mehrfach ausführbar.
 -- Reihenfolge 0001 → … → 0041.
 
@@ -152,5 +154,37 @@ grant execute on function public.ws_design_werte_ok(jsonb) to authenticated;
 
 -- KI-Wunsch beim Fragen (Format-Prüfung ws_design_chat_ki_check aus 0018 bleibt; Id, von, stand, frage_id weiter nicht vorgebbar)
 grant insert (projekt_id, entwurf_id, text, werte, ki) on public.ws_design_chat to authenticated;
+
+-- Mengengrenze für Design-Aufträge (Befund M1): Zählung über das vorhandene Protokoll „design_auftrag“
+create index if not exists ws_protokoll_wer_was_wann on public.ws_protokoll (wer, was, wann);
+create or replace function public.ws_design_auftrag(p_projekt text, p_art text, p_titel text, p_text text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare g text; a bigint; t text; x text;
+begin
+  if auth.uid() is null then raise exception 'Nicht angemeldet'; end if;
+  if p_art is null or p_art not in ('baustein','kachel') then raise exception 'Unbekannte Auftragsart'; end if;
+  if not public.ws_darf_design(p_projekt) then raise exception 'Keine Berechtigung für das Design dieses Projekts'; end if;
+  -- Mengengrenze (Sicherheitsprüfung Chat zur Kachel, 0041): höchstens 10 Design-Aufträge je Person und Stunde
+  if (select count(*) from public.ws_protokoll where wer = auth.uid() and was = 'design_auftrag' and wann > now() - interval '1 hour') >= 10 then
+    raise exception 'Höchstens 10 Design-Aufträge je Stunde – bitte später noch einmal'; end if;
+  t := btrim(coalesce(p_titel, '')); x := btrim(coalesce(p_text, ''));
+  if char_length(t) not between 2 and 80 then raise exception 'Name fehlt oder ist zu lang (höchstens 80 Zeichen)'; end if;
+  if char_length(x) not between 10 and 8000 then raise exception 'Beschreibung fehlt oder ist zu lang (10 bis 8000 Zeichen)'; end if;
+  -- Steuerzeichen (außer Zeilenumbruch und Tabulator) haben im Titel und Text nichts verloren
+  -- dazu C1-Steuerzeichen, Richtungs- und unsichtbare Zeichen (Verschleierung, Prüfung 2026-10-24)
+  if t ~ '[[:cntrl:]\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069\ufeff]'
+     or x ~ '[\x01-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069\ufeff]' then raise exception 'Ungültige Zeichen'; end if;
+  select design_gruppe_id into g from public.ws_projekte where id = p_projekt and not coalesce(archiviert, false);
+  if not found then raise exception 'Projekt nicht gefunden oder archiviert'; end if;
+  if g is null then raise exception 'Der App-Designer ist für dieses Projekt noch nicht eingerichtet'; end if;
+  t := left(case p_art when 'baustein' then 'Neuer Baustein: ' else 'Neue Kachel für den Seiten-Designer: ' end || t, 80);
+  insert into public.ws_auftraege (gruppe_id, titel, art, erstellt_von) values (g, t, 'neu', auth.uid()) returning id into a;
+  insert into public.ws_nachrichten (auftrag_id, von, art, text, kanal) values (a, auth.uid(), 'text', x, 'codeschmiede');
+  insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'design_auftrag', jsonb_build_object('projekt', p_projekt, 'art', p_art, 'auftrag', a));
+  return a;
+end $$;
+
+revoke execute on function public.ws_design_auftrag(text, text, text, text) from public, anon;
+grant execute on function public.ws_design_auftrag(text, text, text, text) to authenticated;
 
 commit;

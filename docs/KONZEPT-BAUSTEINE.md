@@ -92,7 +92,7 @@ Designer und App nutzen dieselben Funktionen (`kachelStilKlassen`/`kachelStilWer
 - Vorschlag als Zeile `KACHEL: {…}` mit nur den geänderten Feldern; in der App Vorher → Nachher, **„Übernehmen“** schreibt bereinigt
   (`sanitizeTiles`) in den Entwurf, danach wie immer „Zur Freigabe“; **„Ablehnen“** verwirft. Neuer Code nötig → **„Als Auftrag“** (`ws_design_auftrag`, Art „kachel“).
 - **Nachrichten** (Herkunft und Fenster geprüft): App → Codeschmiede `kachel-chat-abo {schluessel}`, `kachel-chat-senden {schluessel, text, ki, kachel, info}`,
-  `kachel-chat-entscheiden {id, entscheidung}`, `kachel-chat-auftrag {text}`; Codeschmiede → App `kachel-chat {schluessel, nachrichten, kis, standard, bereit, hinweis}`,
+  `kachel-chat-entscheiden {id, entscheidung}`, `kachel-chat-auftrag {schluessel, antwortId}` (Auftragstext baut die Codeschmiede selbst – Frage, Kachelwerte, KI-Antwort als Datenblöcke, Arbeitsauftrag fest im Code –, Bestätigungsdialog im Codeschmiede-Fenster, höchstens 10 Design-Aufträge je Person und Stunde); Codeschmiede → App `kachel-chat {schluessel, nachrichten, kis, standard, bereit, hinweis}`,
   `kachel-chat-fehler {schluessel, text}`, `kachel-chat-auftrag-stand {ok, nr|text}`. Schlüssel `<seite>/<gerät>/<kachelId>` (`^[a-z_]{2,30}/(pc|tablet|handy)/[A-Za-z0-9_-]{1,40}$`).
 
 ## App-Designer 2.0 · Etappe 3 „Neuer Baustein“-Assistent (0.9.8, Entwurf frei 2026-10-24 22:08)

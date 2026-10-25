@@ -59,3 +59,13 @@ reset role;
 set role anon;
 select public.ws_kachel_ok('{}');
 reset role;
+\echo [11] Mengengrenze Design-Aufträge: 10 in der Stunde -> 10; der 11. -> FEHLER; Protokoll älter als 1 Stunde zählt nicht -> nach Zurückdatieren OK (t)
+set role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false) \g /dev/null
+select count(ws_design_auftrag('trainer-to-go','kachel','Kachel '||i,'Beschreibung Nummer '||i)) as auftraege from generate_series(1,10) i;
+select ws_design_auftrag('trainer-to-go','kachel','Elf','Beschreibung Nummer elf');
+reset role;
+update ws_protokoll set wann = now() - interval '61 minutes' where was = 'design_auftrag';
+set role authenticated;
+select ws_design_auftrag('trainer-to-go','kachel','Zwoelf','Beschreibung Nummer zwoelf') > 0 as wieder_frei;
+reset role;
