@@ -1,0 +1,91 @@
+<title>Aufgaben Entwurf</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#0b1220;--side:#0d2a22;--panel:#111a2b;--line:#1f2a3d;--fg:#e6edf6;--mut:#93a3b8;--acc:#10b981;--acc-ink:#052e1f;--orange:#f97316;--red:#f87171;--amber:#fbbf24;--blue:#60a5fa;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:Barlow,system-ui,sans-serif;font-size:15px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
+h1{font-size:22px;margin:0}.sub{color:var(--mut);font-size:14px;margin:4px 0 16px;max-width:76ch}
+.app{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+nav{flex:0 1 210px;background:var(--side);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:2px;font-size:14px}
+nav span{padding:8px 10px;border-radius:9px;color:#cfe7dc}nav .on{background:#10b98133;color:#fff;font-weight:700;outline:2px solid var(--orange);outline-offset:1px}
+nav small{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding:10px 10px 2px}
+.list{flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{font:inherit;font-size:13.5px;border:0;background:transparent;color:var(--fg);padding:7px 12px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--acc);color:var(--acc-ink);font-weight:700}
+button.p{font:inherit;font-weight:700;font-size:14px;background:var(--acc);color:var(--acc-ink);border:0;border-radius:10px;padding:8px 14px;cursor:pointer}
+button.g{font:inherit;font-size:13.5px;font-weight:600;background:transparent;color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:7px 12px;cursor:pointer}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px}
+.card.sel{border-color:var(--acc)}
+.meta{display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--mut);align-items:center}
+.pill{padding:2px 8px;border-radius:999px;font-weight:700;font-size:11.5px}
+.hoch{background:#f8717122;color:var(--red)}.mittel{background:#fbbf2422;color:var(--amber)}.niedrig{background:#60a5fa22;color:var(--blue)}
+.st{background:#10b98122;color:#6ee7b7}
+.det{flex:1 1 380px;max-width:520px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--mut)}
+input,select,textarea{font:inherit;font-size:14px;color:var(--fg);background:#0e1626;border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+textarea{min-height:80px;resize:vertical}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.anh{display:flex;flex-wrap:wrap;gap:8px}
+.th{width:84px;height:62px;border-radius:9px;background:linear-gradient(135deg,#1e3a5f,#0f766e);display:flex;align-items:flex-end;padding:4px 6px;font-size:10.5px;color:#fff}
+.file{display:flex;gap:8px;align-items:center;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:9px}
+.add{width:84px;height:62px;border-radius:9px;border:1px dashed var(--acc);display:flex;align-items:center;justify-content:center;color:var(--acc);font-size:12px;text-align:center}
+.link{font-size:13.5px;color:#6ee7b7;display:flex;gap:6px}
+.note{font-size:12.5px;line-height:1.5;color:#c7d2e0;background:#0e1626;border:1px solid var(--line);border-radius:10px;padding:9px}
+.send{border:2px solid var(--orange);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.ok{font-size:13px;color:#6ee7b7;font-weight:700}
+svg{width:15px;height:15px;flex-shrink:0}
+</style>
+
+<h1>Aufgaben in der Codeschmiede</h1>
+<p class="sub">Entwurf zur Freigabe. Neuer Menüpunkt <b>„Aufgaben“</b> unter „Zu erledigen“. Jede Aufgabe gehört zu einem Projekt, alle im Projekt sehen sie, und man kann jemanden als zuständig eintragen. Eine Aufgabe enthält Beschreibung, Fotos/Screenshots, Dateien, Links, Status, Priorität, Fälligkeit und den Bezug zu Feature oder Gruppe. Mit <b>„In den Chat schicken“</b> landet sie als Nachricht mit allen Anhängen im Chat des Features oder der Gruppe. Dort machst du wie gewohnt einen Auftrag daraus.</p>
+
+<div class="app">
+  <nav><small>Projekt</small><span>Auftrags-Zentrale</span><span>Zu erledigen</span><span class="on">Aufgaben · 4</span><span>Live-Vorschau</span><span>App-Designer</span></nav>
+  <div class="list">
+    <div class="bar"><span class="seg" id="filter"><button aria-pressed="true" data-f="offen">Offen</button><button aria-pressed="false" data-f="arbeit">In Arbeit</button><button aria-pressed="false" data-f="erledigt">Erledigt</button><button aria-pressed="false" data-f="alle">Alle</button></span>
+      <select aria-label="Zuständig"><option>Alle Personen</option><option>Gerhard Kresak</option><option>Ohne Zuständige</option></select>
+      <span style="flex:1"></span><button class="p" id="neu">Neue Aufgabe</button></div>
+    <div id="liste" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+  <div class="det" id="det"></div>
+</div>
+
+<script>
+const IC={img:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>',
+file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></svg>',
+link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>',
+cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>'};
+const A=[
+ {id:1,t:"Schnellzugriffe am Handy zu klein",st:"offen",pr:"hoch",f:"28.10.",wer:"Gerhard Kresak",bez:"Feature · Startseite",bes:"Am Handy sind die Kacheln der Schnellzugriffe zu klein zum Tippen. Bitte mindestens 48 px hoch und Text nicht abschneiden.",bilder:["Handy-Startseite.png","Detail.png"],dateien:[],links:[["Vorschau Testfassung","main.trainer-to-go.pages.dev"]]},
+ {id:2,t:"Kassa: Export als PDF",st:"arbeit",pr:"mittel",f:"02.11.",wer:"—",bez:"Gruppe · Verwaltung",bes:"Der Kassabericht soll als PDF im Layout der Vorlage exportiert werden.",bilder:[],dateien:["Vorlage-Kassabericht.pdf"],links:[]},
+ {id:3,t:"Handbuch: Kapitel Kantine ergänzen",st:"offen",pr:"niedrig",f:"",wer:"—",bez:"Feature · Kantine",bes:"Schichten und Vorbestellung fehlen im Handbuch.",bilder:[],dateien:[],links:[]},
+ {id:4,t:"Fehler beim Speichern der Aufstellung",st:"erledigt",pr:"hoch",f:"24.10.",wer:"Gerhard Kresak",bez:"Feature · Aufstellung",bes:"Behoben in Version 0.9.6.",bilder:["Fehlermeldung.png"],dateien:[],links:[],chat:"Feature · Aufstellung"}];
+let filt="offen",sel=1,gesendet={};
+const lab={offen:"Offen",arbeit:"In Arbeit",erledigt:"Erledigt"};
+function liste(){const l=document.getElementById('liste');l.innerHTML='';
+ A.filter(a=>filt==='alle'||a.st===filt).forEach(a=>{const d=document.createElement('div');d.className='card'+(a.id===sel?' sel':'');
+  d.innerHTML=`<b>${a.t}</b><div class="meta"><span class="pill ${a.pr}">${a.pr[0].toUpperCase()+a.pr.slice(1)}</span><span class="pill st">${lab[a.st]}</span>${a.f?`<span>${IC.cal} fällig ${a.f}</span>`:''}<span>${a.bez}</span>${a.bilder.length?`<span>${IC.img} ${a.bilder.length}</span>`:''}${a.dateien.length?`<span>${IC.file} ${a.dateien.length}</span>`:''}${a.links.length?`<span>${IC.link} ${a.links.length}</span>`:''}${a.chat||gesendet[a.id]?`<span>im Chat: ${a.chat||gesendet[a.id]}</span>`:''}</div>`;
+  d.onclick=()=>{sel=a.id;render()};l.appendChild(d)});
+ if(!l.children.length)l.innerHTML='<div class="note">Keine Aufgaben in dieser Ansicht.</div>'}
+function det(){const a=A.find(x=>x.id===sel);const e=document.getElementById('det');if(!a){e.innerHTML='<div class="note">Aufgabe links wählen.</div>';return}
+ e.innerHTML=`<label>Titel<input value="${a.t}"></label>
+ <label>Was soll geändert werden?<textarea>${a.bes}</textarea></label>
+ <div class="grid2"><label>Status<select>${Object.entries(lab).map(([k,v])=>`<option ${k===a.st?'selected':''}>${v}</option>`).join('')}</select></label>
+ <label>Priorität<select><option ${a.pr==='hoch'?'selected':''}>Hoch</option><option ${a.pr==='mittel'?'selected':''}>Mittel</option><option ${a.pr==='niedrig'?'selected':''}>Niedrig</option></select></label>
+ <label>Fällig am<input type="date"></label><label>Zuständig<select><option>${a.wer}</option><option>Gerhard Kresak</option><option>—</option></select></label></div>
+ <label>Bezug<select><option>${a.bez}</option><option>Feature · Startseite</option><option>Gruppe · Verwaltung</option><option>Gruppe · Sport</option></select></label>
+ <div><div style="font-size:13px;color:var(--mut);margin-bottom:6px">Fotos und Dateien</div><div class="anh">${a.bilder.map(b=>`<div class="th">${b}</div>`).join('')}${a.dateien.map(f=>`<div class="file">${IC.file}${f}</div>`).join('')}<div class="add">+ Foto<br>oder Datei</div></div></div>
+ <div><div style="font-size:13px;color:var(--mut);margin-bottom:6px">Links</div>${a.links.map(([n,u])=>`<div class="link">${IC.link}${n} · ${u}</div>`).join('')}<button class="g" style="margin-top:6px">+ Link</button></div>
+ <div class="note">Keine Fotos von Personen oder Kindern und keine Daten von Mitgliedern hochladen. Screenshots mit Beispieldaten genügen.</div>
+ <div class="send"><b>In den Chat schicken</b><div class="grid2"><label>An<select id="ziel"><option>${a.bez}</option><option>Feature · Startseite</option><option>Gruppe · Verwaltung</option></select></label><label>&nbsp;<button class="p" id="go">Senden</button></label></div>
+ <div id="res">${gesendet[a.id]||a.chat?`<span class="ok">Im Chat von ${gesendet[a.id]||a.chat}. Dort mit „Als Auftrag“ weitermachen.</span>`:'<span style="font-size:12.5px;color:var(--mut)">Kommt als Nachricht mit Beschreibung, Links, Bildern und Dateien in den Chat. Die Aufgabe merkt sich, wohin sie ging.</span>'}</div></div>`;
+ document.getElementById('go').onclick=()=>{gesendet[a.id]=document.getElementById('ziel').value;render()}}
+function render(){document.querySelectorAll('#filter button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.f===filt));liste();det()}
+document.getElementById('filter').onclick=e=>{const b=e.target.closest('[data-f]');if(b){filt=b.dataset.f;render()}};
+document.getElementById('neu').onclick=()=>{const id=A.length+1;A.unshift({id,t:"Neue Aufgabe",st:"offen",pr:"mittel",f:"",wer:"—",bez:"Gruppe · Verwaltung",bes:"",bilder:[],dateien:[],links:[]});sel=id;filt="offen";render()};
+render();
+</script>

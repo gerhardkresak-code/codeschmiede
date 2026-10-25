@@ -40,6 +40,10 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-25 13:50 – Aufgaben (Entwurf 1.0 frei, `docs/entwurf-1.0-aufgaben.html`):** Eigener Menüpunkt „Aufgaben“ unter „Zu erledigen“; Aufgaben je Projekt
+  (sehen alle Mitglieder, eine Person zuständig), mit Links (nur https) und Anhängen (privater Speicher, Hinweis: keine Fotos von Personen/Kindern,
+  keine Mitgliederdaten); „In den Chat schicken“ an Feature oder Gruppe, dort „Als Auftrag“ mit den normalen Rechten. Anhänge gehen nur über
+  einen Auftrag an die Werkstatt (Datenblock, keine Anweisungen). Datenbank 0042, `docs/KONZEPT.md` › Aufgaben.
 - **2026-10-24 22:08 – App-Designer 2.0 (Entwurf 1.0 frei, Grundsätze 21:4x):** App-Designer 2.0: ein Designer, wirkt sofort über Design-Pakete;
   neue Bausteine als Auftrag; Farben frei mit Kontrast-Wächter. Aussehen (Farben, Schrift, Logo, Menü, Seiten, Bausteine) geht über die
   Design-Pakete der App (Trainer to go: `DesignPackage`, Stufen Entwurf → Freigabe, ab Werk „Sofort“), gespeichert in der eingebetteten App mit
