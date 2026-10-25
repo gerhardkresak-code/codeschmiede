@@ -113,7 +113,7 @@ export default function Einrichtung({ ich, d, toast, onClose }) {
       </div>) },
     { titel: "Programm & Werkzeuge", icon: Monitor, inhalt: !st ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700" /> : !st.desk ? (
       <div className="flex flex-col gap-2 text-sm"><p>Du bist im Browser. Die Werkstatt läuft nur im Programm <b>Codeschmiede</b> für {mac ? "Mac" : "Windows"}.</p>
-        <a className={btn} href="https://github.com/gerhardkresak-code/codeschmiede/releases/latest" target="_blank" rel="noopener noreferrer"><ExternalLink className="w-4 h-4" />Programm herunterladen</a>
+        <a className={btn} href="https://github.com/kresak-it-solutions/codeschmiede/releases/latest" target="_blank" rel="noopener noreferrer"><ExternalLink className="w-4 h-4" />Programm herunterladen</a>
         <p className="text-xs text-slate-500">Installieren, öffnen, anmelden – der Assistent startet dann im Programm von selbst.</p></div>) : (
       <div>
         <Zeile ok={!!w.node} titel="Node.js" text="Laufzeit für die Werkstatt und die KI-Programme."><Befehl text={BEFEHL.node} toast={toast} /></Zeile>

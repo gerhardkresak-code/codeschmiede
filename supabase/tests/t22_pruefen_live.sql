@@ -14,7 +14,7 @@ insert into ws_einladungen(email,rolle,eingeladen_von,projekt_id) values ('d1@x.
 select ws_einladung_annehmen('D1') \g /dev/null
 insert into ws_werkstatt_pcs(benutzer_id,name,an) values (auth.uid(),'PC-D1',true);
 reset role;
-update ws_projekte set repo='gerhardkresak-code/neu' where id='neu';
+update ws_projekte set repo='kresak-it-solutions/neu' where id='neu';
 insert into ws_features(id,gruppe_id,name) values ('N-1','neu-funktionen','Kasse');
 set role authenticated;
 

@@ -1,13 +1,13 @@
 // GitHub-Repository für ein neues Projekt anlegen (Gerhard 2026-10-23 18:38, Antworten 18:40):
-// Konto gerhardkresak-code, öffentlich (per Klick privat), Grundgerüst aus dem Regelwerk ai-dev-os/project-template.
+// Organisation kresak-it-solutions (seit 2026-10-25, vorher Konto gerhardkresak-code), öffentlich (per Klick privat), Grundgerüst aus dem Regelwerk ai-dev-os/project-template.
 // Läuft nur in der Werkstatt des Admins mit dessen GitHub-Anmeldung (gh). Es wird kein Projekt-Code ausgeführt:
 // nur „gh repo create“, Dateien schreiben, „git commit/push“ ohne Hooks – darum auch auf dem Admin-PC zulässig.
 import { copyFile, lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const REPO_KONTO = "gerhardkresak-code";
-export const REGELWERK = "gerhardkresak-code/ai-dev-os";
+export const REPO_KONTO = "kresak-it-solutions";   // GitHub-Organisation (Enterprise „Kresak IT-Solutions“)
+export const REGELWERK = "gerhardkresak-code/ai-dev-os";   // Regelwerk bleibt beim persönlichen Konto
 /** GitHub-Name aus der Projekt-Kennung (Kennung ist schon klein, a–z, 0–9 und Bindestrich). */
 export const repoName = (id) => String(id || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "").slice(0, 100);
 export const repoOk = (r) => /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/.test(r || "") && !/\/\.\.?$/.test(r);

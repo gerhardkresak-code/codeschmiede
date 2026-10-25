@@ -197,7 +197,7 @@ export function Aenderungsprotokoll({ d }) {
   useEffect(() => {
     if (quelle !== "codeschmiede" || cs.inhalt) return undefined;
     setCs({ laden: true, inhalt: "" });
-    fetch("https://raw.githubusercontent.com/gerhardkresak-code/codeschmiede/main/docs/CHANGELOG.md", { cache: "no-store" })
+    fetch("https://raw.githubusercontent.com/kresak-it-solutions/codeschmiede/main/docs/CHANGELOG.md", { cache: "no-store" })
       .then((r) => (r.ok ? r.text() : "")).then((t) => setCs({ laden: false, inhalt: t })).catch(() => setCs({ laden: false, inhalt: "" }));
   }, [quelle, cs.inhalt]);
   const schalter = (
