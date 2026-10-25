@@ -1,3 +1,3 @@
 # Dateien, die beim nächsten Push in die Codeschmiede-Datenbank eingespielt werden (Reihenfolge!). Alle sind mehrfach ausführbar.
-# 2026-10-25: Aufbau wie in der App – Obergruppen, Gruppen = Menüpunkte, Features; Änderungen in die App übernehmen (0.9.12; Ablauf übergibt die Datei jetzt als Datei)
-migrations/0044_aufbau_wie_app.sql
+# 2026-10-26: Aufbau – Nachbesserung nach der Prüfung (0.9.12)
+migrations/0045_aufbau_nachbesserung.sql

@@ -33,13 +33,14 @@ export function aufbauAusDaten(d) {
   const app = og("app", false); const erp = og("erp", true);
   // Startbereich hat in der App keine Überschrift
   for (const o of app) if (o.key === "start") o.label = null;
-  const features = { version: 1, hinweis: "Features je Menüpunkt – gleicher Stand wie die Codeschmiede (src/lib/appStruktur.js). Nummern nie ändern.", app: {}, erp: {}, global: [], website: [], altlast: [] };
+  const features = { version: 1, hinweis: "Features je Menüpunkt – gleicher Stand wie die Codeschmiede (src/lib/appStruktur.js). Nummern nie ändern.", app: {}, erp: {}, global: [], website: [], altlast: [], geplant: {} };
   for (const t of ["app", "erp"]) for (const b of teil(t)) for (const g of d.gruppen.filter((x) => x.bereich_id === b.id && x.app_key).sort(reihe)) features[t][g.app_key] = fe(g.id);
   for (const [t, ziel] of [["global", "global"], ["website", "website"], ["sonst", "altlast"]]) {
     for (const b of teil(t)) for (const g of d.gruppen.filter((x) => x.bereich_id === b.id && x.id !== "werkstatt").sort(reihe)) features[ziel].push(...fe(g.id));
   }
-  // geplante Gruppen ohne Menüpunkt (nur zur Info im Auftrag)
-  const geplant = d.gruppen.filter((g) => ohneMenue(g, d.bereiche.find((b) => b.id === g.bereich_id))).map((g) => ({ gruppe: g.name, obergruppe: bereichName(d.bereiche.find((b) => b.id === g.bereich_id)), features: fe(g.id) }));
+  // geplante Gruppen ohne Menüpunkt: ihre Features bleiben in der Datei (Abschnitt „geplant“, Schlüssel = Gruppe der Codeschmiede)
+  const geplant = d.gruppen.filter((g) => ohneMenue(g, d.bereiche.find((b) => b.id === g.bereich_id))).map((g) => ({ id: g.id, gruppe: g.name, obergruppe: bereichName(d.bereiche.find((b) => b.id === g.bereich_id)), features: fe(g.id) }));
+  for (const g of geplant) if (g.features.length) features.geplant[g.id] = g.features;
   return { app: { obergruppen: app }, erp: { obergruppen: erp }, features, geplant };
 }
 
@@ -60,7 +61,7 @@ export function aufbauAuftragText(d, aenderungen) {
     verschoben.length
       ? "3. Verschobene Features: den Inhalt im Code vom alten in den neuen Menüpunkt umziehen (Reiter/Unterseite/Komponente), Verweise, Rechte und Handbuch-Kapitel nachziehen – nichts darf verloren gehen."
       : "3. Es wurden keine Features zwischen Menüpunkten verschoben – reine Menü-Änderung.",
-    "4. Neue Obergruppen erscheinen im Menü automatisch, sobald sie einen Menüpunkt enthalten. Geplante Gruppen ohne Menüpunkt (Liste ganz unten) NICHT anlegen.",
+    "4. Neue Obergruppen erscheinen im Menü automatisch, sobald sie einen Menüpunkt enthalten. Geplante Gruppen ohne Menüpunkt (Liste ganz unten) NICHT als Menüpunkt anlegen – ihre Features stehen im Abschnitt „geplant“ der Datei.",
     "5. `node tools/struktur_pruefen.mjs` muss grün sein; Handbuch (Navigation/Kapitel), docs/CHANGELOG.md und docs/AUFBAU.md ergänzen.",
     "",
     "Neue Fassung `app` / `erp`:",
@@ -90,7 +91,8 @@ export function AufbauBanner({ d, ich, offen, toast, onFertig }) {
       if (error) throw error;
       const r = await supabase.from("ws_nachrichten").insert({ auftrag_id: data.id, von: ich.id, art: "text", text: aufbauAuftragText(d, offen), kanal: "codeschmiede" });
       if (r.error) throw r.error;
-      const u = await supabase.rpc("ws_aufbau_uebergeben", { p_projekt: d.projektId, p_auftrag: data.id });
+      // nur die Änderungen, die im Text stehen (später entstandene bleiben offen)
+      const u = await supabase.rpc("ws_aufbau_uebergeben", { p_projekt: d.projektId, p_auftrag: data.id, p_bis: Math.max(...offen.map((x) => x.id)) });
       if (u.error) throw u.error;
       toast(`Auftrag #${data.id} angelegt – der Aufbau geht wie jede Änderung über Freigabe und Prüfungen in ${projekt?.name || "die App"}`);
       setAuf(false); onFertig?.();

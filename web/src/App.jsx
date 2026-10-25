@@ -344,14 +344,21 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
   const bereichReihe = async (bid, vorBid) => {
     const b = alle.bereiche.find((x) => x.id === bid); const vor = alle.bereiche.find((x) => x.id === vorBid);
     if (!b || !vor || b.id === vor.id || b.app_teil !== vor.app_teil) return;
-    const liste = alle.bereiche.filter((x) => x.app_teil === b.app_teil && x.id !== b.id).sort((x, y) => x.reihenfolge - y.reihenfolge);
-    const pos = liste.findIndex((x) => x.id === vor.id) + 1;
+    const alleT = alle.bereiche.filter((x) => x.app_teil === b.app_teil).sort((x, y) => x.reihenfolge - y.reihenfolge);
+    const liste = alleT.filter((x) => x.id !== b.id);
+    // nach unten gezogen = hinter das Ziel, nach oben = davor (so geht auch die letzte Stelle)
+    const nachUnten = alleT.findIndex((x) => x.id === b.id) < alleT.findIndex((x) => x.id === vor.id);
+    const pos = liste.findIndex((x) => x.id === vor.id) + (nachUnten ? 2 : 1);
     const { error } = await supabase.rpc("ws_bereich_aendern", { p_bereich: bid, p_name: null, p_reihe: pos });
     if (error) toast(fehler(error)); else await alle.holen?.();
   };
   const istGlobal = (bid) => !!alle.bereiche.find((b) => b.id === bid)?.global;
+  // Gezogene Gruppe merken: Ziel nur, wenn es zum selben Teil gehört (App ↔ App, ERP ↔ ERP)
+  const [zug, setZug] = useState(null); const [zugB, setZugB] = useState(null);
+  const teilVon = (bid) => alle.bereiche.find((b) => b.id === bid)?.app_teil;
+  const passt = (bid) => !!zug && ["app", "erp"].includes(teilVon(bid)) && teilVon(bid) === teilVon(alle.gruppen.find((x) => x.id === zug)?.bereich_id);
   const ablage = (gid) => kannVerschieben ? {
-    onDragOver: (e) => { if (e.dataTransfer.types.includes("text/cs-feature") || (e.dataTransfer.types.includes("text/cs-gruppe") && !istGlobal(alle.gruppen.find((x) => x.id === gid)?.bereich_id))) { e.preventDefault(); setZiel(gid); } },
+    onDragOver: (e) => { if (e.dataTransfer.types.includes("text/cs-feature") || (e.dataTransfer.types.includes("text/cs-gruppe") && !istGlobal(alle.gruppen.find((x) => x.id === gid)?.bereich_id) && passt(alle.gruppen.find((x) => x.id === gid)?.bereich_id))) { e.preventDefault(); setZiel(gid); } },
     onDragLeave: () => setZiel((z) => (z === gid ? null : z)),
     onDrop: (e) => {
       e.preventDefault(); setZiel(null);
@@ -361,7 +368,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
     },
   } : {};
   const kopfAblage = (b) => kannVerschieben && !b.global ? {
-    onDragOver: (e) => { if (e.dataTransfer.types.includes("text/cs-gruppe") || e.dataTransfer.types.includes("text/cs-bereich")) { e.preventDefault(); setZiel("b:" + b.id); } },
+    onDragOver: (e) => { if ((e.dataTransfer.types.includes("text/cs-gruppe") && passt(b.id)) || (e.dataTransfer.types.includes("text/cs-bereich") && zugB && teilVon(zugB) === b.app_teil)) { e.preventDefault(); setZiel("b:" + b.id); } },
     onDragLeave: () => setZiel((z) => (z === "b:" + b.id ? null : z)),
     onDrop: (e) => {
       e.preventDefault(); setZiel(null);
@@ -399,12 +406,12 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
           {d.bereiche.map((b) => (
             <div key={b.id} className="border-t first:border-t-0 border-slate-200 dark:border-slate-800 pb-1">
               <div {...kopfAblage(b)} draggable={kannVerschieben && !b.global && !!b.app_teil && ["app", "erp"].includes(b.app_teil)}
-                onDragStart={(e) => { e.dataTransfer.setData("text/cs-bereich", b.id); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setZiel(null)}
+                onDragStart={(e) => { e.dataTransfer.setData("text/cs-bereich", b.id); e.dataTransfer.effectAllowed = "move"; setZugB(b.id); }} onDragEnd={() => { setZiel(null); setZugB(null); }}
                 title={kannVerschieben && !b.global ? "Gruppen hierher ziehen · Obergruppe ziehen = Reihenfolge ändern" : undefined}
                 className={`group/kopf flex items-center gap-1 font-display font-semibold text-xs uppercase tracking-widest text-slate-500 px-4 pt-3 pb-1 ${ziel === "b:" + b.id ? "ring-2 ring-inset ring-orange-500 bg-orange-50 dark:bg-orange-950/40" : ""}`}>
                 <span className="truncate">{bereichName(b)}</span>
                 {kannVerschieben && !b.global && ["app", "erp"].includes(b.app_teil) && <span className="ml-auto flex gap-0.5 opacity-0 group-hover/kopf:opacity-100 focus-within:opacity-100">
-                  <button type="button" className="p-1 rounded hover:text-emerald-700" aria-label={`Obergruppe ${b.name} umbenennen`} onClick={() => setDlgA({ art: "bereich", b })}><PenLine className="w-3.5 h-3.5" /></button>
+                  {b.id !== "start" && <button type="button" className="p-1 rounded hover:text-emerald-700" aria-label={`Obergruppe ${b.name} umbenennen`} onClick={() => setDlgA({ art: "bereich", b })}><PenLine className="w-3.5 h-3.5" /></button>}
                   {!d.gruppen.some((x) => x.bereich_id === b.id) && <button type="button" className="p-1 rounded hover:text-red-600" aria-label={`Leere Obergruppe ${b.name} entfernen`} onClick={async () => { const { error } = await supabase.rpc("ws_bereich_entfernen", { p_bereich: b.id }); if (error) toast(fehler(error)); else { toast(`Obergruppe „${b.name}“ entfernt`); await alle.holen?.(); } }}><Trash2 className="w-3.5 h-3.5" /></button>}
                 </span>}
               </div>
@@ -412,7 +419,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
                 const Icon = WS_ICON[x.symbol] || Layers; const js = aufFor(x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const fr = js.filter((a) => a.offeneFrage).length;
                 return (
                   <button key={x.id} type="button" aria-current={g.id === x.id} onClick={() => setSel({ g: x.id, f: null })} {...(x.id !== konzeptId ? ablage(x.id) : {})}
-                    draggable={kannVerschieben && x.id !== konzeptId && !b.global} onDragStart={(e) => { e.dataTransfer.setData("text/cs-gruppe", x.id); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setZiel(null)}
+                    draggable={kannVerschieben && x.id !== konzeptId && !b.global && ["app", "erp"].includes(b.app_teil)} onDragStart={(e) => { e.dataTransfer.setData("text/cs-gruppe", x.id); e.dataTransfer.effectAllowed = "move"; setZug(x.id); }} onDragEnd={() => { setZiel(null); setZug(null); }}
                     className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-[15px] ${ziel === x.id ? "ring-2 ring-inset ring-orange-500 bg-orange-50 dark:bg-orange-950/40" : ""} ${g.id === x.id ? "bg-emerald-50 dark:bg-emerald-950/40 font-semibold shadow-[inset_3px_0_0_#047857]" : "hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20"}`}>
                     <Icon className="w-[18px] h-[18px] shrink-0" /><span className="min-w-0 truncate">{x.name}</span>
                     {ohneMenue(x, b) && <span className="shrink-0 text-[10px] font-semibold px-1.5 rounded border border-dashed border-slate-400 text-slate-500" title="Geplant – in der App gibt es dafür noch keinen Menüpunkt">geplant</span>}
