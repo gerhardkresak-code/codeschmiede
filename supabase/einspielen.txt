@@ -1,3 +1,3 @@
 # Dateien, die beim nächsten Push in die Codeschmiede-Datenbank eingespielt werden (Reihenfolge!). Alle sind mehrfach ausführbar.
-# 2026-10-25: Umzug in die GitHub-Organisation kresak-it-solutions (0.9.11)
-migrations/0043_umzug_organisation.sql
+# 2026-10-25: Aufbau wie in der App – Obergruppen, Gruppen = Menüpunkte, Features; Änderungen in die App übernehmen (0.9.12)
+migrations/0044_aufbau_wie_app.sql

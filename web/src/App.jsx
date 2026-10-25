@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useStat
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
   Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power,
-  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale, ListChecks, Rocket, Undo2, Pin, FlaskConical, ScanSearch, Plug, Code2, AlertTriangle, ClipboardList,
+  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale, ListChecks, Rocket, Undo2, Pin, FlaskConical, ScanSearch, Plug, Code2, AlertTriangle, ClipboardList, PenLine,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { Markdown } from "./Markdown";
@@ -22,6 +22,7 @@ import Aufgaben, { AufgabenImChat, AufgabeBeilagen, AufgabePlakette, useMeineAuf
 import { LogoZeichen } from "./Logo";
 import CodeschmiedeZeichen from "./Zeichen";
 import GeraeteRahmen from "./GeraeteRahmen";
+import { AufbauBanner, NeueObergruppe, Umbenennen, bereichName, ohneMenue } from "./Aufbau";
 const AboLimits = lazy(() => import("./AboLimits"));
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
@@ -75,7 +76,7 @@ function Dialog({ title, onClose, children }) {
 // ---------------- Daten ----------------
 const usd = (n) => (n == null ? "–" : new Intl.NumberFormat("de-AT", { style: "currency", currency: "USD" }).format(Number(n)));
 function useWerkstattDaten(me, projektId) {
-  const leer = { projekte: [], mitglieder: [], bereiche: [], gruppen: [], features: [], auftraege: [], benutzer: [], rechte: [], pcs: [], verbrauch: [], gesamt: 0, einstellungen: null, abo: [] };
+  const leer = { projekte: [], mitglieder: [], bereiche: [], gruppen: [], features: [], auftraege: [], aufbau: [], benutzer: [], rechte: [], pcs: [], verbrauch: [], gesamt: 0, einstellungen: null, abo: [] };
   const [d, setD] = useState(leer);
   const [laden, setLaden] = useState(true);
   const timer = useRef(null);
@@ -93,14 +94,16 @@ function useWerkstattDaten(me, projektId) {
     ]);
     // Gewähltes Projekt nur, wenn es (noch) da und nicht archiviert ist – sonst das erste
     const pid = (projektId && (pj.data || []).some((x) => x.id === projektId)) ? projektId : pj.data?.[0]?.id;
-    let b = [], g = [], f = [], a = [], erl = [];
+    let b = [], g = [], f = [], a = [], erl = [], auf = [];
     if (pid) {
       b = (await supabase.from("ws_bereiche").select("*").eq("projekt_id", pid).order("reihenfolge")).data || [];
       const bids = b.map((x) => x.id);
       g = bids.length ? (await supabase.from("ws_gruppen").select("*").in("bereich_id", bids).order("reihenfolge")).data || [] : [];
       const gids = g.map((x) => x.id);
       if (gids.length) {
-        f = (await supabase.from("ws_features").select("*").in("gruppe_id", gids).order("id")).data || [];
+        f = (await supabase.from("ws_features").select("*").in("gruppe_id", gids).order("reihenfolge").order("id")).data || [];
+        // Aufbau-Änderungen, die noch nicht in der App sind (Datenbank 0044)
+        auf = (await supabase.from("ws_aufbau_aenderungen").select("id, art, text, details, erstellt").eq("projekt_id", pid).is("auftrag_id", null).order("id")).data || [];
         a = (await supabase.from("ws_auftraege").select("*").in("gruppe_id", gids).neq("stand", "abgebrochen").order("id")).data || [];
         // Offene Rückfrage = Auftrag in „frage“ und die letzte Nachricht kommt von der Werkstatt (noch nicht beantwortet)
         const fragIds = a.filter((x) => x.stand === "frage").map((x) => x.id);
@@ -113,7 +116,7 @@ function useWerkstattDaten(me, projektId) {
         if (ids.length) erl = (await supabase.from("ws_erlaubnisse").select("id, auftrag_id, werkzeug, eingabe, grund, status, erstellt").in("auftrag_id", ids).eq("status", "offen").order("id")).data || [];
       }
     }
-    setD({ projekte: pj.data || [], mitglieder: mg.data || [], bereiche: b, gruppen: g, features: f, auftraege: a, erlaubnisse: erl, benutzer: u.data || [], rechte: r.data || [],
+    setD({ projekte: pj.data || [], mitglieder: mg.data || [], bereiche: b, gruppen: g, features: f, auftraege: a, erlaubnisse: erl, aufbau: auf, benutzer: u.data || [], rechte: r.data || [],
       pcs: p.data || [], einstellungen: e.data || null, verbrauch: vm.data || [], gesamt: Number(vg.data || 0), abo: ab.data || [], projektId: pid });
     setLaden(false);
   }, [projektId]);
@@ -121,7 +124,7 @@ function useWerkstattDaten(me, projektId) {
     if (!me) return undefined;
     setLaden(true); holen();
     const ch = supabase.channel("cs-zentrale-" + (projektId || "start"));
-    ["ws_projekte", "ws_projekt_mitglieder", "ws_gruppen", "ws_features", "ws_auftraege", "ws_nachrichten", "ws_benutzer", "ws_rechte", "ws_werkstatt_pcs", "ws_verbrauch", "ws_einstellungen", "ws_abo_limits", "ws_erlaubnisse"].forEach((t) =>
+    ["ws_projekte", "ws_projekt_mitglieder", "ws_bereiche", "ws_gruppen", "ws_features", "ws_auftraege", "ws_nachrichten", "ws_benutzer", "ws_rechte", "ws_werkstatt_pcs", "ws_verbrauch", "ws_einstellungen", "ws_abo_limits", "ws_erlaubnisse"].forEach((t) =>
       ch.on("postgres_changes", { event: "*", schema: "public", table: t }, () => { clearTimeout(timer.current); timer.current = setTimeout(holen, 300); }));
     ch.subscribe();
     return () => { supabase.removeChannel(ch); clearTimeout(timer.current); };
@@ -331,10 +334,40 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
     const gz = alle.gruppen.find((x) => x.id === gid);
     if (error) toast(fehler(error)); else { toast(`„${feat.name}“ verschoben nach ${gz?.name || gid}`); await alle.holen?.(); }
   };
+  // Aufbau wie in der App (0.9.12): Gruppen auf eine Obergruppe bzw. vor eine andere Gruppe ziehen, Obergruppen umsortieren
+  const [dlgA, setDlgA] = useState(null);
+  const einordnen = async (gid, bid, vor = null) => {
+    const gr = alle.gruppen.find((x) => x.id === gid); if (!gr || gid === vor) return;
+    const { error } = await supabase.rpc("ws_gruppe_einordnen", { p_gruppe: gid, p_bereich: bid, p_vor: vor });
+    if (error) toast(fehler(error)); else { toast(`„${gr.name}“ → ${bereichName(alle.bereiche.find((b) => b.id === bid))}`); await alle.holen?.(); }
+  };
+  const bereichReihe = async (bid, vorBid) => {
+    const b = alle.bereiche.find((x) => x.id === bid); const vor = alle.bereiche.find((x) => x.id === vorBid);
+    if (!b || !vor || b.id === vor.id || b.app_teil !== vor.app_teil) return;
+    const liste = alle.bereiche.filter((x) => x.app_teil === b.app_teil && x.id !== b.id).sort((x, y) => x.reihenfolge - y.reihenfolge);
+    const pos = liste.findIndex((x) => x.id === vor.id) + 1;
+    const { error } = await supabase.rpc("ws_bereich_aendern", { p_bereich: bid, p_name: null, p_reihe: pos });
+    if (error) toast(fehler(error)); else await alle.holen?.();
+  };
+  const istGlobal = (bid) => !!alle.bereiche.find((b) => b.id === bid)?.global;
   const ablage = (gid) => kannVerschieben ? {
-    onDragOver: (e) => { if (e.dataTransfer.types.includes("text/cs-feature")) { e.preventDefault(); setZiel(gid); } },
+    onDragOver: (e) => { if (e.dataTransfer.types.includes("text/cs-feature") || (e.dataTransfer.types.includes("text/cs-gruppe") && !istGlobal(alle.gruppen.find((x) => x.id === gid)?.bereich_id))) { e.preventDefault(); setZiel(gid); } },
     onDragLeave: () => setZiel((z) => (z === gid ? null : z)),
-    onDrop: (e) => { e.preventDefault(); setZiel(null); const fid = e.dataTransfer.getData("text/cs-feature"); if (fid) verschiebe(fid, gid); },
+    onDrop: (e) => {
+      e.preventDefault(); setZiel(null);
+      const fid = e.dataTransfer.getData("text/cs-feature"); if (fid) { verschiebe(fid, gid); return; }
+      const grp = e.dataTransfer.getData("text/cs-gruppe"); const zielG = alle.gruppen.find((x) => x.id === gid);
+      if (grp && zielG) einordnen(grp, zielG.bereich_id, gid);
+    },
+  } : {};
+  const kopfAblage = (b) => kannVerschieben && !b.global ? {
+    onDragOver: (e) => { if (e.dataTransfer.types.includes("text/cs-gruppe") || e.dataTransfer.types.includes("text/cs-bereich")) { e.preventDefault(); setZiel("b:" + b.id); } },
+    onDragLeave: () => setZiel((z) => (z === "b:" + b.id ? null : z)),
+    onDrop: (e) => {
+      e.preventDefault(); setZiel(null);
+      const grp = e.dataTransfer.getData("text/cs-gruppe"); if (grp) { einordnen(grp, b.id, null); return; }
+      const ber = e.dataTransfer.getData("text/cs-bereich"); if (ber) bereichReihe(ber, b.id);
+    },
   } : {};
   const globalGruppe = alle.gruppen.find((x) => alle.bereiche.find((b) => b.id === x.bereich_id)?.global);
   const fragen = d.auftraege.filter((a) => a.offeneFrage).length;
@@ -346,6 +379,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
   const istKonzept = !nurGlobal && !!g && g.id === konzeptId;
   return (
     <>
+      {!nurGlobal && <AufbauBanner d={alle} ich={ich} offen={alle.aufbau || []} toast={toast} onFertig={() => alle.holen?.()} />}
       <div className="flex flex-wrap gap-1.5 mb-4" role="toolbar" aria-label="Weg eines Auftrags">
         {fragen > 0 && <button type="button" aria-pressed={station === "frage"} onClick={() => { setStation(station === "frage" ? null : "frage"); setPlatz(null); }} className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200 ${station === "frage" ? "ring-2 ring-amber-500" : ""}`}><i className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />{fragen} Rückfrage{fragen > 1 ? "n" : ""} an dich</button>}
         {STEPS.map(([s, t], i) => {
@@ -364,13 +398,24 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
         <nav className={`${card} overflow-hidden`} aria-label="Bereiche und Gruppen">
           {d.bereiche.map((b) => (
             <div key={b.id} className="border-t first:border-t-0 border-slate-200 dark:border-slate-800 pb-1">
-              <div className="font-display font-semibold text-xs uppercase tracking-widest text-slate-500 px-4 pt-3 pb-1">{b.name}</div>
+              <div {...kopfAblage(b)} draggable={kannVerschieben && !b.global && !!b.app_teil && ["app", "erp"].includes(b.app_teil)}
+                onDragStart={(e) => { e.dataTransfer.setData("text/cs-bereich", b.id); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setZiel(null)}
+                title={kannVerschieben && !b.global ? "Gruppen hierher ziehen · Obergruppe ziehen = Reihenfolge ändern" : undefined}
+                className={`group/kopf flex items-center gap-1 font-display font-semibold text-xs uppercase tracking-widest text-slate-500 px-4 pt-3 pb-1 ${ziel === "b:" + b.id ? "ring-2 ring-inset ring-orange-500 bg-orange-50 dark:bg-orange-950/40" : ""}`}>
+                <span className="truncate">{bereichName(b)}</span>
+                {kannVerschieben && !b.global && ["app", "erp"].includes(b.app_teil) && <span className="ml-auto flex gap-0.5 opacity-0 group-hover/kopf:opacity-100 focus-within:opacity-100">
+                  <button type="button" className="p-1 rounded hover:text-emerald-700" aria-label={`Obergruppe ${b.name} umbenennen`} onClick={() => setDlgA({ art: "bereich", b })}><PenLine className="w-3.5 h-3.5" /></button>
+                  {!d.gruppen.some((x) => x.bereich_id === b.id) && <button type="button" className="p-1 rounded hover:text-red-600" aria-label={`Leere Obergruppe ${b.name} entfernen`} onClick={async () => { const { error } = await supabase.rpc("ws_bereich_entfernen", { p_bereich: b.id }); if (error) toast(fehler(error)); else { toast(`Obergruppe „${b.name}“ entfernt`); await alle.holen?.(); } }}><Trash2 className="w-3.5 h-3.5" /></button>}
+                </span>}
+              </div>
               {d.gruppen.filter((x) => x.bereich_id === b.id).map((x) => {
                 const Icon = WS_ICON[x.symbol] || Layers; const js = aufFor(x.id); const arbeitet = js.some((a) => a.stand === "laeuft"); const fr = js.filter((a) => a.offeneFrage).length;
                 return (
                   <button key={x.id} type="button" aria-current={g.id === x.id} onClick={() => setSel({ g: x.id, f: null })} {...(x.id !== konzeptId ? ablage(x.id) : {})}
+                    draggable={kannVerschieben && x.id !== konzeptId && !b.global} onDragStart={(e) => { e.dataTransfer.setData("text/cs-gruppe", x.id); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setZiel(null)}
                     className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-[15px] ${ziel === x.id ? "ring-2 ring-inset ring-orange-500 bg-orange-50 dark:bg-orange-950/40" : ""} ${g.id === x.id ? "bg-emerald-50 dark:bg-emerald-950/40 font-semibold shadow-[inset_3px_0_0_#047857]" : "hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20"}`}>
                     <Icon className="w-[18px] h-[18px] shrink-0" /><span className="min-w-0 truncate">{x.name}</span>
+                    {ohneMenue(x, b) && <span className="shrink-0 text-[10px] font-semibold px-1.5 rounded border border-dashed border-slate-400 text-slate-500" title="Geplant – in der App gibt es dafür noch keinen Menüpunkt">geplant</span>}
                     <span className="ml-auto flex items-center gap-1.5">
                       {arbeitet && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600"><i className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />arbeitet</span>}
                       {fr > 0 && <span className="text-[11px] font-semibold bg-amber-100 text-amber-700 rounded-full px-1.5">{fr} Frage{fr > 1 ? "n" : ""}</span>}
@@ -382,14 +427,17 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
           {!nurGlobal && kannVerschieben && globalGruppe && <div {...ablage(globalGruppe.id)} className={`mx-3 my-2 rounded-lg border border-dashed px-3 py-2 text-xs flex items-center gap-2 ${ziel === globalGruppe.id ? "border-orange-500 bg-orange-50 text-orange-800 dark:bg-orange-950/40 dark:text-orange-200" : "border-slate-300 dark:border-slate-700 text-slate-500"}`}><Globe className="w-4 h-4" />Hierher ziehen = Globale Einstellungen</div>}
           {nurGlobal && <p className="px-4 py-3 text-xs text-slate-500 border-t border-slate-200 dark:border-slate-800">Diese Features gelten für die ganze App und alle Nutzer. In der App selbst gibt es dafür keinen eigenen Bereich.</p>}
           {ich.rolle === "admin" && !nurGlobal && <button type="button" onClick={() => setDlg({ art: "gruppe" })} className="w-full flex items-center gap-2 px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 text-emerald-700 font-semibold text-sm"><Plus className="w-4 h-4" />Neue Gruppe</button>}
+          {ich.rolle === "admin" && !nurGlobal && <button type="button" onClick={() => setDlgA({ art: "obergruppe" })} className="w-full flex items-center gap-2 px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 text-emerald-700 font-semibold text-sm"><FolderPlus className="w-4 h-4" />Neue Obergruppe</button>}
+          {kannVerschieben && !nurGlobal && <p className="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-200 dark:border-slate-800">Ziehen: Feature auf eine Gruppe · Gruppe auf eine Obergruppe oder vor eine andere Gruppe · Obergruppe auf eine andere (Reihenfolge). Danach „In die App übernehmen“.</p>}
         </nav>
 
         {istKonzept ? <div className="min-w-0 xl:col-span-2"><KonzeptArbeitsplatz g={g} d={d} ich={ich} toast={toast} onDesigner={onDesigner} /></div> : <>
         <section className={card}>
           <div className="flex flex-wrap gap-3 items-start justify-between p-4 border-b border-slate-200 dark:border-slate-800">
             <div className="min-w-0">
-              <div className="text-xs text-slate-500">{d.bereiche.find((b) => b.id === g.bereich_id)?.name}</div>
-              <h2 className="font-display font-bold text-2xl">{g.name}</h2>
+              <div className="text-xs text-slate-500">{bereichName(d.bereiche.find((b) => b.id === g.bereich_id))}</div>
+              <h2 className="font-display font-bold text-2xl flex items-center gap-2">{g.name}{kannVerschieben && !istKonzept && <button type="button" className="p-1 rounded text-slate-400 hover:text-emerald-700" aria-label={`Gruppe ${g.name} umbenennen`} onClick={() => setDlgA({ art: "gruppe", g })}><PenLine className="w-4 h-4" /></button>}</h2>
+              {g.app_key && <div className="text-xs text-slate-500">Menüpunkt in der App: <code>{g.app_key}</code></div>}
               <div className="flex items-center gap-1.5 text-sm text-slate-500 mt-1"><Bot className="w-4 h-4" />Werkstatt {g.name} · <code className="text-xs">docs/gruppen/{g.id}.md</code></div>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -425,6 +473,9 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
       </div>}
       {dlg?.art === "feature" && <NeuesFeature g={g} ich={ich} texter={rolle === "texter"} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: g.id, f: id })} />}
       {dlg?.art === "gruppe" && <NeueGruppe d={d} ich={ich} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: id, f: null })} />}
+      {dlgA?.art === "obergruppe" && <NeueObergruppe d={alle} toast={toast} onClose={() => setDlgA(null)} onFertig={() => alle.holen?.()} />}
+      {dlgA?.art === "bereich" && <Umbenennen titel="Obergruppe umbenennen" alt={dlgA.b.name} onClose={() => setDlgA(null)} onSpeichern={async (n) => { const { error } = await supabase.rpc("ws_bereich_aendern", { p_bereich: dlgA.b.id, p_name: n, p_reihe: null }); if (error) toast(fehler(error)); else { setDlgA(null); await alle.holen?.(); } }} />}
+      {dlgA?.art === "gruppe" && <Umbenennen titel="Gruppe umbenennen" alt={dlgA.g.name} onClose={() => setDlgA(null)} onSpeichern={async (n) => { const { error } = await supabase.rpc("ws_gruppe_umbenennen", { p_gruppe: dlgA.g.id, p_name: n }); if (error) toast(fehler(error)); else { setDlgA(null); await alle.holen?.(); } }} />}
       {dlg?.art === "loeschen" && <Loeschen f={dlg.f} g={g} ich={ich} toast={toast} onClose={() => setDlg(null)} />}
       {dlg?.art === "verschieben" && <Verschieben f={dlg.f} d={alle} onClose={() => setDlg(null)} onWahl={async (gid) => { setDlg(null); await verschiebe(dlg.f.id, gid); setSel({ g: g.id, f: null }); }} />}
     </>

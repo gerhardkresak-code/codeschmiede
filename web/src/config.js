@@ -2,6 +2,7 @@
 import {
   Users, Cone, Trophy, ClipboardList, BookOpen, Calendar, MessageSquare, Home, CupSoda, Shirt, Gavel, PenLine, Euro,
   Handshake, UsersRound, Sprout, Target, ChartColumn, Palette, Globe, FileText, Settings, Archive, Wrench, Layers, Lightbulb,
+  BadgeCheck, Timer, TrendingUp, Contact, CreditCard, Wallet, Network, Map as MapIcon, Vote, ListTodo, Shield, CalendarRange, KeyRound, Star, Ticket, Building2, Database,
 } from "lucide-react";
 
 // Symbolname in ws_gruppen.symbol -> Lucide-Symbol
@@ -10,6 +11,10 @@ export const WS_ICON = {
   "message-square": MessageSquare, home: Home, "cup-soda": CupSoda, shirt: Shirt, gavel: Gavel, pen: PenLine, euro: Euro,
   handshake: Handshake, "users-round": UsersRound, sprout: Sprout, target: Target, "chart-column": ChartColumn,
   palette: Palette, globe: Globe, "file-text": FileText, settings: Settings, archive: Archive, wrench: Wrench, layers: Layers, lightbulb: Lightbulb,
+  // seit 0.9.12 (Aufbau wie in der App): Symbole der Menüpunkte
+  "badge-check": BadgeCheck, timer: Timer, "trending-up": TrendingUp, contact: Contact, "credit-card": CreditCard, wallet: Wallet, network: Network,
+  map: MapIcon, vote: Vote, "list-todo": ListTodo, shield: Shield, "calendar-range": CalendarRange, "key-round": KeyRound, star: Star,
+  "book-open": BookOpen, ticket: Ticket, building: Building2, database: Database,
 };
 
 export const STAND = {
