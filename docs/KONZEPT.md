@@ -77,6 +77,8 @@ Inspektor rechts (Bearbeiten | Chat), Sofort-Vorschau und Entwurf im Design-Pake
 `docs/KONZEPT-BAUSTEINE.md` (Abschnitt „App-Designer 2.0“).
 Etappe 3 „Neuer Baustein“: Assistent (Was? → Gestalten → Zuweisen → Als Auftrag), strukturierte geprüfte Daten und optional ein Bild am Auftrag
 (Datenbank 0039, `web/src/BausteinAssistent.jsx`, `desktop/dienst/lib/bausteinAuftrag.mjs`).
+Etappe 4 „Übernehmen“: alle offenen Design-Änderungen an einer Stelle (`web/src/Uebernehmen.jsx`) – „wirkt sofort“ (Freigabe-Reiter der App,
+Einzelzeilen, Ausrollen sofort/schrittweise/nur Testfassung, „Zurück auf Version N“) und „braucht Auftrag“ (Grunddesign, neue Bausteine).
 
 ## Rollen und Rechte
 | Rolle | Aufträge | Freigeben / Erlauben | Löschen | Claude | GitHub |

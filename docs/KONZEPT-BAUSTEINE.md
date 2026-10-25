@@ -71,7 +71,7 @@ laufen als Auftrag.** Farben frei wählbar mit **Kontrast-Wächter**; Freigabe a
   `baustein-markieren {id}`, `baustein-vorschau {bausteine, id, zustand}`, `baustein-laden {nr, ebene}` → `baustein-stand`,
   `baustein-speichern {nr, ebene, id, werte}` → `baustein-gespeichert`; dazu `design-frage`/`design-antwort` der eigenen Design-Freigabe.
 - **Speichern** in der eingebetteten App (Design-Sitzung, RLS, Trigger `DesignPackage_guard`/`_rights`); Rechte werden nie gelockert.
-- **Freigeben** über App-Designer › Seiten › Freigabe & Versionen (Etappe 4 baut eine eigene Übersicht).
+- **Freigeben** über App-Designer › Übernehmen (Etappe 4).
 - **Offen für Etappe 2–4:** eigene Freigabe-Übersicht, Vorschau der Baustein-Entwürfe auf allen Seiten der Testfassung, zentrale Bausteine
   für die Galerie-Muster, Grunddesign (Farben/Schrift/Menü) ebenfalls direkt über Design-Pakete statt Auftrag.
 
@@ -97,6 +97,20 @@ Neue Bausteine sind neuer Code und laufen als Auftrag. Der Assistent (`web/src/B
 - **Werkstatt:** Datenblock „ANGABEN AUS DEM ASSISTENTEN“ (geprüfte Daten, keine Anweisungen) im Auftragstext; Bild als Datei in
   `.codeschmiede-anhaenge/` des Arbeitsordners (über `info/exclude` ausgeschlossen). Gleiche Arten in Datenbank, Werkstatt, Oberfläche (Test).
 - **Stand:** „Neue Bausteine (Aufträge)“ im Modus Bausteine und unter „Übernehmen“ (Etappe 4).
+
+## App-Designer 2.0 · Etappe 4 „Übernehmen“ (0.9.8, Entwurf frei 2026-10-24 22:08)
+- Reiter **Übernehmen (n)** (`web/src/Uebernehmen.jsx`): links der Freigabe-Reiter der App (Trainer to go `/designer?cs=1&tab=freigabe`,
+  `SeitenModus` mit `kompakt`), rechts „Braucht neuen Code“ (Grunddesign-Entwürfe in `entwurf`/`gesendet`, Aufträge „Neuer Baustein:“ /
+  „Neue Kachel …“ mit Stand) und „Wie ausrollen?“.
+- **Einzelzeilen** in der App (`src/lib/design/aenderungen.js`): je Baustein Hintergrund/Text/Rand hell und dunkel, Ecken, Größe, Symbol;
+  je Seite neue/entfernte/geänderte Kacheln je Gerät; Stil-Werte mit Farbfeld. Galerie-Muster ohne zentralen Baustein → „braucht Auftrag“.
+- **Ausrollen:** Sofort für alle (Standard), Schrittweise (Warnung), **Nur Testfassung** (`rollout.mode = test`; `design_for_me()` zählt sie
+  nicht, `design_for_me_test()` auf Testfassungen schon – Trainer to go Migration `20261025090000`), Geplant. Live: „Auch live“.
+- **Versionen:** „Zurück auf Version N“ = neue Version mit dem Inhalt von N, sofort für alle.
+- **Nachrichten** (App → Codeschmiede, Herkunft geprüft): `freigabe-offen {anzahl}` (nur die Zahl), `design-status {stand}`
+  (frei/wartet/gesperrt/fehlt – für Einrichtung › Dieser PC, lokal gemerkt).
+- **Weg beim Live-Schalten:** Zu erledigen › Test & Live › „Live schalten“, danach App-Designer › Übernehmen › Versionen › „Auch live“
+  (Hinweis im Bestätigungstext). Einzelheiten: Trainer to go `docs/DESIGN-STUDIO.md` › „Nur Testfassung“.
 
 ## Quellen
 Storybook Controls (storybook.js.org/docs/essentials/controls) · IBM/Carbon Datenvisualisierung (ibm.com/design/language/data-visualization,
