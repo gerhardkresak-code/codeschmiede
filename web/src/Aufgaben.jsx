@@ -39,7 +39,7 @@ const TYPEN = {
 export const MAX_ANHAENGE = 20;
 const ANNEHMEN = ".png,.jpg,.jpeg,.webp,.pdf,.txt,.csv,.docx,.xlsx";
 const LINK = /^https:\/\/[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?)+(:[0-9]{1,5})?([/?#][!#$%&()*+,./0-9:;=?@A-Z[\]_a-z~-]*)?$/;
-const SCHLUESSEL = /[?&#;](access_token|id_token|refresh_token|token|api_?key|key|secret|client_secret|password|passwort|pass|pwd|sig|signature|auth|code|session|sid|jwt)=/i;
+const SCHLUESSEL = /[?&#;](access_token|id_token|refresh_token|token|api_?key|access_?key|key|secret|client_secret|credentials?|password|passwort|pass|pwd|sig|signature|auth|code|session|sid|jwt|x-(amz|goog)-[a-z-]*)=/i;
 // eslint-disable-next-line no-control-regex
 const UNSICHTBAR = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069\ufeff]/;
 /** Link prüfen → Fehlertext oder "" (nur https, keine Zugangsdaten in der Adresse). */
@@ -108,6 +108,18 @@ function useVorschau(pfade) {
   return urls;
 }
 
+// Lösch-Warteschlange abarbeiten (Datenbank 0042): Dateien gelöschter Anhänge im Speicher entfernen und austragen.
+// Läuft nach jedem Löschen und beim Öffnen der Aufgaben (holt auch liegengebliebene nach). Fehler werden gemeldet.
+export async function dateienAufraeumen(toast) {
+  const { data, error } = await supabase.from("ws_aufgabe_dateien_weg").select("pfad").order("erstellt").limit(200);
+  if (error || !data?.length) return;
+  const pfade = data.map((x) => x.pfad);
+  const weg = await supabase.storage.from(BUCKET).remove(pfade);
+  if (weg.error) { toast?.(`Dateien im Speicher nicht gelöscht: ${fehler(weg.error)} – wird beim nächsten Öffnen wiederholt`); return; }
+  const { error: e2 } = await supabase.rpc("ws_aufgabe_dateien_erledigt", { p_pfade: pfade });
+  if (e2) toast?.(`Löschen nicht vermerkt: ${fehler(e2)}`);
+}
+
 async function herunterladen(a, toast) {
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(a.pfad, 120, { download: a.dateiname });
   if (error || !data?.signedUrl) return toast?.(error ? fehler(error) : "Datei nicht verfügbar");
@@ -150,7 +162,7 @@ function useAufgabenDaten(projektId) {
   const holen = useCallback(async () => {
     const [a, b, c] = await Promise.all([
       supabase.from("ws_aufgaben").select("*").eq("projekt_id", projektId).order("id", { ascending: false }).limit(1000),
-      supabase.from("ws_aufgabe_anhaenge").select("*").eq("projekt_id", projektId).order("id").limit(5000),
+      supabase.from("ws_aufgabe_anhaenge").select("*").eq("projekt_id", projektId).eq("fertig", true).order("id").limit(5000),
       supabase.from("ws_aufgabe_sendungen").select("id, aufgabe_id, gruppe_id, feature_id, von, erstellt, auftrag_id, als_auftrag_am, zurueckgezogen").eq("projekt_id", projektId).order("id").limit(5000),
     ]);
     setD({ aufgaben: a.data || [], anhaenge: b.data || [], sendungen: c.data || [], fehlt: !!a.error });
@@ -195,6 +207,7 @@ const rolleVon = (d, ich) => (ich.rolle === "admin" ? "admin" : d.mitglieder.fin
 // ---------- Seite „Aufgaben“ ----------
 export default function Aufgaben({ d, ich, toast, onOeffneChat }) {
   const daten = useAufgabenDaten(d.projektId);
+  useEffect(() => { dateienAufraeumen(toast); }, [d.projektId]); // eslint-disable-line react-hooks/exhaustive-deps
   const rolle = rolleVon(d, ich);
   const kann = ["admin", "entwickler", "texter"].includes(rolle);
   const [filter, setFilter] = useState("offen"); const [wer, setWer] = useState("alle");
@@ -324,24 +337,28 @@ function Detail({ a, d, ich, kann, toast, leute, gruppen, features, anhaenge, se
       if (error || !res) { toast(error ? fehler(error) : "Anhang nicht angelegt"); continue; }
       const up = await supabase.storage.from(BUCKET).upload(res.pfad, datei, { contentType: p.mime, upsert: false, cacheControl: "60" });
       if (up.error) { await supabase.rpc("ws_aufgabe_anhang_loeschen", { p_id: res.id }); toast(`„${datei.name}“ nicht hochgeladen: ${fehler(up.error)}`); continue; }
+      // Datenbank vergleicht Größe und Typ der angekommenen Datei mit der Reservierung; erst dann ist der Anhang sichtbar
+      const best = await supabase.rpc("ws_aufgabe_anhang_bestaetigen", { p_id: res.id });
+      if (best.error || best.data !== true) { toast(`„${datei.name}“ abgelehnt: ${best.error ? fehler(best.error) : "Größe oder Typ passen nicht"}`); continue; }
       ok++;
     }
     setBusy(""); if (dateiRef.current) dateiRef.current.value = "";
+    if (ok < dateien.length) await dateienAufraeumen(toast);
     if (ok) { toast(ok === 1 ? "Anhang hochgeladen" : `${ok} Anhänge hochgeladen`); onAenderung(); }
   };
   const entfernen = async (x) => {
-    const { data: pfad, error } = await supabase.rpc("ws_aufgabe_anhang_loeschen", { p_id: x.id });
+    const { error } = await supabase.rpc("ws_aufgabe_anhang_loeschen", { p_id: x.id });
     if (error) return toast(fehler(error));
-    if (pfad) await supabase.storage.from(BUCKET).remove([pfad]);
     toast(`„${x.dateiname}“ entfernt`); onAenderung();
+    await dateienAufraeumen(toast);
   };
   const loeschen = async () => {
     if (!loeschenSicher) { setLoeschenSicher(true); setTimeout(() => setLoeschenSicher(false), 6000); return; }
     setBusy("loeschen");
-    const { data, error } = await supabase.rpc("ws_aufgabe_loeschen", { p_aufgabe: a.id });
-    if (!error && data?.length) await supabase.storage.from(BUCKET).remove(data);
+    const { error } = await supabase.rpc("ws_aufgabe_loeschen", { p_aufgabe: a.id });
     setBusy(""); if (error) return toast(fehler(error));
     toast("Aufgabe gelöscht"); onWeg();
+    await dateienAufraeumen(toast);
   };
   const senden = async () => {
     if (geaendert) return toast("Bitte zuerst speichern – geschickt wird der gespeicherte Stand");
@@ -460,7 +477,7 @@ export function AufgabenImChat({ g, f, d, ich, kannAuftrag, toast }) {
     if (error) { setListe([]); return; }
     setListe(data || []);
     const ids = [...new Set((data || []).flatMap((s) => s.anhaenge || []))];
-    setAnh(ids.length ? (await supabase.from("ws_aufgabe_anhaenge").select("*").in("id", ids)).data || [] : []);
+    setAnh(ids.length ? (await supabase.from("ws_aufgabe_anhaenge").select("*").in("id", ids).eq("fertig", true)).data || [] : []);
   }, [d.projektId, g.id, f?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     holen();
@@ -503,7 +520,7 @@ export function AufgabeBeilagen({ daten, toast }) {
   useEffect(() => {
     if (!ids.length) { setAnh([]); return undefined; }
     let aus = false;
-    supabase.from("ws_aufgabe_anhaenge").select("*").in("id", ids).then(({ data }) => { if (!aus) setAnh(data || []); });
+    supabase.from("ws_aufgabe_anhaenge").select("*").in("id", ids).eq("fertig", true).then(({ data }) => { if (!aus) setAnh(data || []); });
     return () => { aus = true; };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!links.length && !ids.length) return null;

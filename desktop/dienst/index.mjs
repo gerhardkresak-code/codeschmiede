@@ -37,7 +37,7 @@ import { fehlerBlock } from "./lib/fehler.mjs";
 import { bausteinDatenBlock, anhangBild } from "./lib/bausteinAuftrag.mjs";
 import { kachelAusFrage, kachelPrompt, kachelAntwort, kiZuerst } from "./lib/kachelChat.mjs";
 import { aufgabeDatenBereinigen, aufgabeDatenBlock, anhangDateiOk, MAX_GESAMT } from "./lib/aufgabeAuftrag.mjs";
-import { rm } from "node:fs/promises";
+import { rm, readdir } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 // Claude Code finden. Windows: nativer Installer (claude.exe in %USERPROFILE%\.local\bin) oder npm (cli.js) – immer OHNE Shell
@@ -292,6 +292,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
   const abort = new AbortController();
   laeuft = { id: auftrag.id, abort };
   melde("status", fortsetzen ? "Setzt Auftrag fort" : "Übernimmt Auftrag", auftrag.id);
+  let anhangOrdner = null;   // .codeschmiede-anhaenge/ dieses Laufs – wird im finally IMMER gelöscht (Prüfung M3)
   try {
     const { data: gruppe } = await db.from("ws_gruppen").select("*, ws_bereiche!inner(projekt_id, global)").eq("id", auftrag.gruppe_id).single();
     const { data: projekt } = await db.from("ws_projekte").select("*").eq("id", gruppe.ws_bereiche.projekt_id).single();
@@ -307,6 +308,7 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
     const { count } = await db.from("ws_auftraege").select("id", { count: "exact", head: true })
       .in("gruppe_id", (pgr || []).map((x) => x.id)).in("stand", ["freigabe", "zusammen", "sicherheit", "wissen"]);
     const { ordner, zweig } = await arbeitsordner(projekt, auftrag);
+    anhangOrdner = path.join(ordner, ".codeschmiede-anhaenge");
     const merk = (await sitzungen())[auftrag.id] || {};
     const versuch = merk.versuch || 0;
     const lage = await aboLage();
@@ -317,7 +319,10 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
     const prompt = nacharbeit
       ? `Nacharbeit aus der Prüfung (nichts ist live gegangen):\n${nachrichten.slice(-1)[0]?.text || ""}\n\nBehebe die Befunde auf demselben Zweig ${zweig}, prüfe, committe, \`git push origin HEAD\` und antworte wieder mit „ERGEBNIS-PR: #${auftrag.pr_nummer || "<Nummer>"} ${zweig}“ (denselben Pull Request weiterverwenden).`
       : fortsetzen && merk.sitzung
-      ? `Antwort von Gerhard/Team auf deine Rückfrage:\n${nachrichten.filter((n) => n.von).slice(-1)[0]?.text || ""}\n\nArbeite weiter nach denselben Regeln.`
+      // Anhänge wurden nach dem letzten Lauf gelöscht – für die Fortsetzung neu bereitstellen (Prüfung N5)
+      ? [`Antwort von Gerhard/Team auf deine Rückfrage:\n${nachrichten.filter((n) => n.von).slice(-1)[0]?.text || ""}\n\nArbeite weiter nach denselben Regeln.`,
+          ...[await bausteinDatenFuer(auftrag, nachrichten, projekt.id, ordner), await aufgabeDatenFuer(auftrag, nachrichten, projekt.id, ordner)].filter(Boolean)
+            .map((b) => `(Anhänge neu bereitgestellt – frühere Pfade gelten nicht mehr.)\n${b}`)].join("\n\n")
       : auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, (count || 0) === 0 && projekt.id !== "trainer-to-go", await vorlagenFuer(feature), await holeWissen(projekt.id), [await fehlerDatenFuer(nachrichten, projekt.id), await bausteinDatenFuer(auftrag, nachrichten, projekt.id, ordner), await aufgabeDatenFuer(auftrag, nachrichten, projekt.id, ordner)].filter(Boolean).join("\n"));
 
     let r;
@@ -445,7 +450,19 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
       await db.from("ws_auftraege").update({ stand: "frage" }).eq("id", auftrag.id);
     } catch { /* Datenbank nicht erreichbar – nächster Durchlauf versucht es wieder */ }
   } finally {
+    if (anhangOrdner) await rm(anhangOrdner, { recursive: true, force: true }).catch(() => {});
     laeuft = null;
+  }
+}
+
+// Beim Start: Anhang-Ordner früherer (abgestürzter) Läufe in allen Arbeitsordnern löschen (Prüfung M3)
+async function alteAnhaengeAufraeumen() {
+  const projekte = path.join(cfg.daten_ordner, "projekte");
+  for (const p of await readdir(projekte).catch(() => [])) {
+    for (const o of await readdir(path.join(projekte, p)).catch(() => [])) {
+      if (!/^(auftrag|pruef)-\d+$/.test(o)) continue;
+      await rm(path.join(projekte, p, o, ".codeschmiede-anhaenge"), { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
 
@@ -499,12 +516,19 @@ async function bausteinDatenFuer(auftrag, nachrichten, projektId, ordner) {
 async function aufgabeDatenFuer(auftrag, nachrichten, projektId, ordner) {
   const n = (nachrichten || [])[0];
   if (!n || !n.von || n.von !== auftrag.erstellt_von || n.art !== "text" || !n.daten?.aufgabe) return "";
-  const d = aufgabeDatenBereinigen(n.daten.aufgabe); if (!d) return "";
+  const d = aufgabeDatenBereinigen(n.daten.aufgabe); if (!d || !d.sendung) return "";
+  // Quelle ist die Sendung (Schnappschuss beim „In den Chat schicken“), nicht die Nachricht: daten der Nachricht sind frei setzbar (Prüfung M2).
+  // Sie muss zu GENAU diesem Auftrag, dieser Aufgabe und diesem Projekt gehören (gesetzt von ws_aufgabe_als_auftrag).
+  const { data: s } = await db.from("ws_aufgabe_sendungen").select("id, aufgabe_id, projekt_id, auftrag_id, anhaenge, links").eq("id", d.sendung).maybeSingle();
+  if (!s || s.auftrag_id !== auftrag.id || s.aufgabe_id !== d.id || s.projekt_id !== projektId) {
+    await log(auftrag.id, "info", "Anhänge der Aufgabe übersprungen (Sendung passt nicht zu diesem Auftrag)"); return "";
+  }
+  const q = aufgabeDatenBereinigen({ id: s.aufgabe_id, sendung: s.id, anhaenge: s.anhaenge, links: s.links });
   const dateien = []; let fehlend = 0;
   try {
-    const { data: rows } = d.anhaenge.length ? await db.from("ws_aufgabe_anhaenge").select("id, art, dateiname, mime, groesse, pfad")
-      .in("id", d.anhaenge).eq("aufgabe_id", d.id).eq("projekt_id", projektId).order("id") : { data: [] };
-    fehlend = d.anhaenge.length - (rows || []).length;
+    const { data: rows } = q.anhaenge.length ? await db.from("ws_aufgabe_anhaenge").select("id, art, dateiname, mime, groesse, pfad")
+      .in("id", q.anhaenge).eq("aufgabe_id", q.id).eq("projekt_id", projektId).eq("fertig", true).order("id") : { data: [] };
+    fehlend = q.anhaenge.length - (rows || []).length;
     if ((rows || []).length) {
       const ziel = path.join(ordner, ".codeschmiede-anhaenge");
       const exclude = path.join(path.resolve(ordner, await git(ordner, "rev-parse", "--git-common-dir")), "info", "exclude");
@@ -512,10 +536,10 @@ async function aufgabeDatenFuer(auftrag, nachrichten, projektId, ordner) {
       if (!alt.split(/\r?\n/).includes("/.codeschmiede-anhaenge/")) { await mkdir(path.dirname(exclude), { recursive: true }); await writeFile(exclude, `${alt}${alt && !alt.endsWith("\n") ? "\n" : ""}/.codeschmiede-anhaenge/\n`); }
       let summe = 0;
       for (const r of rows) {
-        if (!String(r.pfad).startsWith(`${projektId}/${d.id}/`) || summe + Number(r.groesse) > MAX_GESAMT) { fehlend++; continue; }
+        if (!String(r.pfad).startsWith(`${projektId}/${q.id}/`) || summe + Number(r.groesse) > MAX_GESAMT) { fehlend++; continue; }
         const { data: blob, error } = await db.storage.from("ws-aufgaben").download(r.pfad);
         const buf = !error && blob ? Buffer.from(await blob.arrayBuffer()) : null;
-        const endung = buf ? anhangDateiOk(buf, r.mime) : null;
+        const endung = buf && buf.length === Number(r.groesse) ? anhangDateiOk(buf, r.mime) : null;
         if (!endung) { fehlend++; await log(auftrag.id, "info", `Anhang ${r.id} übersprungen (nicht lesbar oder keine echte Datei des Typs)`); continue; }
         summe += buf.length;
         await mkdir(ziel, { recursive: true });
@@ -525,7 +549,7 @@ async function aufgabeDatenFuer(auftrag, nachrichten, projektId, ordner) {
       }
     }
   } catch (e) { await log(auftrag.id, "info", `Anhänge der Aufgabe nicht lesbar: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 200)}`); }
-  return aufgabeDatenBlock(d, dateien, Math.max(0, fehlend));
+  return aufgabeDatenBlock(q, dateien, Math.max(0, fehlend));
 }
 
 // ---------- Hand-Änderung aus dem Code-Editor (Datenbank 0031) ----------
@@ -1533,6 +1557,7 @@ async function naechsterAuftrag() {
 
 async function start() {
   await mkdir(cfg.daten_ordner, { recursive: true });
+  await alteAnhaengeAufraeumen();
   verbinde();
   await tokenSchreiben();
   await pcAnmelden();

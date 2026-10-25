@@ -5,7 +5,11 @@
 --   * ws_aufgabe_anhaenge    – Fotos/Screenshots (PNG/JPEG/WebP ≤ 5 MB) und Dateien (PDF/TXT/CSV/DOCX/XLSX ≤ 10 MB), höchstens 20 je Aufgabe.
 --                              Die Datei liegt im PRIVATEN Speicher-Bucket „ws-aufgaben“ unter <projekt>/<aufgabe>/<uuid>.<endung>.
 --                              Ablauf: ws_aufgabe_anhang_neu reserviert (prüft Typ, Größe, Anzahl, erzeugt den Pfad) → die Oberfläche lädt
---                              genau dorthin hoch (Regel: nur reservierte Pfade, kein Überschreiben) → Anzeige über signierte Adressen (zeitlich begrenzt).
+--                              genau dorthin hoch (Regel: nur reservierte Pfade, kein Überschreiben) → ws_aufgabe_anhang_bestaetigen vergleicht
+--                              Größe und Typ der angekommenen Datei mit der Reservierung und setzt „fertig“ (nur fertige Anhänge werden gezeigt,
+--                              geschickt und an die Werkstatt gegeben; unfertige verfallen nach 1 Stunde) → Anzeige über signierte Adressen.
+--   * ws_aufgabe_dateien_weg – Lösch-Warteschlange: jeder gelöschte Anhang (auch über Aufgabe/Projekt) hinterlässt seinen Pfad; die Oberfläche
+--                              löscht die Datei im Speicher (Regel: nur Pfade aus der Warteschlange) und meldet sie mit ws_aufgabe_dateien_erledigt.
 --   * ws_aufgabe_sendungen   – „In den Chat schicken“: Ziel Feature oder Gruppe; die Sendung erscheint im Chat dieses Features bzw. dieser Gruppe
 --                              als Karte (Beschreibung, Links, Anhänge). Dort macht man mit „Als Auftrag“ (ws_aufgabe_als_auftrag, normale
 --                              Auftragsrechte) wie gewohnt einen Auftrag daraus: Auftrag + erste Nachricht in EINEM Schritt, die Nachricht trägt
@@ -50,7 +54,7 @@ create or replace function public.ws_aufgabe_link_ok(p_url text) returns boolean
 language sql immutable set search_path = public as $$
   select p_url is not null and char_length(p_url) between 12 and 2000
     and p_url ~ '^https://[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?)+(:[0-9]{1,5})?([/?#][!#$%&()*+,./0-9:;=?@A-Z\[\]_a-z~-]*)?$'
-    and p_url !~* '[?&#;](access_token|id_token|refresh_token|token|api_?key|key|secret|client_secret|password|passwort|pass|pwd|sig|signature|auth|code|session|sid|jwt)='
+    and p_url !~* '[?&#;](access_token|id_token|refresh_token|token|api_?key|access_?key|key|secret|client_secret|credentials?|password|passwort|pass|pwd|sig|signature|auth|code|session|sid|jwt|x-(amz|goog)-[a-z-]*)='
 $$;
 revoke execute on function public.ws_aufgabe_link_ok(text) from public, anon;
 grant execute on function public.ws_aufgabe_link_ok(text) to authenticated;
@@ -105,8 +109,17 @@ create table if not exists public.ws_aufgabe_anhaenge (
   pfad text not null unique check (pfad ~ '^[a-z0-9][a-z0-9-]{1,39}/[1-9][0-9]{0,17}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|webp|pdf|txt|csv|docx|xlsx)$'),
   von uuid references auth.users(id) on delete set null,
   erstellt timestamptz not null default now(),
+  fertig boolean not null default false,             -- erst nach ws_aufgabe_anhang_bestaetigen (Größe und Typ im Speicher geprüft)
   constraint ws_aufgabe_anhaenge_art_mime check ((art = 'bild') = (mime like 'image/%')),
   constraint ws_aufgabe_anhaenge_bild_groesse check (art <> 'bild' or groesse <= 5242880)
+);
+alter table public.ws_aufgabe_anhaenge add column if not exists fertig boolean not null default false;
+
+-- Lösch-Warteschlange für Dateien im Speicher (ohne Fremdschlüssel: überlebt das Löschen von Aufgabe und Projekt)
+create table if not exists public.ws_aufgabe_dateien_weg (
+  pfad text primary key check (pfad ~ '^[a-z0-9][a-z0-9-]{1,39}/[1-9][0-9]{0,17}/[0-9a-f-]{36}\.[a-z]{3,4}$'),
+  projekt_id text not null,
+  erstellt timestamptz not null default now()
 );
 create index if not exists ws_aufgabe_anhaenge_aufgabe on public.ws_aufgabe_anhaenge (aufgabe_id, id);
 
@@ -136,6 +149,8 @@ language plpgsql security definer set search_path = public as $$
 begin
   -- (Funktion läuft als Eigentümer – Herkunft daher über auth.uid(), nicht current_user)
   if tg_op = 'INSERT' then
+    if not exists (select 1 from public.ws_projekte where id = new.projekt_id and not coalesce(archiviert, false)) then
+      raise exception 'Projekt nicht gefunden oder archiviert'; end if;
     if auth.uid() is not null then
       new.erstellt_von := auth.uid(); new.erstellt := now(); new.erledigt_am := null;
       if (select count(*) from public.ws_aufgaben where erstellt_von = auth.uid() and erstellt > now() - interval '1 day') >= 200 then
@@ -181,16 +196,75 @@ create policy ws_aufgaben_aendern on public.ws_aufgaben for update to authentica
   using (public.ws_darf_aufgaben(projekt_id)) with check (public.ws_darf_aufgaben(projekt_id));
 
 drop policy if exists ws_aufgabe_anhaenge_lesen on public.ws_aufgabe_anhaenge;
-create policy ws_aufgabe_anhaenge_lesen on public.ws_aufgabe_anhaenge for select to authenticated using (public.ws_sieht_projekt(projekt_id));
+create policy ws_aufgabe_anhaenge_lesen on public.ws_aufgabe_anhaenge for select to authenticated
+  using (public.ws_sieht_projekt(projekt_id) and (fertig or von = auth.uid()));
+alter table public.ws_aufgabe_dateien_weg enable row level security;
+drop policy if exists ws_aufgabe_dateien_weg_lesen on public.ws_aufgabe_dateien_weg;
+create policy ws_aufgabe_dateien_weg_lesen on public.ws_aufgabe_dateien_weg for select to authenticated
+  using (public.ws_ist_admin() or public.ws_darf_aufgaben(projekt_id));
 drop policy if exists ws_aufgabe_sendungen_lesen on public.ws_aufgabe_sendungen;
 create policy ws_aufgabe_sendungen_lesen on public.ws_aufgabe_sendungen for select to authenticated using (public.ws_sieht_projekt(projekt_id));
 
-revoke all on public.ws_aufgaben, public.ws_aufgabe_anhaenge, public.ws_aufgabe_sendungen from anon, authenticated;
-grant select on public.ws_aufgaben, public.ws_aufgabe_anhaenge, public.ws_aufgabe_sendungen to authenticated;
+revoke all on public.ws_aufgaben, public.ws_aufgabe_anhaenge, public.ws_aufgabe_sendungen, public.ws_aufgabe_dateien_weg from anon, authenticated;
+grant select on public.ws_aufgaben, public.ws_aufgabe_anhaenge, public.ws_aufgabe_sendungen, public.ws_aufgabe_dateien_weg to authenticated;
 grant insert (projekt_id, titel, beschreibung, status, prioritaet, faellig, zustaendig, feature_id, gruppe_id, links) on public.ws_aufgaben to authenticated;
 grant update (titel, beschreibung, status, prioritaet, faellig, zustaendig, feature_id, gruppe_id, links) on public.ws_aufgaben to authenticated;
 grant usage on sequence public.ws_aufgaben_id_seq to authenticated;
 -- Anhänge und Sendungen nur über die Funktionen unten; Löschen einer Aufgabe nur über ws_aufgabe_loeschen
+
+-- ---------- Lösch-Warteschlange ----------
+-- Jeder gelöschte Anhang (einzeln, mit seiner Aufgabe oder mit dem Projekt) hinterlässt seinen Pfad
+create or replace function public.ws_aufgabe_anhang_weg() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.ws_aufgabe_dateien_weg (pfad, projekt_id) values (old.pfad, old.projekt_id) on conflict (pfad) do nothing;
+  return old;
+end $$;
+revoke execute on function public.ws_aufgabe_anhang_weg() from public, anon, authenticated;
+drop trigger if exists ws_aufgabe_anhang_weg on public.ws_aufgabe_anhaenge;
+create trigger ws_aufgabe_anhang_weg after delete on public.ws_aufgabe_anhaenge for each row execute function public.ws_aufgabe_anhang_weg();
+
+-- Unfertige Reservierungen älter als 1 Stunde verwerfen (bei Gelegenheit: beim Reservieren und Bestätigen)
+create or replace function public.ws_aufgabe_reste_verwerfen(p_projekt text) returns void
+language sql security definer set search_path = public as $$
+  delete from public.ws_aufgabe_anhaenge where projekt_id = p_projekt and not fertig and erstellt < now() - interval '1 hour'
+$$;
+revoke execute on function public.ws_aufgabe_reste_verwerfen(text) from public, anon, authenticated;
+
+-- Nach dem Hochladen: Größe und Typ der Datei im Speicher müssen zur Reservierung passen → fertig. Sonst wird der Anhang verworfen
+-- (die Datei kommt in die Lösch-Warteschlange) und das Ergebnis ist false. Liest storage.objects als Eigentümer (ohne Zeilen-Regeln).
+create or replace function public.ws_aufgabe_anhang_bestaetigen(p_id bigint) returns boolean
+language plpgsql security definer set search_path = public set row_security = off as $$
+declare r public.ws_aufgabe_anhaenge; m jsonb;
+begin
+  if auth.uid() is null then raise exception 'Nicht angemeldet'; end if;
+  select * into r from public.ws_aufgabe_anhaenge where id = p_id for update;
+  if r.id is null or r.von is distinct from auth.uid() then raise exception 'Anhang nicht gefunden'; end if;
+  if r.fertig then return true; end if;
+  if not public.ws_darf_aufgaben(r.projekt_id) then raise exception 'Keine Berechtigung für Aufgaben in diesem Projekt'; end if;
+  perform public.ws_aufgabe_reste_verwerfen(r.projekt_id);
+  select o.metadata into m from storage.objects o where o.bucket_id = 'ws-aufgaben' and o.name = r.pfad;
+  if not found or r.erstellt < now() - interval '1 hour'
+     or m is null or (m ->> 'size') is distinct from r.groesse::text or lower(coalesce(m ->> 'mimetype', '')) <> r.mime then
+    delete from public.ws_aufgabe_anhaenge where id = r.id;
+    return false;
+  end if;
+  update public.ws_aufgabe_anhaenge set fertig = true where id = r.id;
+  update public.ws_aufgaben set geaendert = now() where id = r.aufgabe_id;
+  return true;
+end $$;
+
+-- Dateien aus der Warteschlange, die im Speicher nicht mehr da sind, austragen (die Oberfläche ruft das nach remove() auf)
+create or replace function public.ws_aufgabe_dateien_erledigt(p_pfade text[]) returns int
+language plpgsql security definer set search_path = public set row_security = off as $$
+declare n int;
+begin
+  if auth.uid() is null then raise exception 'Nicht angemeldet'; end if;
+  delete from public.ws_aufgabe_dateien_weg w where w.pfad = any (coalesce(p_pfade, '{}')) and (public.ws_ist_admin() or public.ws_darf_aufgaben(w.projekt_id))
+    and not exists (select 1 from storage.objects o where o.bucket_id = 'ws-aufgaben' and o.name = w.pfad);
+  get diagnostics n = row_count;
+  return n;
+end $$;
 
 -- ---------- Anhänge ----------
 -- Reservieren: prüft Recht, Typ (Endung passt zum Typ), Größe (Bild ≤ 5 MB, Datei ≤ 10 MB), Anzahl (≤ 20 je Aufgabe, ≤ 100 am Tag je Person)
@@ -216,6 +290,7 @@ begin
   -- Dateiname nur zur Anzeige: harmlose Zeichen, Endung passend zum Typ
   n := btrim(regexp_replace(regexp_replace(coalesce(p_dateiname, ''), '\.[A-Za-z0-9]{1,8}$', ''), '[^A-Za-z0-9ÄÖÜäöüß ()._-]', '_', 'g'), ' ._-');
   n := left(coalesce(nullif(n, ''), 'anhang'), 110) || '.' || e;
+  perform public.ws_aufgabe_reste_verwerfen(a.projekt_id);
   if (select count(*) from public.ws_aufgabe_anhaenge x where x.aufgabe_id = a.id) >= 20 then raise exception 'Höchstens 20 Anhänge je Aufgabe'; end if;
   if (select count(*) from public.ws_aufgabe_anhaenge x where x.von = auth.uid() and x.erstellt > now() - interval '1 day') >= 100 then
     raise exception 'Heute schon 100 Anhänge hochgeladen – morgen wieder'; end if;
@@ -227,7 +302,7 @@ begin
   id := r.id; pfad := r.pfad; return next;
 end $$;
 
--- Anhang entfernen: gibt den Pfad zurück; die Oberfläche löscht danach die Datei im Speicher (erlaubt nur für Pfade ohne Eintrag)
+-- Anhang entfernen: der Pfad kommt in die Lösch-Warteschlange (Trigger); die Oberfläche löscht danach die Datei im Speicher
 create or replace function public.ws_aufgabe_anhang_loeschen(p_id bigint) returns text
 language plpgsql security definer set search_path = public as $$
 declare r public.ws_aufgabe_anhaenge;
@@ -237,10 +312,11 @@ begin
   if not public.ws_darf_aufgaben(r.projekt_id) then raise exception 'Keine Berechtigung für Aufgaben in diesem Projekt'; end if;
   delete from public.ws_aufgabe_anhaenge where id = p_id;
   update public.ws_aufgaben set geaendert = now() where id = r.aufgabe_id;
+  insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'aufgabe_anhang_loeschen', jsonb_build_object('projekt', r.projekt_id, 'aufgabe', r.aufgabe_id, 'anhang', r.id));
   return r.pfad;
 end $$;
 
--- Aufgabe löschen: nur wer sie angelegt hat (mit Bearbeitungsrecht) oder der Admin; gibt die Speicherpfade der Anhänge zurück
+-- Aufgabe löschen: nur wer sie angelegt hat (mit Bearbeitungsrecht) oder der Admin; die Pfade der Anhänge kommen in die Lösch-Warteschlange
 create or replace function public.ws_aufgabe_loeschen(p_aufgabe bigint) returns setof text
 language plpgsql security definer set search_path = public as $$
 declare a public.ws_aufgaben;
@@ -266,6 +342,7 @@ begin
   select * into a from public.ws_aufgaben where id = p_aufgabe for update;
   if a.id is null or not public.ws_sieht_projekt(a.projekt_id) then raise exception 'Aufgabe nicht gefunden'; end if;
   if not public.ws_darf_aufgaben(a.projekt_id) then raise exception 'Keine Berechtigung für Aufgaben in diesem Projekt'; end if;
+  if exists (select 1 from public.ws_projekte where id = a.projekt_id and coalesce(archiviert, false)) then raise exception 'Das Projekt ist archiviert'; end if;
   if p_feature is not null then
     select f.gruppe_id into g from public.ws_features f where f.id = p_feature and not f.ausgebaut;
     if g is null or public.ws_projekt_von_gruppe(g) is distinct from a.projekt_id then raise exception 'Das Feature gehört nicht zu diesem Projekt'; end if;
@@ -282,7 +359,7 @@ begin
        || E'\n\n' || btrim(a.beschreibung);
   insert into public.ws_aufgabe_sendungen (aufgabe_id, projekt_id, gruppe_id, feature_id, titel, text, links, anhaenge, von)
     values (a.id, a.projekt_id, g, p_feature, a.titel, t, a.links,
-            coalesce((select jsonb_agg(x.id order by x.id) from public.ws_aufgabe_anhaenge x where x.aufgabe_id = a.id), '[]'::jsonb), auth.uid())
+            coalesce((select jsonb_agg(x.id order by x.id) from public.ws_aufgabe_anhaenge x where x.aufgabe_id = a.id and x.fertig), '[]'::jsonb), auth.uid())
     returning id into s;
   insert into public.ws_protokoll (wer, was, details) values (auth.uid(), 'aufgabe_senden',
     jsonb_build_object('projekt', a.projekt_id, 'aufgabe', a.id, 'sendung', s, 'gruppe', g, 'feature', p_feature));
@@ -318,15 +395,17 @@ begin
     if g is null then raise exception 'Das Feature gibt es nicht mehr'; end if;
   end if;
   if public.ws_projekt_von_gruppe(g) is distinct from s.projekt_id then raise exception 'Ziel gehört nicht mehr zu diesem Projekt'; end if;
+  if exists (select 1 from public.ws_projekte where id = s.projekt_id and coalesce(archiviert, false)) then raise exception 'Das Projekt ist archiviert'; end if;
   if not public.ws_darf(public.ws_bereich_von_gruppe(g), 'auftraege') then raise exception 'Für diesen Bereich hast du kein Recht, Aufträge zu geben'; end if;
   -- nur Anhänge, die es noch gibt
   select coalesce(jsonb_agg(x.id order by x.id), '[]'::jsonb) into ids from public.ws_aufgabe_anhaenge x
-    where x.aufgabe_id = s.aufgabe_id and x.projekt_id = s.projekt_id and to_jsonb(x.id) <@ s.anhaenge;
+    where x.aufgabe_id = s.aufgabe_id and x.projekt_id = s.projekt_id and x.fertig and to_jsonb(x.id) <@ s.anhaenge;
   insert into public.ws_auftraege (gruppe_id, feature_id, titel, art, erstellt_von)
     values (g, f, left('Aufgabe: ' || s.titel, 80), case when public.ws_rolle_fuer_gruppe(g) = 'texter' then 'text' else 'aendern' end, auth.uid())
     returning id into n;
   insert into public.ws_nachrichten (auftrag_id, von, art, text, kanal, daten)
-    values (n, auth.uid(), 'text', left('**Aufgabe: ' || s.titel || E'**\n' || s.text, 8000), case when f is null then 'gruppe' else 'codeschmiede' end,
+    -- Klartext ohne klickbare Markdown-Links („](“ entschärft); die Oberfläche zeigt diese Nachricht ohnehin ohne Markdown (Prüfung N3)
+    values (n, auth.uid(), 'text', left(replace('Aufgabe: ' || s.titel || E'\n' || s.text, '](', '] ('), 8000), case when f is null then 'gruppe' else 'codeschmiede' end,
             jsonb_build_object('aufgabe', jsonb_build_object('id', s.aufgabe_id, 'sendung', s.id, 'anhaenge', ids, 'links', s.links)));
   update public.ws_aufgabe_sendungen set auftrag_id = n, als_auftrag_von = auth.uid(), als_auftrag_am = now() where id = s.id;
   update public.ws_aufgaben set status = case when status = 'offen' then 'arbeit' else status end where id = s.aufgabe_id;
@@ -336,38 +415,37 @@ end $$;
 
 revoke execute on function public.ws_aufgabe_anhang_neu(bigint, text, text, bigint), public.ws_aufgabe_anhang_loeschen(bigint),
   public.ws_aufgabe_loeschen(bigint), public.ws_aufgabe_senden(bigint, text, text), public.ws_aufgabe_sendung_zurueckziehen(bigint),
-  public.ws_aufgabe_als_auftrag(bigint) from public, anon;
+  public.ws_aufgabe_als_auftrag(bigint), public.ws_aufgabe_anhang_bestaetigen(bigint), public.ws_aufgabe_dateien_erledigt(text[]) from public, anon;
 grant execute on function public.ws_aufgabe_anhang_neu(bigint, text, text, bigint), public.ws_aufgabe_anhang_loeschen(bigint),
   public.ws_aufgabe_loeschen(bigint), public.ws_aufgabe_senden(bigint, text, text), public.ws_aufgabe_sendung_zurueckziehen(bigint),
-  public.ws_aufgabe_als_auftrag(bigint) to authenticated;
+  public.ws_aufgabe_als_auftrag(bigint), public.ws_aufgabe_anhang_bestaetigen(bigint), public.ws_aufgabe_dateien_erledigt(text[]) to authenticated;
 
 -- ---------- Privater Speicher „ws-aufgaben“ ----------
+create or replace function public.ws_aufgabe_datei_loeschbar(p_name text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.ws_aufgabe_dateien_weg w where w.pfad = p_name and (public.ws_ist_admin() or public.ws_darf_aufgaben(w.projekt_id)))
+$$;
 -- Nicht öffentlich; Größe ≤ 10 MB und nur die erlaubten Typen (prüft der Speicher selbst). Regeln nach Projekt:
---   lesen      – Mitglieder des Projekts, nur Dateien mit Eintrag in ws_aufgabe_anhaenge (signierte Adressen erst beim Anzeigen)
---   hochladen  – nur an einen reservierten Pfad, mit Bearbeitungsrecht; kein Überschreiben (keine update-Regel)
---   löschen    – mit Bearbeitungsrecht, nur Dateien OHNE Eintrag (erst ws_aufgabe_anhang_loeschen, dann die Datei)
+--   lesen      – Mitglieder des Projekts für FERTIGE Anhänge; wer reserviert hat, für die eigene unfertige Datei; für Pfade in der
+--                Lösch-Warteschlange, wer sie löschen darf (remove() braucht Lesen und Löschen)
+--   hochladen  – nur an einen eigenen, unfertigen, höchstens 1 Stunde alten reservierten Pfad, mit Bearbeitungsrecht; kein Überschreiben
+--   löschen    – nur Pfade aus der Lösch-Warteschlange: Admin oder Bearbeitungsrecht im Projekt des Pfads
 create or replace function public.ws_aufgabe_datei_lesbar(p_name text) returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.ws_aufgabe_anhaenge x where x.pfad = p_name and public.ws_sieht_projekt(x.projekt_id))
+  select exists (select 1 from public.ws_aufgabe_anhaenge x where x.pfad = p_name and public.ws_sieht_projekt(x.projekt_id) and (x.fertig or x.von = auth.uid()))
+      or public.ws_aufgabe_datei_loeschbar(p_name)
 $$;
 create or replace function public.ws_aufgabe_datei_hochladbar(p_name text) returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.ws_aufgabe_anhaenge x where x.pfad = p_name and x.von = auth.uid()
+  select exists (select 1 from public.ws_aufgabe_anhaenge x where x.pfad = p_name and x.von = auth.uid() and not x.fertig
                    and x.erstellt > now() - interval '1 hour' and public.ws_darf_aufgaben(x.projekt_id))
 $$;
-create or replace function public.ws_aufgabe_datei_loeschbar(p_name text) returns boolean
-language sql stable security definer set search_path = public as $$
-  select p_name ~ '^[a-z0-9][a-z0-9-]{1,39}/[1-9][0-9]{0,17}/[0-9a-f-]{36}\.[a-z]{3,4}$'
-     and public.ws_darf_aufgaben(split_part(p_name, '/', 1))
-     and not exists (select 1 from public.ws_aufgabe_anhaenge x where x.pfad = p_name)
-$$;
-revoke execute on function public.ws_aufgabe_datei_lesbar(text), public.ws_aufgabe_datei_hochladbar(text), public.ws_aufgabe_datei_loeschbar(text) from public, anon;
-grant execute on function public.ws_aufgabe_datei_lesbar(text), public.ws_aufgabe_datei_hochladbar(text), public.ws_aufgabe_datei_loeschbar(text) to authenticated;
-
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('ws-aufgaben', 'ws-aufgaben', false, 10485760, array['image/png','image/jpeg','image/webp','application/pdf','text/plain','text/csv',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
 on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+revoke execute on function public.ws_aufgabe_datei_lesbar(text), public.ws_aufgabe_datei_hochladbar(text), public.ws_aufgabe_datei_loeschbar(text) from public, anon;
+grant execute on function public.ws_aufgabe_datei_lesbar(text), public.ws_aufgabe_datei_hochladbar(text), public.ws_aufgabe_datei_loeschbar(text) to authenticated;
 
 drop policy if exists ws_aufgaben_dateien_lesen on storage.objects;
 create policy ws_aufgaben_dateien_lesen on storage.objects for select to authenticated
@@ -381,7 +459,7 @@ create policy ws_aufgaben_dateien_loeschen on storage.objects for delete to auth
 
 -- ---------- Live-Abgleich ----------
 do $$ declare t text; begin
-  foreach t in array array['ws_aufgaben','ws_aufgabe_anhaenge','ws_aufgabe_sendungen'] loop
+  foreach t in array array['ws_aufgaben','ws_aufgabe_anhaenge','ws_aufgabe_sendungen','ws_aufgabe_dateien_weg'] loop
     begin execute format('alter publication supabase_realtime add table public.%I', t); exception when duplicate_object then null; end;
   end loop;
 end $$;

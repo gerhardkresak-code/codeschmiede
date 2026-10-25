@@ -10,6 +10,9 @@ test("Links: nur https ohne Zugangsdaten", () => {
   assert.equal(linkOk("https://example.org/?access_token=abc"), false);
   assert.equal(linkOk("https://example.org/a b"), false);
   assert.equal(linkOk("javascript:alert(1)"), false);
+  assert.equal(linkOk("https://b.s3.amazonaws.com/f.png?X-Amz-Credential=abc"), false);
+  assert.equal(linkOk("https://storage.googleapis.com/b/f?x-goog-signature=abc"), false);
+  assert.equal(linkOk("https://example.org/?AccessKey=abc"), false);
 });
 
 test("daten.aufgabe wird streng bereinigt", () => {
@@ -44,7 +47,12 @@ test("Dateien: Kennung muss zum Typ passen", () => {
   assert.equal(anhangDateiOk(Buffer.alloc(5 * 1024 * 1024 + 1, 0xff), "image/jpeg"), null);
 });
 
-test("Typen gleich in Datenbank, Werkstatt und Oberfläche", () => {
+test("Typen und Sperrmuster gleich in Datenbank, Werkstatt und Oberfläche", () => {
+  const lib = readFileSync(new URL("../lib/aufgabeAuftrag.mjs", import.meta.url), "utf8");
+  const sql0 = readFileSync(new URL("../../../supabase/migrations/0042_aufgaben.sql", import.meta.url), "utf8");
+  const web0 = readFileSync(new URL("../../../web/src/Aufgaben.jsx", import.meta.url), "utf8");
+  const muster = (t) => /\[\?&#;\]\(([^)]*\([^)]*\)[^)]*)\)=/.exec(t)?.[1];
+  assert.ok(muster(lib)); assert.equal(muster(sql0), muster(lib)); assert.equal(muster(web0), muster(lib));
   const sql = readFileSync(new URL("../../../supabase/migrations/0042_aufgaben.sql", import.meta.url), "utf8");
   const web = readFileSync(new URL("../../../web/src/Aufgaben.jsx", import.meta.url), "utf8");
   for (const mime of Object.keys(AUFGABE_TYPEN)) { assert.ok(sql.includes(`'${mime}'`), `Datenbank: ${mime}`); assert.ok(web.includes(`"${mime}"`), `Oberfläche: ${mime}`); }

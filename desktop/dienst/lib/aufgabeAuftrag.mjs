@@ -14,7 +14,7 @@ export const MAX_ANHAENGE = 20;
 export const MAX_GESAMT = 60 * 1024 * 1024;   // höchstens 60 MB je Auftrag auf den PC
 
 const LINK = /^https:\/\/[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?)+(:[0-9]{1,5})?([/?#][!#$%&()*+,./0-9:;=?@A-Z[\]_a-z~-]*)?$/;
-const SCHLUESSEL = /[?&#;](access_token|id_token|refresh_token|token|api_?key|key|secret|client_secret|password|passwort|pass|pwd|sig|signature|auth|code|session|sid|jwt)=/i;
+const SCHLUESSEL = /[?&#;](access_token|id_token|refresh_token|token|api_?key|access_?key|key|secret|client_secret|credentials?|password|passwort|pass|pwd|sig|signature|auth|code|session|sid|jwt|x-(amz|goog)-[a-z-]*)=/i;
 // eslint-disable-next-line no-control-regex
 const UNSICHTBAR = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069\ufeff]/;
 

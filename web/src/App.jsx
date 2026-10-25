@@ -513,7 +513,7 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
                     {m.kanal === "claude-chat" && <span className="px-1.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">aus Claude-Chat</span>}
                     {m.daten?.aufgabe && m.von && <span className="px-1.5 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300">aus Aufgabe</span>}
                     {zu && <span className="text-green-700 dark:text-green-400 inline-flex items-center gap-1"><CircleCheck className="w-3 h-3" />abgeschlossen</span>}</div>}
-                  <Markdown text={m.text} klein />
+                  {m.daten?.aufgabe && m.von ? <p className="whitespace-pre-wrap break-words">{m.text}</p> : <Markdown text={m.text} klein />}
                   {m.daten?.aufgabe && m.von && <AufgabeBeilagen daten={m.daten.aufgabe} toast={toast} />}
                 </div>); })}
               <PruefBefunde a={a} />
