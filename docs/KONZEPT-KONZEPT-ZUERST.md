@@ -34,7 +34,8 @@ Antwort: Konzept-Dokument. Umsetzung: Ansicht „Konzept-Dokument“ im Konzept-
   In der Codeschmiede erscheinen die Antworten als Knöpfe, dazu ein Feld für eine eigene Antwort; „Antworten senden“ schickt alle gesammelt.
 - **Aufträge selbst anlegen:** Ist alles geklärt, endet die Antwort mit `AUFTRAEGE: [{gruppe_id, feature_id, titel, text, konzept}]` (1–5, keine offenen
   Punkte). Die Werkstatt legt sie gleich nach der Antwort an (`ws_konzept_auftraege_anlegen`, Datenbank 0048) – nur aus dem geprüften Vorschlag, nur als die
-  Person, die gefragt hat, mit deren normalen Rechten (Recht „Aufträge“ je Gruppe, Texter nur Text-Aufträge), höchstens 15 je Stunde. Das Konzept hängt am
+  Person, die gefragt hat, mit deren normalen Rechten (Recht „Aufträge“ je Gruppe, Texter nur Text-Aufträge), höchstens 15 je Stunde, nur im Konzept-Gespräch,
+  nicht in archivierten Projekten, ohne Steuer- oder unsichtbare Zeichen. Erfundene Gruppen verwirft die Werkstatt einzeln. Das Konzept hängt am
   Auftragstext. Klappt das Anlegen nicht (Rechte, Grenze, Gruppe inzwischen geändert), bleibt die Karte mit „Aufträge anlegen“ stehen.
 - **Stand im Chat:** Die Karte zeigt je Auftrag den Stand (In Arbeit, Rückfrage, Bereit zur Freigabe …). **Freigeben** und **Zusammenführen** bleiben Klicks
   des Admins – direkt auf der Karte, mit derselben Rückfrage wie in der Zentrale (`web/src/Auftragsknoepfe.jsx`).

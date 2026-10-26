@@ -1220,7 +1220,7 @@ async function claudeChat() {
       gruppen: (gruppen || []).filter((g) => g.id !== projekt.konzept_gruppe_id).map((g) => ({ id: g.id, name: g.name, global: g.ws_bereiche?.global })), features: feats || [] });
     const aufgabe = f.ort === "konzept" || istKonzeptFrage(f.text, verlauf) ? "konzept" : "chat";
     const { roh, ki } = await kiAntwort(projekt, aufgabe, prompt, { claudeLesenIn: lesenIn || null, dokuLesen: true, frage: f.text });
-    const { text, vorschlag } = assistentAntwort(ohneGeheimnisse(roh));
+    const { text, vorschlag } = assistentAntwort(ohneGeheimnisse(roh), { ort: f.ort, gruppen: (gruppen || []).filter((g) => g.id !== projekt.konzept_gruppe_id), features: feats || [] });
     const { data: antwortId, error: e2 } = await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
     if (e2) throw e2;
     await kiVermerken("chat", f.id, ki);

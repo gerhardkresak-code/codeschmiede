@@ -24,7 +24,7 @@ Nur der Admin, direkt in der Zentrale:
 - **Neue Obergruppe** (App oder ERP) unten in der Liste; Gruppe umbenennen über den Stift im Kopf der Gruppe.
 - **Gruppe löschen** (0.9.14, Anweisung Gerhard 26.10.2026 08:07, „Ohne Menüpunkt und leer“): Papierkorb im Kopf der Gruppe. Möglich nur bei
   geplanten/ungenutzten Gruppen **ohne Menüpunkt** in der App, **ohne Features** (auch ausgebaute) und **ohne Aufträge**; nicht bei globalen Gruppen und
-  nicht bei Gruppen, die das Projekt verwendet (Konzept, Designer, Datenbank). Sonst ist der Knopf grau und nennt den Grund. Features zuerst verschieben;
+  nicht bei Gruppen, die das Projekt verwendet (Konzept, Designer, Datenbank). Sonst ist der Knopf blass und nennt beim Klick den Grund. Der Gruppen-Chat der Aufgaben-Sendungen wird mit gelöscht. Features zuerst verschieben;
   Menüpunkte der App entfernt nur ein Ausbau-Auftrag. Datenbank: `ws_gruppe_loeschen` (0048, nur Admin, protokolliert „gruppe_weg“).
 
 Jede Änderung protokolliert die Datenbank (`ws_aufbau_aenderungen`, Trigger `ws_aufbau_log`). Oben erscheint **„Aufbau geändert“** mit der Liste;

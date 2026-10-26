@@ -1,3 +1,3 @@
 # Dateien, die beim nächsten Push in die Codeschmiede-Datenbank eingespielt werden (Reihenfolge!). Alle sind mehrfach ausführbar.
-# 2026-10-26: Gruppen löschen + Konzept-Chat legt Aufträge selbst an (0.9.14)
+# 2026-10-26: Gruppen löschen + Konzept-Chat legt Aufträge selbst an (0.9.14) – Nachbesserung nach der Prüfung (nur im Konzept, Zeichenfilter, Pflichtfelder)
 migrations/0048_gruppen_loeschen_konzept_auftraege.sql

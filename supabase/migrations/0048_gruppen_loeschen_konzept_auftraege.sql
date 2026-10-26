@@ -43,8 +43,8 @@ begin
        or jsonb_array_length(v->'fragen') not between 1 and 4 then return false; end if;
     for x in select * from jsonb_array_elements(v->'fragen') loop
       if jsonb_typeof(x) <> 'object' or exists (select 1 from jsonb_object_keys(x) k where k not in ('frage','optionen')) then return false; end if;
-      if jsonb_typeof(x->'frage') <> 'string' or char_length(x->>'frage') not between 3 and 300 then return false; end if;
-      if jsonb_typeof(x->'optionen') <> 'array' or jsonb_array_length(x->'optionen') not between 2 and 5 then return false; end if;
+      if coalesce(jsonb_typeof(x->'frage'), '') <> 'string' or char_length(x->>'frage') not between 3 and 300 then return false; end if;
+      if coalesce(jsonb_typeof(x->'optionen'), '') <> 'array' or jsonb_array_length(x->'optionen') not between 2 and 5 then return false; end if;
       for o in select * from jsonb_array_elements(x->'optionen') loop
         if jsonb_typeof(o) <> 'string' or char_length(o #>> '{}') not between 1 and 120 then return false; end if;
       end loop;
@@ -66,7 +66,7 @@ begin
   if v ? 'wissen' then
     if exists (select 1 from jsonb_object_keys(v) k where k <> 'wissen') or jsonb_typeof(v->'wissen') <> 'object'
        or exists (select 1 from jsonb_object_keys(v->'wissen') k where k not in ('kapitel','text')) then return false; end if;
-    if jsonb_typeof(v->'wissen'->'kapitel') <> 'string' or jsonb_typeof(v->'wissen'->'text') <> 'string' then return false; end if;
+    if coalesce(jsonb_typeof(v->'wissen'->'kapitel'), '') <> 'string' or coalesce(jsonb_typeof(v->'wissen'->'text'), '') <> 'string' then return false; end if;
     return (v->'wissen'->>'kapitel') in ('ziel','funktionen','daten','design','ablauf','offen','sonstiges')
        and char_length(v->'wissen'->>'text') between 3 and 2000;
   end if;
@@ -74,7 +74,7 @@ begin
   if v ? 'feature_neu' then
     if exists (select 1 from jsonb_object_keys(v) k where k <> 'feature_neu') or jsonb_typeof(v->'feature_neu') <> 'object'
        or exists (select 1 from jsonb_object_keys(v->'feature_neu') k where k not in ('gruppe_id','name','beschreibung')) then return false; end if;
-    if jsonb_typeof(v->'feature_neu'->'gruppe_id') <> 'string' or jsonb_typeof(v->'feature_neu'->'name') <> 'string' then return false; end if;
+    if coalesce(jsonb_typeof(v->'feature_neu'->'gruppe_id'), '') <> 'string' or coalesce(jsonb_typeof(v->'feature_neu'->'name'), '') <> 'string' then return false; end if;
     if char_length(v->'feature_neu'->>'name') not between 2 and 80 or char_length(coalesce(v->'feature_neu'->>'beschreibung','')) > 1000 then return false; end if;
     return public.ws_projekt_von_gruppe(v->'feature_neu'->>'gruppe_id') is not distinct from p_projekt and not public.ws_ist_konzept_gruppe(v->'feature_neu'->>'gruppe_id');
   end if;
@@ -88,7 +88,7 @@ begin
   end if;
   -- c) ein Auftrag (mit optionalem Konzept) wie bisher
   if exists (select 1 from jsonb_object_keys(v) k where k not in ('gruppe_id','feature_id','titel','text','konzept')) then return false; end if;
-  if jsonb_typeof(v->'gruppe_id') <> 'string' or jsonb_typeof(v->'titel') <> 'string' or jsonb_typeof(v->'text') <> 'string' then return false; end if;
+  if coalesce(jsonb_typeof(v->'gruppe_id'), '') <> 'string' or coalesce(jsonb_typeof(v->'titel'), '') <> 'string' or coalesce(jsonb_typeof(v->'text'), '') <> 'string' then return false; end if;
   if char_length(v->>'titel') not between 3 and 80 or char_length(v->>'text') not between 10 and 8000 then return false; end if;
   if public.ws_projekt_von_gruppe(v->>'gruppe_id') is distinct from p_projekt or public.ws_ist_konzept_gruppe(v->>'gruppe_id') then return false; end if;
   if v ? 'feature_id' and v->'feature_id' <> 'null'::jsonb then
@@ -112,7 +112,9 @@ begin
   if a.entscheidung is not null then return coalesce((select array_agg(e::bigint) from jsonb_array_elements_text(a.vorschlag->'angelegt') e), '{}'); end if;
   select * into f from ws_claude_chat where id = a.frage_id;
   if f.von is distinct from auth.uid() then raise exception 'Nur wer gefragt hat, legt die Aufträge an'; end if;
+  if f.ort is distinct from 'konzept' then raise exception 'Aufträge legt die KI nur im Konzept-Gespräch selbst an'; end if;   -- Prüfung R2
   if not public.ws_darf_fragen(f.projekt_id) then raise exception 'Kein Zugriff mehr auf dieses Projekt'; end if;
+  if exists (select 1 from ws_projekte where id = f.projekt_id and coalesce(archiviert, false)) then raise exception 'Das Projekt ist archiviert'; end if;
   if not public.ws_vorschlag_ok(f.projekt_id, a.vorschlag) then raise exception 'Der Vorschlag passt nicht mehr zum Projekt (Gruppe oder Feature geändert)'; end if;
   n := jsonb_array_length(a.vorschlag->'auftraege');
   -- Mengengrenze: höchstens 15 Aufträge je Person und Stunde aus dem Konzept-Gespräch
@@ -122,6 +124,11 @@ begin
   for x in select * from jsonb_array_elements(a.vorschlag->'auftraege') loop
     if not public.ws_darf(public.ws_bereich_von_gruppe(x->>'gruppe_id'), 'auftraege') then
       raise exception 'Keine Berechtigung für Aufträge in der Gruppe %', x->>'gruppe_id'; end if;
+    -- Steuer-, Richtungs- und unsichtbare Zeichen haben in Titel und Text nichts verloren (wie ws_design_auftrag, 0041 – Prüfung G1)
+    if (x->>'titel') ~ '[[:cntrl:]\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069\ufeff]'
+       or (x->>'text') ~ '[\x01-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069\ufeff]'
+       or coalesce(x->>'konzept', '') ~ '[\x01-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069\ufeff]' then
+      raise exception 'Ungültige Zeichen im Auftrag „%“', left(x->>'titel', 40); end if;
     k := x->'konzept';
     t := x->>'text';
     if jsonb_typeof(k) = 'object' then
@@ -146,5 +153,26 @@ begin
 end $$;
 revoke all on function public.ws_konzept_auftraege_anlegen(bigint) from public, anon;
 grant execute on function public.ws_konzept_auftraege_anlegen(bigint) to authenticated;
+
+-- Antwort der Werkstatt speichern (wie 0010) – FRAGEN und AUFTRAEGE nur im Konzept-Gespräch (Prüfung R2)
+create or replace function public.ws_claude_chat_antwort(p_frage bigint, p_text text, p_vorschlag jsonb default null, p_fehler boolean default false)
+returns bigint language plpgsql security definer set search_path = public as $$
+declare f public.ws_claude_chat; a bigint;
+begin
+  select * into f from public.ws_claude_chat where id = p_frage and frage_id is null for update;
+  if f.id is null then raise exception 'Frage nicht gefunden'; end if;
+  if f.von is distinct from auth.uid() then raise exception 'Nur die eigene Werkstatt beantwortet eigene Fragen'; end if;
+  if f.stand <> 'laeuft' then raise exception 'Frage ist nicht in Bearbeitung'; end if;
+  if not public.ws_darf_fragen(f.projekt_id) then raise exception 'Kein Zugriff mehr auf dieses Projekt'; end if;
+  if p_text is null or char_length(p_text) not between 1 and 8000 then raise exception 'Antwort fehlt oder ist zu lang'; end if;
+  if p_vorschlag is not null and jsonb_typeof(p_vorschlag) = 'object' and (p_vorschlag ? 'fragen' or p_vorschlag ? 'auftraege') and f.ort is distinct from 'konzept' then p_vorschlag := null; end if;
+  if p_fehler or pg_column_size(p_vorschlag) >= 16384 or not public.ws_vorschlag_ok(f.projekt_id, p_vorschlag) then p_vorschlag := null; end if;
+  insert into public.ws_claude_chat (projekt_id, ort, frage_id, von, text, vorschlag, stand, werkstatt_pc)
+    values (f.projekt_id, f.ort, f.id, null, p_text, p_vorschlag, 'beantwortet', f.werkstatt_pc) returning id into a;
+  update public.ws_claude_chat set stand = case when p_fehler then 'fehler' else 'beantwortet' end, geaendert = now() where id = f.id;
+  return a;
+end $$;
+revoke execute on function public.ws_claude_chat_antwort(bigint, text, jsonb, boolean) from public, anon;
+grant execute on function public.ws_claude_chat_antwort(bigint, text, jsonb, boolean) to authenticated;
 
 commit;

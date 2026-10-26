@@ -45,8 +45,9 @@ export default function ClaudeChat({ d, ich, ort = "konzept", kontext, toast, le
     const t = String(vorgabe ?? text).trim(); if (!t) return; setSenden(true);
     const { error } = await supabase.from("ws_claude_chat").insert({ projekt_id: d.projektId, ort: String(ort || "konzept").toLowerCase().replace(/[^a-z0-9:_.-]/g, "-").slice(0, 80), text: t.slice(0, 8000), kontext: String(kontext || "").slice(0, 6000) });
     setSenden(false);
-    if (error) return toast(fehler(error));
+    if (error) { toast(fehler(error)); return false; }
     if (vorgabe == null) setText("");
+    return true;
   };
   const IDEEN = liste.length ? ["Was fehlt noch im Konzept?", "Fasse das Konzept zusammen", "Welche Daten speichern wir?", "Datenschutz prüfen"]
     : ["Lass uns das Grundkonzept besprechen", "Stell mir die wichtigsten Fragen", "Was brauchen wir für die erste Version?"];
@@ -138,8 +139,8 @@ function FeatureVorschlag({ m, d, ich, kann, toast }) {
 
 function Vorschlag(props) {
   const v = props.m.vorschlag;
-  if (v?.fragen) return <FragenVorschlag {...props} />;
-  if (v?.auftraege) return <AuftraegeVorschlag {...props} />;
+  if (Array.isArray(v?.fragen)) return <FragenVorschlag {...props} />;
+  if (Array.isArray(v?.auftraege)) return <AuftraegeVorschlag {...props} />;
   return v?.wissen ? <WissenVorschlag {...props} /> : v?.feature_neu || v?.bezug ? <FeatureVorschlag {...props} /> : <AuftragVorschlag {...props} />;
 }
 
@@ -151,9 +152,11 @@ function FragenVorschlag({ m, kann, toast, onAntwort, sperre }) {
   const senden = async () => {
     setBusy(true);
     const text = `Meine Antworten:\n${liste.map((q, i) => `- ${q.frage} → ${antwort(i).replace(/\s*\(Empfohlen\)\s*$/i, "")}`).join("\n")}`;
-    await onAntwort(text);
-    const { error } = await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "uebernommen" });
-    if (error) toast(fehler(error));
+    // nur als beantwortet markieren, wenn die Antworten wirklich angekommen sind (Prüfung G4)
+    if (await onAntwort(text)) {
+      const { error } = await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "uebernommen" });
+      if (error) toast(fehler(error));
+    }
     setBusy(false);
   };
   const erledigt = !!m.entscheidung;
@@ -164,7 +167,7 @@ function FragenVorschlag({ m, kann, toast, onAntwort, sperre }) {
         <fieldset key={i} className="grid gap-1.5" disabled={erledigt || !kann}>
           <legend className="font-semibold text-sm mb-1">{q.frage}</legend>
           <div className="flex flex-wrap gap-1.5">
-            {q.optionen.map((o) => { const an = !eigen[i]?.trim() && wahl[i] === o; return (
+            {(q.optionen || []).map((o) => { const an = !eigen[i]?.trim() && wahl[i] === o; return (
               <button key={o} type="button" aria-pressed={an} onClick={() => { setWahl({ ...wahl, [i]: o }); setEigen({ ...eigen, [i]: "" }); }}
                 className={`text-left text-xs rounded-lg border px-2.5 py-1.5 ${an ? "border-sky-600 bg-sky-50 text-sky-900 dark:bg-sky-950 dark:text-sky-100 ring-1 ring-sky-600" : "border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"} ${/\(Empfohlen\)\s*$/i.test(o) ? "font-semibold" : ""}`}>{o}</button>); })}
           </div>
@@ -180,7 +183,7 @@ function FragenVorschlag({ m, kann, toast, onAntwort, sperre }) {
 const STAND_TEXT = { wartet: "Wartet auf die Werkstatt", laeuft: "In Arbeit", frage: "Rückfrage an dich", nacharbeit: "Nacharbeit", freigabe: "Bereit zur Freigabe", sicherheit: "Sicherheitsprüfung",
   zusammen: "Bereit zum Zusammenführen", feature: "Feature-Prüfung", wissen: "Live", erledigt: "Erledigt", abgebrochen: "Abgebrochen" };
 function AuftraegeVorschlag({ m, d, ich, kann, toast }) {
-  const v = m.vorschlag; const ids = Array.isArray(v.angelegt) ? v.angelegt : []; const [busy, setBusy] = useState(false); const [offen, setOffen] = useState(false);
+  const v = m.vorschlag; const ids = Array.isArray(v.angelegt) ? v.angelegt : []; const [busy, setBusy] = useState(false); const [offen, setOffen] = useState(true);   // Auftragstexte immer sichtbar (Prüfung M4/G1)
   const anlegen = async () => {
     setBusy(true);
     const { data, error } = await supabase.rpc("ws_konzept_auftraege_anlegen", { p_antwort: m.id });

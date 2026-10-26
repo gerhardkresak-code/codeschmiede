@@ -30,19 +30,32 @@ test("Konzept-Wissen: Länge begrenzt, keine Steuerzeilen, unbekannte Kapitel ig
 });
 test("Konzept-Chat (0.9.14): FRAGEN zum Anklicken und AUFTRAEGE, die die KI selbst anlegt", async () => {
   const { assistentAntwort, assistentPrompt } = await import("../lib/assistent.mjs");
-  const f = assistentAntwort('Zwei Fragen noch.\nFRAGEN: [{"frage":"Wer darf löschen?","optionen":["Nur Admin (Empfohlen)","Alle","Alle"]},{"frage":"Nur eine?","optionen":["ja"]}]');
+  const k = { ort: "konzept" };
+  const f = assistentAntwort('Zwei Fragen noch.\nFRAGEN: [{"frage":"Wer darf löschen?","optionen":["Nur Admin (Empfohlen)","Alle","Alle"]},{"frage":"Nur eine?","optionen":["ja"]}]', k);
   assert.deepEqual(f.vorschlag, { fragen: [{ frage: "Wer darf löschen?", optionen: ["Nur Admin (Empfohlen)", "Alle"] }] });
   assert.equal(f.text, "Zwei Fragen noch.");
-  const a = assistentAntwort('Ich lege an.\nAUFTRAEGE: [{"gruppe_id":"kader","feature_id":null,"titel":"Kader sortieren","text":"Sortieren nach Position im Kader","konzept":{"ziel":"Ordnung","offen":[]}},{"gruppe_id":"erp","titel":"x","text":"zu kurz?"}]');
+  const a = assistentAntwort('Ich lege an.\nAUFTRAEGE: [{"gruppe_id":"kader","feature_id":null,"titel":"Kader sortieren","text":"Sortieren nach Position im Kader","konzept":{"ziel":"Ordnung","offen":[]}},{"gruppe_id":"erp","titel":"x","text":"zu kurz?"}]', k);
   assert.equal(a.vorschlag.auftraege.length, 1);
   assert.deepEqual(a.vorschlag.auftraege[0], { gruppe_id: "kader", feature_id: null, titel: "Kader sortieren", text: "Sortieren nach Position im Kader", konzept: { ziel: "Ordnung" } });
   // offene Punkte → nichts anlegen
-  assert.equal(assistentAntwort('x\nAUFTRAEGE: [{"gruppe_id":"kader","titel":"Kader sortieren","text":"Sortieren nach Position","konzept":{"offen":["Wer?"]}}]').vorschlag, null);
+  assert.equal(assistentAntwort('x\nAUFTRAEGE: [{"gruppe_id":"kader","titel":"Kader sortieren","text":"Sortieren nach Position","konzept":{"offen":["Wer?"]}}]', k).vorschlag, null);
   // höchstens 5, gesamt unter 16 KB
   const viele = Array.from({ length: 8 }, (_, i) => ({ gruppe_id: "g", titel: `Auftrag ${i}`, text: "y".repeat(5000), konzept: { ziel: "z".repeat(3000), entscheidungen: Array(20).fill("e".repeat(400)) } }));
-  const v = assistentAntwort(`AUFTRAEGE: ${JSON.stringify(viele)}`).vorschlag;
+  const v = assistentAntwort(`AUFTRAEGE: ${JSON.stringify(viele)}`, k).vorschlag;
   assert.equal(v.auftraege.length, 5); assert.ok(Buffer.byteLength(JSON.stringify(v)) <= 15000);
   const p = assistentPrompt({ projekt: { name: "TTG" }, ort: "konzept", frage: "Los" });
   assert.match(p, /FRAGEN: \[/); assert.match(p, /AUFTRAEGE: \[/); assert.doesNotMatch(p, /\(AUFTRAG, FEATURE-NEU/);
   assert.doesNotMatch(assistentPrompt({ projekt: { name: "TTG" }, ort: "zentrale", frage: "Los" }), /AUFTRAEGE: \[/);
+});
+test("Konzept-Chat: nur im Konzept, Größe endlich, erfundene Gruppen weg (Prüfung R1–R3)", async () => {
+  const { assistentAntwort } = await import("../lib/assistent.mjs");
+  const zeile = 'AUFTRAEGE: [{"gruppe_id":"kader","titel":"Kader sortieren","text":"Sortieren nach Position im Kader"}]';
+  assert.equal(assistentAntwort(`x\n${zeile}`, { ort: "zentrale" }).vorschlag, null);   // außerhalb des Konzepts nie automatisch
+  const voll = Array.from({ length: 5 }, (_, i) => ({ gruppe_id: "g", titel: `Auftrag ${i}`, text: "y".repeat(3000),
+    konzept: { ziel: "z".repeat(2000), umfang: "u".repeat(2000), datenschutz: "d".repeat(2000), entscheidungen: Array(20).fill("e".repeat(500)), abnahme: Array(20).fill("a".repeat(500)) } }));
+  const t0 = Date.now(); const v = assistentAntwort(`AUFTRAEGE: ${JSON.stringify(voll)}`, { ort: "konzept" }).vorschlag;
+  assert.ok(Date.now() - t0 < 1000); assert.ok(v.auftraege.length >= 1); assert.ok(Buffer.byteLength(JSON.stringify(v)) <= 15000);
+  const g = assistentAntwort('ok\nAUFTRAEGE: [{"gruppe_id":"gibtsnicht","titel":"Erfunden","text":"Diese Gruppe gibt es nicht"},{"gruppe_id":"kader","feature_id":"F-999","titel":"Kader sortieren","text":"Sortieren nach Position im Kader"}]\nWISSEN: {"kapitel":"ziel","text":"abc"}',
+    { ort: "konzept", gruppen: [{ id: "kader" }], features: [{ id: "F-001", gruppe_id: "kader" }] });
+  assert.equal(g.vorschlag.auftraege.length, 1); assert.equal(g.vorschlag.auftraege[0].feature_id, null); assert.doesNotMatch(g.text, /WISSEN/);
 });

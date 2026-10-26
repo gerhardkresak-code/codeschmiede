@@ -66,17 +66,20 @@ ${ort === "konzept" ? `- Rückfragen zum Anklicken als LETZTE Zeile genau
 ` : ""}- Höchstens EINE dieser Zeilen (${ort === "konzept" ? "FRAGEN, AUFTRAEGE, " : "AUFTRAG, "}FEATURE-NEU, BEZUG oder WISSEN) je Antwort. Features dieses Projekts: ${fl || "–"}.`;
 }
 
-export function assistentAntwort(roh) {
+// opt.ort: nur im Konzept-Gespräch zählen FRAGEN/AUFTRAEGE (Prüfung R2); opt.gruppen/opt.features: erlaubte Ziele (Prüfung G3)
+export function assistentAntwort(roh, opt = {}) {
   const zeilen = String(roh || "").trim().split(/\r?\n/);
   let vorschlag = null;
   // Konzept-Gespräch: Rückfragen zum Anklicken (FRAGEN) oder mehrere Aufträge, die die KI selbst anlegt (AUFTRAEGE) – Datenbank 0048
-  const q = zeilen.map((z) => z.trim()).findLastIndex((z) => /^\**(FRAGEN|AUFTRAEGE|AUFTRÄGE):/i.test(z));
+  const q = opt.ort === "konzept" ? zeilen.map((z) => z.trim()).findLastIndex((z) => /^\**(FRAGEN|AUFTRAEGE|AUFTRÄGE):/i.test(z)) : -1;
   if (q >= 0) {
     const art = /^\**FRAGEN/i.test(zeilen[q].trim()) ? "fragen" : "auftraege";
     let v = null;
     try { v = JSON.parse(zeilen[q].trim().replace(/^\**(FRAGEN|AUFTRAEGE|AUFTRÄGE):\**\s*/i, "").replace(/^`+|`+$/g, "")); } catch { /* kein gültiges JSON */ }
     zeilen.splice(q, 1);
-    const liste = art === "fragen" ? fragenAus(v) : auftraegeAus(v);
+    // weitere Steuerzeilen nicht als Rohtext stehen lassen
+    for (let i = zeilen.length - 1; i >= 0; i--) if (/^\**(FRAGEN|AUFTRAEGE|AUFTRÄGE|AUFTRAG|WISSEN|FEATURE-NEU|BEZUG):/i.test(zeilen[i].trim())) zeilen.splice(i, 1);
+    const liste = art === "fragen" ? fragenAus(v) : auftraegeAus(v, opt);
     if (liste) {
       const text = zeilen.join("\n").trim().slice(0, 7900) || (art === "fragen" ? "Dazu brauche ich noch deine Antworten:" : "Ich lege die Aufträge jetzt an:");
       return { text, vorschlag: { [art]: liste } };
@@ -147,11 +150,15 @@ export function fragenAus(v) {
 }
 
 // Mehrere Aufträge aus dem Konzept-Gespräch: 1–5, Text höchstens 2500 Zeichen (damit der Vorschlag unter 16 KB bleibt), keine offenen Punkte
-export function auftraegeAus(v) {
+export function auftraegeAus(v, opt = {}) {
   if (!Array.isArray(v)) return null;
+  const gIds = Array.isArray(opt.gruppen) ? new Set(opt.gruppen.map((g) => g.id)) : null;
+  const fIn = Array.isArray(opt.features) ? new Map(opt.features.map((f) => [f.id, f.gruppe_id])) : null;
   const r = [];
   for (const x of v) {
     if (!x || typeof x !== "object" || Array.isArray(x) || typeof x.gruppe_id !== "string" || typeof x.titel !== "string" || typeof x.text !== "string") continue;
+    if (gIds && !gIds.has(x.gruppe_id)) continue;   // erfundene Gruppe → nur diesen Auftrag weglassen (Prüfung G3)
+    if (fIn && typeof x.feature_id === "string" && x.feature_id && fIn.get(x.feature_id) !== x.gruppe_id) x.feature_id = null;
     if (x.titel.trim().length < 3 || x.text.trim().length < 10) continue;
     const k = konzeptAus(x.konzept);
     if (k?.offen?.length) return null;   // noch offen → nicht anlegen (die KI soll zuerst fragen)
@@ -159,7 +166,10 @@ export function auftraegeAus(v) {
     r.push({ gruppe_id: x.gruppe_id, feature_id: typeof x.feature_id === "string" && x.feature_id ? x.feature_id : null, titel: x.titel.trim().slice(0, 80), text: x.text.trim().slice(0, 2500), ...(k && Object.keys(k).length ? { konzept: k } : {}) });
     if (r.length === 5) break;
   }
-  // gesamt unter 16 KB (Grenze der Datenbank) – sonst die Texte kürzen
-  while (r.length && Buffer.byteLength(JSON.stringify({ auftraege: r })) > 15000) for (const x of r) x.text = x.text.slice(0, Math.max(200, Math.floor(x.text.length * 0.8)));
-  return r.length ? r : null;
+  // gesamt unter 16 KB (Grenze der Datenbank): erst Texte kürzen, dann Konzept-Listen, dann Aufträge von hinten weglassen – immer endlich (Prüfung R1)
+  const gross = () => Buffer.byteLength(JSON.stringify({ auftraege: r }));
+  for (let i = 0; i < 8 && r.length && gross() > 15000; i++) for (const x of r) x.text = x.text.slice(0, Math.max(200, Math.floor(x.text.length * 0.75)));
+  for (const x of r) if (gross() > 15000 && x.konzept) { for (const f of ["entscheidungen", "abnahme"]) if (x.konzept[f]) x.konzept[f] = x.konzept[f].slice(0, 3).map((y) => y.slice(0, 120)); for (const f of ["ziel", "umfang", "datenschutz"]) if (x.konzept[f]) x.konzept[f] = x.konzept[f].slice(0, 200); }
+  while (r.length > 1 && gross() > 15000) r.pop();
+  return r.length && gross() <= 15000 ? r : null;
 }
