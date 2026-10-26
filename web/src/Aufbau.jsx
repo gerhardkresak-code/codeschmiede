@@ -5,7 +5,7 @@
 // protokolliert die Datenbank das (ws_aufbau_aenderungen). „In die App übernehmen“ macht daraus EINEN Auftrag mit der neuen Fassung
 // beider Dateien und der Liste der Änderungen – er läuft wie jeder Auftrag über Freigabe, Prüfungen und Live.
 import React, { useState } from "react";
-import { Shuffle, Send, Loader2, X, FolderPlus } from "lucide-react";
+import { Shuffle, Send, Loader2, X, FolderPlus, Trash2 } from "lucide-react";
 import { supabase } from "./supabase";
 
 const card = "rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900";
@@ -149,6 +149,44 @@ export function Umbenennen({ titel, alt, onClose, onSpeichern }) {
         <p className="text-xs text-slate-500">Der neue Name gilt nach „In die App übernehmen“ auch im Menü der App.</p>
         <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={onClose}>Abbrechen</button>
           <button type="button" className={btn} disabled={busy || name.trim().length < 2 || name.trim() === alt} onClick={async () => { setBusy(true); await onSpeichern(name.trim()); setBusy(false); }}>Speichern</button></div>
+      </div>
+    </div>
+  );
+}
+
+// Gruppe löschen (Anweisung Gerhard 26.10.2026 08:07, „Ohne Menüpunkt und leer“): nur geplante/ungenutzte Gruppen ohne Menüpunkt,
+// ohne Features und ohne Aufträge. Gibt den Grund zurück, warum es (noch) nicht geht – sonst null. Die Datenbank prüft dasselbe (0048).
+export function gruppeLoeschbar(g, b, d, konzeptId) {
+  if (!g || !b) return "Gruppe nicht gefunden";
+  if (b.global) return "Gruppen der globalen Einstellungen bleiben";
+  if (g.app_key) return "Menüpunkt der App – entfernen nur über einen Ausbau-Auftrag";
+  if (g.id === konzeptId || (d.projekte || []).some((p) => [p.design_gruppe_id, p.konzept_gruppe_id, p.db_gruppe_id].includes(g.id))) return "Wird vom Projekt verwendet (Konzept, Designer oder Datenbank)";
+  const nf = (d.features || []).filter((f) => f.gruppe_id === g.id).length;
+  if (nf) return `Enthält noch ${nf} Feature${nf > 1 ? "s" : ""} – zuerst verschieben`;
+  if ((d.auftraege || []).some((a) => a.gruppe_id === g.id)) return "Hat Aufträge – bleibt als Verlauf erhalten";
+  return null;
+}
+
+export function GruppeLoeschen({ g, grund, onClose, onLoeschen }) {
+  const [busy, setBusy] = useState(false);
+  if (grund) return (
+    <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Gruppe löschen">
+      <div className={`${card} w-full max-w-md p-5 grid gap-3`}>
+        <div className="flex items-center justify-between"><h2 className="font-display font-bold text-xl">Gruppe „{g.name}“</h2><button type="button" onClick={onClose} aria-label="Schließen"><X className="w-5 h-5" /></button></div>
+        <p>Diese Gruppe kann nicht gelöscht werden: <b>{grund}</b>.</p>
+        <p className="text-xs text-slate-500">Löschbar sind nur geplante oder ungenutzte Gruppen ohne Menüpunkt in der App, ohne Features und ohne Aufträge.</p>
+        <div className="flex justify-end"><button type="button" className={ghost} onClick={onClose}>Schließen</button></div>
+      </div>
+    </div>);
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Gruppe löschen">
+      <div className={`${card} w-full max-w-md p-5 grid gap-3`}>
+        <div className="flex items-center justify-between"><h2 className="font-display font-bold text-xl">Gruppe löschen</h2><button type="button" onClick={onClose} aria-label="Schließen"><X className="w-5 h-5" /></button></div>
+        <p>Die Gruppe <b>„{g.name}“</b> ist leer und hat keinen Menüpunkt in der App. Sie wird endgültig entfernt.</p>
+        <p className="text-xs text-slate-500">Aufgaben, die dieser Gruppe zugeordnet waren, bleiben erhalten (ohne Gruppe). Der Gruppen-Chat der Aufgaben-Sendungen wird mit gelöscht. Die Änderung erscheint unter „In die App übernehmen“.</p>
+        <div className="flex justify-end gap-2"><button type="button" className={ghost} onClick={onClose}>Abbrechen</button>
+          <button type="button" className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-red-700 hover:bg-red-800 disabled:opacity-50 text-white text-sm font-semibold" disabled={busy}
+            onClick={async () => { setBusy(true); await onLoeschen(); setBusy(false); }}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}Löschen</button></div>
       </div>
     </div>
   );

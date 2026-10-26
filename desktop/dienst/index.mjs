@@ -373,7 +373,10 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
       kind.on("error", (e) => fehl(new Error(e.code === "ENOENT" ? "Claude Code ist auf diesem PC nicht installiert." : e.message)));
       kind.on("close", (code) => Promise.all(offen).then(() => (ende || code === 0 ? fertig() : fehl(new Error(/log ?in|login|not logged/i.test(fehlerText)
         ? "Claude Code ist nicht angemeldet – bitte einmal „claude“ starten und mit deinem Abo anmelden."
-        : /limit/i.test(fehlerText) ? "Abo-Nutzungslimit erreicht – die Werkstatt wartet bis zur Rücksetzung." : `Claude Code beendet (${code}): ${fehlerText.slice(-300)}`)))));
+        : /limit/i.test(fehlerText) ? "Abo-Nutzungslimit erreicht – die Werkstatt wartet bis zur Rücksetzung."
+        // ohne Ausgangscode = von außen beendet (Werkstatt aus/neu gestartet, Programm geschlossen, Update) – Meldung 26.10.2026 („Claude Code beendet (null)“)
+        : code === null ? "Claude Code wurde unterbrochen (Werkstatt aus- oder neu gestartet, Programm geschlossen oder Update). Einfach noch einmal versuchen."
+        : `Claude Code beendet (${code}): ${fehlerText.slice(-300)}`)))));
     });
     await merkeSitzung(auftrag.id, { sitzung, versuch });
     await db.from("ws_verbrauch").insert({ auftrag_id: auftrag.id, projekt_id: projekt.id, modell, kosten_usd: kosten, tokens_ein: ein, tokens_aus: aus, werkstatt_pc: pcId });
@@ -1220,10 +1223,17 @@ async function claudeChat() {
       gruppen: (gruppen || []).filter((g) => g.id !== projekt.konzept_gruppe_id).map((g) => ({ id: g.id, name: g.name, global: g.ws_bereiche?.global })), features: feats || [] });
     const aufgabe = f.ort === "konzept" || istKonzeptFrage(f.text, verlauf) ? "konzept" : "chat";
     const { roh, ki } = await kiAntwort(projekt, aufgabe, prompt, { claudeLesenIn: lesenIn || null, dokuLesen: true, frage: f.text });
-    const { text, vorschlag } = assistentAntwort(ohneGeheimnisse(roh));
-    const { error: e2 } = await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
+    const { text, vorschlag } = assistentAntwort(ohneGeheimnisse(roh), { ort: f.ort, gruppen: (gruppen || []).filter((g) => g.id !== projekt.konzept_gruppe_id), features: feats || [] });
+    const { data: antwortId, error: e2 } = await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
     if (e2) throw e2;
     await kiVermerken("chat", f.id, ki);
+    // Konzept-Gespräch: die KI „erledigt das“ – geklärte Aufträge gleich anlegen (als die Person, die gefragt hat; Datenbank 0048).
+    // Geht das nicht (Rechte, Grenze, Gruppe geändert), bleibt die Karte mit „Aufträge anlegen“ im Chat stehen.
+    if (vorschlag?.auftraege && antwortId) {
+      const { data: ids, error: e3 } = await db.rpc("ws_konzept_auftraege_anlegen", { p_antwort: antwortId });
+      if (e3) melde("fehler", `Konzept-Aufträge: ${ohneGeheimnisse(e3.message)}`);
+      else melde("status", `Konzept: ${ids?.length || 0} Auftrag/Aufträge angelegt`);
+    }
   } catch (e) {
     await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: `Claude konnte gerade nicht antworten: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 300)}`, p_fehler: true });
   }
@@ -1574,6 +1584,16 @@ async function start() {
   try { const { data } = await db.from("ws_ki_kopplung").select("anbieter, anfragen_heute, anfragen_tag").eq("pc_id", pcId); for (const z of data || []) if (z.anfragen_tag) anfragen[z.anbieter] = { tag: z.anfragen_tag, n: z.anfragen_heute || 0 }; } catch { /* Spalten erst ab Datenbank 0029 */ }
   setInterval(() => aboAusStatuszeile().catch(() => {}), 60 * 1000);
   melde("status", "Werkstatt bereit");
+  // Beim Start: Aufträge, die auf diesem PC liefen, als unterbrochen melden – sonst hängen sie in „In Arbeit“ und lassen sich nicht abbrechen
+  // (Meldung Gerhard 26.10.2026: Auftrag #18 hing nach einem Neustart der Werkstatt)
+  try {
+    const { data: haengt } = await db.from("ws_auftraege").select("id, hand").eq("werkstatt_pc", pcId).eq("stand", "laeuft");
+    for (const a of haengt || []) {
+      if (a.hand) { await db.from("ws_auftraege").update({ stand: "abgebrochen" }).eq("id", a.id); continue; }
+      await nachricht(a.id, "frage", "Die Werkstatt wurde neu gestartet, während ich an diesem Auftrag gearbeitet habe. Soll ich weitermachen, oder willst du den Auftrag abbrechen?");
+      await db.from("ws_auftraege").update({ stand: "frage" }).eq("id", a.id);
+    }
+  } catch { /* nächster Start versucht es wieder */ }
   setInterval(() => lebenszeichen(true).catch(() => {}), 60 * 1000);
   // Abgleich im Hintergrund (alle 10 Min.), unabhängig von laufenden Aufträgen
   const abgleich = () => projektAbgleich().catch((e) => melde("fehler", ohneGeheimnisse(e?.message || String(e))));

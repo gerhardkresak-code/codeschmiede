@@ -22,7 +22,8 @@ import Aufgaben, { AufgabenImChat, AufgabeBeilagen, AufgabePlakette, useMeineAuf
 import { LogoZeichen } from "./Logo";
 import CodeschmiedeZeichen from "./Zeichen";
 import GeraeteRahmen from "./GeraeteRahmen";
-import { AufbauBanner, NeueObergruppe, Umbenennen, bereichName, ohneMenue } from "./Aufbau";
+import { FreigabeKnopf, ZusammenKnopf } from "./Auftragsknoepfe";
+import { AufbauBanner, NeueObergruppe, Umbenennen, GruppeLoeschen, gruppeLoeschbar, bereichName, ohneMenue } from "./Aufbau";
 const AboLimits = lazy(() => import("./AboLimits"));
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
@@ -443,7 +444,9 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
           <div className="flex flex-wrap gap-3 items-start justify-between p-4 border-b border-slate-200 dark:border-slate-800">
             <div className="min-w-0">
               <div className="text-xs text-slate-500">{bereichName(d.bereiche.find((b) => b.id === g.bereich_id))}</div>
-              <h2 className="font-display font-bold text-2xl flex items-center gap-2">{g.name}{kannVerschieben && !istKonzept && <button type="button" className="p-1 rounded text-slate-400 hover:text-emerald-700" aria-label={`Gruppe ${g.name} umbenennen`} onClick={() => setDlgA({ art: "gruppe", g })}><PenLine className="w-4 h-4" /></button>}</h2>
+              <h2 className="font-display font-bold text-2xl flex items-center gap-2">{g.name}{kannVerschieben && !istKonzept && <button type="button" className="p-1 rounded text-slate-400 hover:text-emerald-700" aria-label={`Gruppe ${g.name} umbenennen`} onClick={() => setDlgA({ art: "gruppe", g })}><PenLine className="w-4 h-4" /></button>}
+                {ich.rolle === "admin" && !istKonzept && (() => { const grund = gruppeLoeschbar(g, d.bereiche.find((b) => b.id === g.bereich_id), alle, konzeptId); return (
+                  <button type="button" className={`p-1 rounded ${grund ? "text-slate-300 dark:text-slate-600" : "text-slate-400 hover:text-red-600"}`} title={grund ? `Nicht löschbar: ${grund}` : "Leere Gruppe löschen"} aria-label={`Gruppe ${g.name} löschen${grund ? ` – nicht möglich: ${grund}` : ""}`} onClick={() => setDlgA({ art: "gruppe-weg", g, grund })}><Trash2 className="w-4 h-4" /></button>); })()}</h2>
               {g.app_key && <div className="text-xs text-slate-500">Menüpunkt in der App: <code>{g.app_key}</code></div>}
               <div className="flex items-center gap-1.5 text-sm text-slate-500 mt-1"><Bot className="w-4 h-4" />Werkstatt {g.name} · <code className="text-xs">docs/gruppen/{g.id}.md</code></div>
             </div>
@@ -476,7 +479,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
         </section>
 
         {f ? <FeatureKurzinfo f={f} g={g} d={d} ich={ich} toast={toast} darfAuftrag={darf(g.bereich_id, "auftraege")} onOeffnen={() => setPlatz(f.id)} onGruppe={() => setSel({ g: g.id, f: null })} onVerschieben={kannVerschieben ? () => setDlg({ art: "verschieben", f }) : null} />
-          : <AuftragsChat g={g} f={null} d={d} ich={ich} darf={darf} toast={toast} kanal="gruppe" />}
+          : <AuftragsChat g={g} f={null} d={d} ich={ich} darf={darf} toast={toast} kanal="gruppe" onKonzept={konzeptId ? () => setSel({ g: konzeptId, f: null }) : undefined} />}
         </>}
       </div>}
       {dlg?.art === "feature" && <NeuesFeature g={g} ich={ich} texter={rolle === "texter"} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: g.id, f: id })} />}
@@ -484,13 +487,14 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
       {dlgA?.art === "obergruppe" && <NeueObergruppe d={alle} toast={toast} onClose={() => setDlgA(null)} onFertig={() => alle.holen?.()} />}
       {dlgA?.art === "bereich" && <Umbenennen titel="Obergruppe umbenennen" alt={dlgA.b.name} onClose={() => setDlgA(null)} onSpeichern={async (n) => { const { error } = await supabase.rpc("ws_bereich_aendern", { p_bereich: dlgA.b.id, p_name: n, p_reihe: null }); if (error) toast(fehler(error)); else { setDlgA(null); await alle.holen?.(); } }} />}
       {dlgA?.art === "gruppe" && <Umbenennen titel="Gruppe umbenennen" alt={dlgA.g.name} onClose={() => setDlgA(null)} onSpeichern={async (n) => { const { error } = await supabase.rpc("ws_gruppe_umbenennen", { p_gruppe: dlgA.g.id, p_name: n }); if (error) toast(fehler(error)); else { setDlgA(null); await alle.holen?.(); } }} />}
+      {dlgA?.art === "gruppe-weg" && <GruppeLoeschen g={dlgA.g} grund={dlgA.grund} onClose={() => setDlgA(null)} onLoeschen={async () => { const { error } = await supabase.rpc("ws_gruppe_loeschen", { p_gruppe: dlgA.g.id }); if (error) toast(fehler(error)); else { toast(`Gruppe „${dlgA.g.name}“ gelöscht`); setDlgA(null); setSel({ g: konzeptId || null, f: null }); await alle.holen?.(); } }} />}
       {dlg?.art === "loeschen" && <Loeschen f={dlg.f} g={g} ich={ich} toast={toast} onClose={() => setDlg(null)} />}
       {dlg?.art === "verschieben" && <Verschieben f={dlg.f} d={alle} onClose={() => setDlg(null)} onWahl={async (gid) => { setDlg(null); await verschiebe(dlg.f.id, gid); setSel({ g: g.id, f: null }); }} />}
     </>
   );
 }
 
-function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschmiede", baustein, onBausteinFertig, eingebettet }) {
+function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschmiede", baustein, onBausteinFertig, eingebettet, onKonzept }) {
   const auftraege = d.auftraege.filter((a) => (f ? a.feature_id === f.id : a.gruppe_id === g.id));   // je Feature: Verlauf bleibt beim Verschieben
   const ids = auftraege.map((a) => a.id);
   const { nachrichten, log, erlaubnisse } = useAuftragDetails(ids);
@@ -505,6 +509,22 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
   const verlaufRef = useRef(null);
   useEffect(() => { const el = verlaufRef.current; if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [nachrichten.length, log.length, tab, g.id, f?.id]);
 
+  // Fragen gehen an den allgemeinen Chat im Konzept (Anweisung Gerhard 26.10.2026 08:07 – vorher wurde jede Frage hier zum Bau-Auftrag):
+  // die eingestellte KI liest nach und antwortet; wird etwas gebaut, legt sie dort die Aufträge an.
+  // Neue Anweisung Gerhard 26.10.2026 09:11: „Ich will immer zuerst im Chat alles besprechen“ – jede Nachricht geht in den Konzept-Chat;
+  // Aufträge legt dort die KI an, wenn alles geklärt ist. Direkt hier bleiben nur Antworten auf Rückfragen und Baustein-Aufträge.
+  const istFrage = !frage && !baustein;
+  const fragen = async () => {
+    const t = text.trim(); if (!t) return; setBusy(true);
+    try {
+      const herkunft = f ? `Feature „${f.name}“ (${f.id}) in der Gruppe „${g.name}“` : `Gruppe „${g.name}“`;
+      const { error } = await supabase.from("ws_claude_chat").insert({ projekt_id: d.projektId, ort: "konzept", text: `Frage zu ${herkunft}: ${t}`.slice(0, 8000),
+        kontext: `Gerhard fragt aus der ${herkunft}${g.app_key ? `, Menüpunkt der App: ${g.app_key}` : ""}. Nur beantworten – gebaut wird erst, wenn er es bestätigt.`.slice(0, 6000) });
+      if (error) throw error;
+      setText(""); toast("Im Konzept-Chat – dort wird besprochen, die Antwort kommt gleich");
+      onKonzept?.();
+    } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
+  };
   const senden = async () => {
     const t = text.trim(); if (!t) return; setBusy(true);
     try {
@@ -591,9 +611,10 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
       )}
       {kannAuftrag ? (
         <div className="border-t border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-2">
-          <MitErwaehnung id="ws-auftrag" className={`${input} min-h-[72px]`} value={text} onChange={setText} features={d.features.filter((x) => !x.ausgebaut)} placeholder={frage ? "Antwort auf die Rückfrage …" : f ? `Was soll sich bei „${f.name}“ ändern? (@ verweist auf ein Feature als Vorlage)` : `Was soll sich in ${g.name} ändern?`} aria-label="Nachricht" />
-          <div className="flex items-center justify-between gap-2 flex-wrap"><span className="text-xs text-slate-500">{frage ? "Antwort geht an den laufenden Auftrag" : laufend ? "Neuer Auftrag kommt in die Warteschlange" : "Wird vom nächsten freien Werkstatt-PC übernommen"}</span>
-            <button type="button" className={btn} disabled={busy || !text.trim()} onClick={senden}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}{frage ? "Antworten" : "Senden"}</button></div>
+          <MitErwaehnung id="ws-auftrag" className={`${input} min-h-[72px]`} value={text} onChange={setText} features={d.features.filter((x) => !x.ausgebaut)} placeholder={frage ? "Antwort auf die Rückfrage …" : f ? `Frage oder Änderung zu „${f.name}“ … (@ verweist auf ein Feature als Vorlage)` : `Frage oder Änderung zu ${g.name} …`} aria-label="Nachricht" />
+          <div className="flex items-center justify-between gap-2 flex-wrap"><span className="text-xs text-slate-500">{frage ? "Antwort geht an den laufenden Auftrag" : istFrage ? "Wird zuerst im Konzept-Chat besprochen – gebaut wird erst, wenn alles geklärt ist" : "Wird vom nächsten freien Werkstatt-PC übernommen"}</span>
+            {istFrage ? <button type="button" className={btn} disabled={busy || !text.trim()} onClick={fragen} title="Die eingestellte KI antwortet im Konzept-Chat und legt Aufträge erst an, wenn alles geklärt ist">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}Besprechen</button>
+              : <button type="button" className={btn} disabled={busy || !text.trim()} onClick={senden}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}{frage ? "Antworten" : "Senden"}</button>}</div>
         </div>
       ) : <div className="border-t border-slate-200 dark:border-slate-800 p-4 text-xs text-slate-500">Für diesen Bereich hast du kein Recht, Aufträge zu geben.</div>}
     </aside>
@@ -601,7 +622,8 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
 }
 
 // Auftrag abbrechen (Datenbank 0023, Gerhard 2026-10-23 19:08): zweimal klicken, damit nichts aus Versehen abgebrochen wird
-const ABBRECHBAR = ["wartet", "frage", "nacharbeit", "freigabe"];
+// „laeuft“ auch: hängt ein Auftrag (Werkstatt neu gestartet, 3 Min. ohne Lebenszeichen), lässt er sich abbrechen – die Datenbank prüft (0049)
+const ABBRECHBAR = ["wartet", "laeuft", "frage", "nacharbeit", "freigabe"];
 function AbbrechenKnopf({ a, toast }) {
   const [sicher, setSicher] = useState(false); const [busy, setBusy] = useState(false);
   useEffect(() => { if (!sicher) return undefined; const t = setTimeout(() => setSicher(false), 6000); return () => clearTimeout(t); }, [sicher]);
@@ -627,29 +649,6 @@ function ErlaubnisKarte({ e, g, kann, onEntscheid }) {
         <button type="button" className={`${ghost} h-8`} onClick={() => onEntscheid(e, "abgelehnt")}>Ablehnen</button>
       </div> : <div className="text-xs text-slate-500">Erlauben darf der Admin oder wer das Recht „Freigeben“ hat.</div>}
     </div>
-  );
-}
-
-function FreigabeKnopf({ a, onJa, ohneInfo }) {
-  const [frag, setFrag] = useState(false);
-  const lokal = ohneInfo ? null : a.pruefung?.lokal;
-  if (!frag) return (
-    <div className="flex flex-col gap-1.5">
-      {lokal && <span className={`text-xs ${lokal.ergebnis === "gruen" ? "text-green-700 dark:text-green-400" : "text-red-600"}`}>Bauen & Tests am PC: {lokal.ergebnis === "gruen" ? "grün" : "rot"}{lokal.befund ? ` · ${lokal.befund.split("\n")[0]}` : ""}</span>}
-      <button type="button" className={`${btn} h-9 text-sm self-start`} onClick={() => setFrag(true)}><Check className="w-4 h-4" />Freigeben</button>
-    </div>);
-  return (
-    <div className="flex flex-col gap-2"><span>Auftrag #{a.id} freigeben? Danach läuft die Sicherheitsprüfung automatisch; live geht erst etwas, wenn du zusammenführst und die Feature-Prüfung grün ist.</span>
-      <div className="flex gap-2"><button type="button" className={`${btn} h-9 text-sm`} onClick={onJa}>Ja, freigeben</button><button type="button" className={`${ghost} h-9`} onClick={() => setFrag(false)}>Abbrechen</button></div></div>
-  );
-}
-
-function ZusammenKnopf({ a, onJa }) {
-  const [frag, setFrag] = useState(false);
-  if (!frag) return <button type="button" className={`${btn} h-9 text-sm self-start`} onClick={() => setFrag(true)}><GitMerge className="w-4 h-4" />Zusammenführen</button>;
-  return (
-    <div className="flex flex-col gap-2"><span>Auftrag #{a.id} mit dem neuesten Stand zusammenführen? Das ganze Feature wird in einer Testfassung geprüft und erst bei Grün live geschaltet.</span>
-      <div className="flex gap-2"><button type="button" className={`${btn} h-9 text-sm`} onClick={onJa}>Ja, zusammenführen</button><button type="button" className={`${ghost} h-9`} onClick={() => setFrag(false)}>Abbrechen</button></div></div>
   );
 }
 
