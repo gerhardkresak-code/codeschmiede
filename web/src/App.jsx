@@ -22,7 +22,8 @@ import Aufgaben, { AufgabenImChat, AufgabeBeilagen, AufgabePlakette, useMeineAuf
 import { LogoZeichen } from "./Logo";
 import CodeschmiedeZeichen from "./Zeichen";
 import GeraeteRahmen from "./GeraeteRahmen";
-import { AufbauBanner, NeueObergruppe, Umbenennen, bereichName, ohneMenue } from "./Aufbau";
+import { FreigabeKnopf, ZusammenKnopf } from "./Auftragsknoepfe";
+import { AufbauBanner, NeueObergruppe, Umbenennen, GruppeLoeschen, gruppeLoeschbar, bereichName, ohneMenue } from "./Aufbau";
 const AboLimits = lazy(() => import("./AboLimits"));
 
 // Codeschmiede – Programmierumgebung für alle Projekte (live über Supabase Realtime)
@@ -443,7 +444,9 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
           <div className="flex flex-wrap gap-3 items-start justify-between p-4 border-b border-slate-200 dark:border-slate-800">
             <div className="min-w-0">
               <div className="text-xs text-slate-500">{bereichName(d.bereiche.find((b) => b.id === g.bereich_id))}</div>
-              <h2 className="font-display font-bold text-2xl flex items-center gap-2">{g.name}{kannVerschieben && !istKonzept && <button type="button" className="p-1 rounded text-slate-400 hover:text-emerald-700" aria-label={`Gruppe ${g.name} umbenennen`} onClick={() => setDlgA({ art: "gruppe", g })}><PenLine className="w-4 h-4" /></button>}</h2>
+              <h2 className="font-display font-bold text-2xl flex items-center gap-2">{g.name}{kannVerschieben && !istKonzept && <button type="button" className="p-1 rounded text-slate-400 hover:text-emerald-700" aria-label={`Gruppe ${g.name} umbenennen`} onClick={() => setDlgA({ art: "gruppe", g })}><PenLine className="w-4 h-4" /></button>}
+                {ich.rolle === "admin" && !istKonzept && !g.app_key && (() => { const grund = gruppeLoeschbar(g, d.bereiche.find((b) => b.id === g.bereich_id), alle, konzeptId); return (
+                  <button type="button" className="p-1 rounded text-slate-400 hover:text-red-600 disabled:opacity-40 disabled:hover:text-slate-400" disabled={!!grund} title={grund || "Leere Gruppe löschen"} aria-label={`Gruppe ${g.name} löschen${grund ? ` – nicht möglich: ${grund}` : ""}`} onClick={() => setDlgA({ art: "gruppe-weg", g })}><Trash2 className="w-4 h-4" /></button>); })()}</h2>
               {g.app_key && <div className="text-xs text-slate-500">Menüpunkt in der App: <code>{g.app_key}</code></div>}
               <div className="flex items-center gap-1.5 text-sm text-slate-500 mt-1"><Bot className="w-4 h-4" />Werkstatt {g.name} · <code className="text-xs">docs/gruppen/{g.id}.md</code></div>
             </div>
@@ -484,6 +487,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
       {dlgA?.art === "obergruppe" && <NeueObergruppe d={alle} toast={toast} onClose={() => setDlgA(null)} onFertig={() => alle.holen?.()} />}
       {dlgA?.art === "bereich" && <Umbenennen titel="Obergruppe umbenennen" alt={dlgA.b.name} onClose={() => setDlgA(null)} onSpeichern={async (n) => { const { error } = await supabase.rpc("ws_bereich_aendern", { p_bereich: dlgA.b.id, p_name: n, p_reihe: null }); if (error) toast(fehler(error)); else { setDlgA(null); await alle.holen?.(); } }} />}
       {dlgA?.art === "gruppe" && <Umbenennen titel="Gruppe umbenennen" alt={dlgA.g.name} onClose={() => setDlgA(null)} onSpeichern={async (n) => { const { error } = await supabase.rpc("ws_gruppe_umbenennen", { p_gruppe: dlgA.g.id, p_name: n }); if (error) toast(fehler(error)); else { setDlgA(null); await alle.holen?.(); } }} />}
+      {dlgA?.art === "gruppe-weg" && <GruppeLoeschen g={dlgA.g} onClose={() => setDlgA(null)} onLoeschen={async () => { const { error } = await supabase.rpc("ws_gruppe_loeschen", { p_gruppe: dlgA.g.id }); if (error) toast(fehler(error)); else { toast(`Gruppe „${dlgA.g.name}“ gelöscht`); setDlgA(null); setSel({ g: konzeptId || null, f: null }); await alle.holen?.(); } }} />}
       {dlg?.art === "loeschen" && <Loeschen f={dlg.f} g={g} ich={ich} toast={toast} onClose={() => setDlg(null)} />}
       {dlg?.art === "verschieben" && <Verschieben f={dlg.f} d={alle} onClose={() => setDlg(null)} onWahl={async (gid) => { setDlg(null); await verschiebe(dlg.f.id, gid); setSel({ g: g.id, f: null }); }} />}
     </>
@@ -627,29 +631,6 @@ function ErlaubnisKarte({ e, g, kann, onEntscheid }) {
         <button type="button" className={`${ghost} h-8`} onClick={() => onEntscheid(e, "abgelehnt")}>Ablehnen</button>
       </div> : <div className="text-xs text-slate-500">Erlauben darf der Admin oder wer das Recht „Freigeben“ hat.</div>}
     </div>
-  );
-}
-
-function FreigabeKnopf({ a, onJa, ohneInfo }) {
-  const [frag, setFrag] = useState(false);
-  const lokal = ohneInfo ? null : a.pruefung?.lokal;
-  if (!frag) return (
-    <div className="flex flex-col gap-1.5">
-      {lokal && <span className={`text-xs ${lokal.ergebnis === "gruen" ? "text-green-700 dark:text-green-400" : "text-red-600"}`}>Bauen & Tests am PC: {lokal.ergebnis === "gruen" ? "grün" : "rot"}{lokal.befund ? ` · ${lokal.befund.split("\n")[0]}` : ""}</span>}
-      <button type="button" className={`${btn} h-9 text-sm self-start`} onClick={() => setFrag(true)}><Check className="w-4 h-4" />Freigeben</button>
-    </div>);
-  return (
-    <div className="flex flex-col gap-2"><span>Auftrag #{a.id} freigeben? Danach läuft die Sicherheitsprüfung automatisch; live geht erst etwas, wenn du zusammenführst und die Feature-Prüfung grün ist.</span>
-      <div className="flex gap-2"><button type="button" className={`${btn} h-9 text-sm`} onClick={onJa}>Ja, freigeben</button><button type="button" className={`${ghost} h-9`} onClick={() => setFrag(false)}>Abbrechen</button></div></div>
-  );
-}
-
-function ZusammenKnopf({ a, onJa }) {
-  const [frag, setFrag] = useState(false);
-  if (!frag) return <button type="button" className={`${btn} h-9 text-sm self-start`} onClick={() => setFrag(true)}><GitMerge className="w-4 h-4" />Zusammenführen</button>;
-  return (
-    <div className="flex flex-col gap-2"><span>Auftrag #{a.id} mit dem neuesten Stand zusammenführen? Das ganze Feature wird in einer Testfassung geprüft und erst bei Grün live geschaltet.</span>
-      <div className="flex gap-2"><button type="button" className={`${btn} h-9 text-sm`} onClick={onJa}>Ja, zusammenführen</button><button type="button" className={`${ghost} h-9`} onClick={() => setFrag(false)}>Abbrechen</button></div></div>
   );
 }
 

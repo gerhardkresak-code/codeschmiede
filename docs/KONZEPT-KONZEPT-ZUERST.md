@@ -24,3 +24,18 @@ Antworten (17:55): Aufgaben der Chat-Spalte → Gruppe Konzept · neue **und** b
 ## Ergänzung 18:33 – Konzept-Dokument
 „Konzept hat keine Gruppen und/oder Features. Hier schreibt man nur, und alles Relevante wird ins Wissen und als Konzept gespeichert.“
 Antwort: Konzept-Dokument. Umsetzung: Ansicht „Konzept-Dokument“ im Konzept-Arbeitsplatz, automatisch aus `ws_wissen`, Download als `.md`.
+
+## Ergänzung 0.9.14 (26.10.2026 08:07) – Der allgemeine Chat läuft über Konzept, die KI erledigt die Arbeit
+**Anweisung Gerhard:** „Der allgemeine Chat wie hier bei dir soll über Konzept laufen.“ Entscheidung: „Der eingestellte KI-Anbieter erledigt das.“
+
+- Der Chat in der Gruppe **Konzept** ist der allgemeine Chat zum Projekt – Grundkonzept und jedes neue Vorhaben. Es antwortet der KI-Anbieter, der in der
+  Codeschmiede für „Konzept“ eingestellt ist (`kiAntwort(projekt, "konzept", …)`).
+- **Rückfragen zum Anklicken:** Die KI beendet die Antwort mit `FRAGEN: [{"frage","optionen":[…]}]` (1–4 Fragen, je 2–5 Antworten, Empfehlung zuerst).
+  In der Codeschmiede erscheinen die Antworten als Knöpfe, dazu ein Feld für eine eigene Antwort; „Antworten senden“ schickt alle gesammelt.
+- **Aufträge selbst anlegen:** Ist alles geklärt, endet die Antwort mit `AUFTRAEGE: [{gruppe_id, feature_id, titel, text, konzept}]` (1–5, keine offenen
+  Punkte). Die Werkstatt legt sie gleich nach der Antwort an (`ws_konzept_auftraege_anlegen`, Datenbank 0048) – nur aus dem geprüften Vorschlag, nur als die
+  Person, die gefragt hat, mit deren normalen Rechten (Recht „Aufträge“ je Gruppe, Texter nur Text-Aufträge), höchstens 15 je Stunde. Das Konzept hängt am
+  Auftragstext. Klappt das Anlegen nicht (Rechte, Grenze, Gruppe inzwischen geändert), bleibt die Karte mit „Aufträge anlegen“ stehen.
+- **Stand im Chat:** Die Karte zeigt je Auftrag den Stand (In Arbeit, Rückfrage, Bereit zur Freigabe …). **Freigeben** und **Zusammenführen** bleiben Klicks
+  des Admins – direkt auf der Karte, mit derselben Rückfrage wie in der Zentrale (`web/src/Auftragsknoepfe.jsx`).
+- Außerhalb des Konzepts gilt weiter: höchstens ein Auftrag je Antwort, angelegt erst per Klick.

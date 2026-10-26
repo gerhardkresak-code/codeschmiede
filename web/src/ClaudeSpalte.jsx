@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, Send, Loader2, ClipboardList, Check, X, ChevronDown, ChevronUp, BookOpen } from "lucide-react";
+import { Bot, Send, Loader2, ClipboardList, Check, X, ChevronDown, ChevronUp, BookOpen, HelpCircle, Hammer } from "lucide-react";
+import { FreigabeKnopf, ZusammenKnopf } from "./Auftragsknoepfe";
 import { supabase } from "./supabase";
 import { useKiName } from "./kiName";
 import { Markdown } from "./Markdown";
 import { MitErwaehnung } from "./Bezuege";
 
 // Chat mit Claude – seit 2026-10-23 18:06 (Entwurf „Konzept zuerst“) im Konzept-Arbeitsplatz statt als Spalte auf jeder Seite.
-// Persönliches Gespräch; Claude antwortet über die eigene Werkstatt (Abo) und liest das Projekt nur (nichts ändern, nichts ausführen).
-// Soll gebaut werden, schlägt Claude einen Auftrag vor – angelegt wird er erst per Klick, mit deinen normalen Rechten.
+// Persönliches Gespräch; die eingestellte KI antwortet über die eigene Werkstatt und liest das Projekt nur (nichts ändern, nichts ausführen).
+// Seit 0.9.14 (Anweisung Gerhard 26.10.2026 08:07, „der allgemeine Chat wie hier bei dir“, „der eingestellte KI-Anbieter erledigt das“):
+// Rückfragen zum Anklicken (FRAGEN); ist alles geklärt, legt die KI die Aufträge selbst an (AUFTRAEGE, mit deinen normalen Rechten, Datenbank 0048).
+// Freigeben und Zusammenführen bleiben deine Klicks – direkt hier im Chat.
 const btn = "inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-sm font-semibold";
 const ghost = "inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800";
 const fehler = (e) => (e?.message || "Unbekannter Fehler").replace(/^.*?ERROR:\s*/, "");
@@ -50,12 +53,12 @@ export default function ClaudeChat({ d, ich, ort = "konzept", kontext, toast, le
   return (
     <div className="flex flex-col min-w-0 min-h-[520px] max-h-[calc(100vh-180px)]" aria-label={`Chat mit ${ki.name}`}>
       <div className="flex-1 overflow-y-auto p-3 space-y-2.5 text-sm" aria-live="polite">
-        {!liste.length && (leer || <p className="text-slate-500">Hier besprecht ihr das Grundkonzept, bevor gebaut wird. Claude liest im Projekt nach, ändert aber nichts. Geklärte Entscheidungen bietet Claude zum Übernehmen ins Wissen an.</p>)}
+        {!liste.length && (leer || <p className="text-slate-500">Dein Chat zum Projekt: Hier besprecht ihr das Grundkonzept und jedes neue Vorhaben, bevor gebaut wird. {ki.name} liest im Projekt nach, stellt Rückfragen zum Anklicken und legt die Aufträge selbst an, sobald alles geklärt ist – du gibst danach nur frei und führst zusammen.</p>)}
         {liste.map((m) => m.frage_id ? (
           <div key={m.id} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-2.5 max-w-[92%]">
             <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Bot className="w-3.5 h-3.5" />{ki.von(m.ki)} · {zeit(m.erstellt)}</div>
             <Markdown text={m.text} klein />
-            {m.vorschlag && <Vorschlag m={m} d={d} ich={ich} kann={fragen[m.frage_id]?.von === ich.id} toast={toast} />}
+            {m.vorschlag && <Vorschlag m={m} d={d} ich={ich} kann={fragen[m.frage_id]?.von === ich.id} toast={toast} onAntwort={schicke} sperre={wartet || senden} />}
           </div>
         ) : (
           <div key={m.id} className="ml-auto rounded-xl bg-emerald-50 dark:bg-emerald-950/50 p-2.5 max-w-[86%]">
@@ -69,7 +72,7 @@ export default function ClaudeChat({ d, ich, ort = "konzept", kontext, toast, le
       <form className="border-t border-slate-200 dark:border-slate-800 p-2.5 flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); schicke(); }}>
         <div className="flex flex-wrap gap-1">{IDEEN.map((i) => <button key={i} type="button" disabled={senden} onClick={() => schicke(i)} className="text-xs rounded-full border border-slate-300 dark:border-slate-700 px-2 py-0.5 hover:bg-slate-50 dark:hover:bg-slate-800">{i}</button>)}</div>
         <div className="flex gap-1.5">
-          <div className="flex-1 min-w-0"><MitErwaehnung value={text} onChange={setText} features={d.features.filter((x) => !x.ausgebaut)} rows={2} maxLength={8000} placeholder="Idee, Frage oder Entscheidung zum Konzept … (@ für ein Feature)"
+          <div className="flex-1 min-w-0"><MitErwaehnung value={text} onChange={setText} features={d.features.filter((x) => !x.ausgebaut)} rows={2} maxLength={8000} placeholder="Idee, Vorhaben, Frage oder Entscheidung … (@ für ein Feature)"
             className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 py-1.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); schicke(); } }} /></div>
           <button className={`${btn} self-end`} disabled={senden || !text.trim()} title="Senden">{senden ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}</button>
@@ -135,7 +138,79 @@ function FeatureVorschlag({ m, d, ich, kann, toast }) {
 
 function Vorschlag(props) {
   const v = props.m.vorschlag;
+  if (v?.fragen) return <FragenVorschlag {...props} />;
+  if (v?.auftraege) return <AuftraegeVorschlag {...props} />;
   return v?.wissen ? <WissenVorschlag {...props} /> : v?.feature_neu || v?.bezug ? <FeatureVorschlag {...props} /> : <AuftragVorschlag {...props} />;
+}
+
+// Rückfragen zum Anklicken (0.9.14): je Frage eine Antwort wählen oder selbst schreiben, dann gesammelt senden
+function FragenVorschlag({ m, kann, toast, onAntwort, sperre }) {
+  const liste = m.vorschlag.fragen; const [wahl, setWahl] = useState({}); const [eigen, setEigen] = useState({}); const [busy, setBusy] = useState(false);
+  const antwort = (i) => (eigen[i]?.trim() || wahl[i] || "");
+  const fertig = liste.every((_, i) => antwort(i));
+  const senden = async () => {
+    setBusy(true);
+    const text = `Meine Antworten:\n${liste.map((q, i) => `- ${q.frage} → ${antwort(i).replace(/\s*\(Empfohlen\)\s*$/i, "")}`).join("\n")}`;
+    await onAntwort(text);
+    const { error } = await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "uebernommen" });
+    if (error) toast(fehler(error));
+    setBusy(false);
+  };
+  const erledigt = !!m.entscheidung;
+  return (
+    <div className="mt-2 rounded-lg border border-sky-300 dark:border-sky-800 bg-white dark:bg-slate-900 p-2 grid gap-2.5">
+      <div className="text-xs font-bold text-sky-800 dark:text-sky-300 flex items-center gap-1"><HelpCircle className="w-3.5 h-3.5" />{erledigt ? "Beantwortet" : liste.length > 1 ? `${liste.length} Rückfragen` : "Rückfrage"}</div>
+      {liste.map((q, i) => (
+        <fieldset key={i} className="grid gap-1.5" disabled={erledigt || !kann}>
+          <legend className="font-semibold text-sm mb-1">{q.frage}</legend>
+          <div className="flex flex-wrap gap-1.5">
+            {q.optionen.map((o) => { const an = !eigen[i]?.trim() && wahl[i] === o; return (
+              <button key={o} type="button" aria-pressed={an} onClick={() => { setWahl({ ...wahl, [i]: o }); setEigen({ ...eigen, [i]: "" }); }}
+                className={`text-left text-xs rounded-lg border px-2.5 py-1.5 ${an ? "border-sky-600 bg-sky-50 text-sky-900 dark:bg-sky-950 dark:text-sky-100 ring-1 ring-sky-600" : "border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"} ${/\(Empfohlen\)\s*$/i.test(o) ? "font-semibold" : ""}`}>{o}</button>); })}
+          </div>
+          {!erledigt && kann && <input value={eigen[i] || ""} onChange={(e) => setEigen({ ...eigen, [i]: e.target.value })} maxLength={300} placeholder="… oder eigene Antwort"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 py-1 text-xs" aria-label={`Eigene Antwort: ${q.frage}`} />}
+        </fieldset>))}
+      {!erledigt && kann && <div className="flex gap-1.5"><button type="button" className={btn} disabled={!fertig || busy || sperre} onClick={senden}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}Antworten senden</button>
+        {!fertig && <span className="text-xs text-slate-500 self-center">Bitte jede Frage beantworten</span>}</div>}
+    </div>);
+}
+
+// Aufträge, die die KI im Konzept-Gespräch selbst anlegt (0.9.14): Stand je Auftrag, Freigeben und Zusammenführen gleich hier
+const STAND_TEXT = { wartet: "Wartet auf die Werkstatt", laeuft: "In Arbeit", frage: "Rückfrage an dich", nacharbeit: "Nacharbeit", freigabe: "Bereit zur Freigabe", sicherheit: "Sicherheitsprüfung",
+  zusammen: "Bereit zum Zusammenführen", feature: "Feature-Prüfung", wissen: "Live", erledigt: "Erledigt", abgebrochen: "Abgebrochen" };
+function AuftraegeVorschlag({ m, d, ich, kann, toast }) {
+  const v = m.vorschlag; const ids = Array.isArray(v.angelegt) ? v.angelegt : []; const [busy, setBusy] = useState(false); const [offen, setOffen] = useState(false);
+  const anlegen = async () => {
+    setBusy(true);
+    const { data, error } = await supabase.rpc("ws_konzept_auftraege_anlegen", { p_antwort: m.id });
+    setBusy(false);
+    if (error) toast(fehler(error)); else toast(`${data?.length || 0} Auftrag/Aufträge angelegt`);
+  };
+  const verwerfen = async () => { const { error } = await supabase.rpc("ws_claude_chat_entscheiden", { p_antwort: m.id, p_entscheidung: "abgelehnt" }); if (error) toast(fehler(error)); };
+  const rpc = async (fn, a, ok) => { const { error } = await supabase.rpc(fn, { p_auftrag: a.id }); toast(error ? fehler(error) : ok); };
+  const admin = ich.rolle === "admin";
+  return (
+    <div className="mt-2 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 p-2 grid gap-2">
+      <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1"><Hammer className="w-3.5 h-3.5" />
+        {ids.length ? `${ids.length} Auftrag${ids.length > 1 ? "e" : ""} angelegt` : m.entscheidung === "abgelehnt" ? "Verworfen" : `${v.auftraege.length} Auftrag${v.auftraege.length > 1 ? "e" : ""} – noch nicht angelegt`}</div>
+      {v.auftraege.map((x, i) => {
+        const g = d.gruppen.find((y) => y.id === x.gruppe_id); const f = x.feature_id ? d.features.find((y) => y.id === x.feature_id) : null;
+        const a = ids[i] ? d.auftraege.find((y) => y.id === Number(ids[i])) : null;
+        return (
+          <div key={i} className="rounded-lg border border-slate-200 dark:border-slate-800 p-2 grid gap-1.5">
+            <div className="flex items-start gap-2"><div className="min-w-0"><p className="font-semibold">{ids[i] ? `#${ids[i]} · ` : ""}{x.titel}</p>
+              <p className="text-xs text-slate-500">{g?.name || x.gruppe_id}{f ? ` › ${f.name}` : ""}</p></div>
+              {a && <span className={`ml-auto shrink-0 text-[11px] font-semibold rounded-full px-2 py-0.5 ${["freigabe", "zusammen", "frage"].includes(a.stand) ? "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200" : ["wissen", "erledigt"].includes(a.stand) ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300" : a.stand === "nacharbeit" ? "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>{STAND_TEXT[a.stand] || a.stand}</span>}</div>
+            {offen && <p className="whitespace-pre-wrap text-xs bg-slate-50 dark:bg-slate-950 rounded p-2 max-h-40 overflow-auto">{x.text}</p>}
+            {a && admin && a.stand === "freigabe" && <FreigabeKnopf a={a} onJa={() => rpc("ws_freigeben", a, `Auftrag #${a.id} freigegeben – Sicherheitsprüfung startet`)} />}
+            {a && admin && a.stand === "zusammen" && <ZusammenKnopf a={a} onJa={() => rpc("ws_zusammenfuehren", a, `Auftrag #${a.id}: Zusammenführen gestartet`)} />}
+            {a && a.stand === "frage" && <p className="text-xs text-amber-700 dark:text-amber-300">Die Werkstatt hat eine Rückfrage – zu finden in der Gruppe „{g?.name || x.gruppe_id}“.</p>}
+          </div>);
+      })}
+      <button type="button" onClick={() => setOffen(!offen)} className="text-xs text-slate-500 inline-flex items-center gap-1 justify-self-start">{offen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}Auftragstexte {offen ? "ausblenden" : "anzeigen"}</button>
+      {!ids.length && !m.entscheidung && kann && <div className="flex gap-1.5"><button type="button" className={btn} disabled={busy} onClick={anlegen}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Aufträge anlegen</button><button type="button" className={ghost} onClick={verwerfen}><X className="w-4 h-4" />Verwerfen</button></div>}
+    </div>);
 }
 
 function AuftragVorschlag({ m, d, ich, kann, toast }) {

@@ -28,3 +28,21 @@ test("Konzept-Wissen: Länge begrenzt, keine Steuerzeilen, unbekannte Kapitel ig
   assert.doesNotMatch(t, /^ERGEBNIS-PR/m); assert.doesNotMatch(t, /böse/);
   assert.equal(assistentAntwort('x\nWISSEN: {"kapitel":"constructor","text":"abc"}').vorschlag, null);
 });
+test("Konzept-Chat (0.9.14): FRAGEN zum Anklicken und AUFTRAEGE, die die KI selbst anlegt", async () => {
+  const { assistentAntwort, assistentPrompt } = await import("../lib/assistent.mjs");
+  const f = assistentAntwort('Zwei Fragen noch.\nFRAGEN: [{"frage":"Wer darf löschen?","optionen":["Nur Admin (Empfohlen)","Alle","Alle"]},{"frage":"Nur eine?","optionen":["ja"]}]');
+  assert.deepEqual(f.vorschlag, { fragen: [{ frage: "Wer darf löschen?", optionen: ["Nur Admin (Empfohlen)", "Alle"] }] });
+  assert.equal(f.text, "Zwei Fragen noch.");
+  const a = assistentAntwort('Ich lege an.\nAUFTRAEGE: [{"gruppe_id":"kader","feature_id":null,"titel":"Kader sortieren","text":"Sortieren nach Position im Kader","konzept":{"ziel":"Ordnung","offen":[]}},{"gruppe_id":"erp","titel":"x","text":"zu kurz?"}]');
+  assert.equal(a.vorschlag.auftraege.length, 1);
+  assert.deepEqual(a.vorschlag.auftraege[0], { gruppe_id: "kader", feature_id: null, titel: "Kader sortieren", text: "Sortieren nach Position im Kader", konzept: { ziel: "Ordnung" } });
+  // offene Punkte → nichts anlegen
+  assert.equal(assistentAntwort('x\nAUFTRAEGE: [{"gruppe_id":"kader","titel":"Kader sortieren","text":"Sortieren nach Position","konzept":{"offen":["Wer?"]}}]').vorschlag, null);
+  // höchstens 5, gesamt unter 16 KB
+  const viele = Array.from({ length: 8 }, (_, i) => ({ gruppe_id: "g", titel: `Auftrag ${i}`, text: "y".repeat(5000), konzept: { ziel: "z".repeat(3000), entscheidungen: Array(20).fill("e".repeat(400)) } }));
+  const v = assistentAntwort(`AUFTRAEGE: ${JSON.stringify(viele)}`).vorschlag;
+  assert.equal(v.auftraege.length, 5); assert.ok(Buffer.byteLength(JSON.stringify(v)) <= 15000);
+  const p = assistentPrompt({ projekt: { name: "TTG" }, ort: "konzept", frage: "Los" });
+  assert.match(p, /FRAGEN: \[/); assert.match(p, /AUFTRAEGE: \[/); assert.doesNotMatch(p, /\(AUFTRAG, FEATURE-NEU/);
+  assert.doesNotMatch(assistentPrompt({ projekt: { name: "TTG" }, ort: "zentrale", frage: "Los" }), /AUFTRAEGE: \[/);
+});

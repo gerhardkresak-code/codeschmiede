@@ -1221,9 +1221,16 @@ async function claudeChat() {
     const aufgabe = f.ort === "konzept" || istKonzeptFrage(f.text, verlauf) ? "konzept" : "chat";
     const { roh, ki } = await kiAntwort(projekt, aufgabe, prompt, { claudeLesenIn: lesenIn || null, dokuLesen: true, frage: f.text });
     const { text, vorschlag } = assistentAntwort(ohneGeheimnisse(roh));
-    const { error: e2 } = await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
+    const { data: antwortId, error: e2 } = await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: text, p_vorschlag: vorschlag });
     if (e2) throw e2;
     await kiVermerken("chat", f.id, ki);
+    // Konzept-Gespräch: die KI „erledigt das“ – geklärte Aufträge gleich anlegen (als die Person, die gefragt hat; Datenbank 0048).
+    // Geht das nicht (Rechte, Grenze, Gruppe geändert), bleibt die Karte mit „Aufträge anlegen“ im Chat stehen.
+    if (vorschlag?.auftraege && antwortId) {
+      const { data: ids, error: e3 } = await db.rpc("ws_konzept_auftraege_anlegen", { p_antwort: antwortId });
+      if (e3) melde("fehler", `Konzept-Aufträge: ${ohneGeheimnisse(e3.message)}`);
+      else melde("status", `Konzept: ${ids?.length || 0} Auftrag/Aufträge angelegt`);
+    }
   } catch (e) {
     await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: `Claude konnte gerade nicht antworten: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 300)}`, p_fehler: true });
   }
