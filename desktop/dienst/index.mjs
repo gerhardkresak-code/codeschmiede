@@ -373,7 +373,10 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
       kind.on("error", (e) => fehl(new Error(e.code === "ENOENT" ? "Claude Code ist auf diesem PC nicht installiert." : e.message)));
       kind.on("close", (code) => Promise.all(offen).then(() => (ende || code === 0 ? fertig() : fehl(new Error(/log ?in|login|not logged/i.test(fehlerText)
         ? "Claude Code ist nicht angemeldet – bitte einmal „claude“ starten und mit deinem Abo anmelden."
-        : /limit/i.test(fehlerText) ? "Abo-Nutzungslimit erreicht – die Werkstatt wartet bis zur Rücksetzung." : `Claude Code beendet (${code}): ${fehlerText.slice(-300)}`)))));
+        : /limit/i.test(fehlerText) ? "Abo-Nutzungslimit erreicht – die Werkstatt wartet bis zur Rücksetzung."
+        // ohne Ausgangscode = von außen beendet (Werkstatt aus/neu gestartet, Programm geschlossen, Update) – Meldung 26.10.2026 („Claude Code beendet (null)“)
+        : code === null ? "Claude Code wurde unterbrochen (Werkstatt aus- oder neu gestartet, Programm geschlossen oder Update). Einfach noch einmal versuchen."
+        : `Claude Code beendet (${code}): ${fehlerText.slice(-300)}`)))));
     });
     await merkeSitzung(auftrag.id, { sitzung, versuch });
     await db.from("ws_verbrauch").insert({ auftrag_id: auftrag.id, projekt_id: projekt.id, modell, kosten_usd: kosten, tokens_ein: ein, tokens_aus: aus, werkstatt_pc: pcId });

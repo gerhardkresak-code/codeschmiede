@@ -479,7 +479,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
         </section>
 
         {f ? <FeatureKurzinfo f={f} g={g} d={d} ich={ich} toast={toast} darfAuftrag={darf(g.bereich_id, "auftraege")} onOeffnen={() => setPlatz(f.id)} onGruppe={() => setSel({ g: g.id, f: null })} onVerschieben={kannVerschieben ? () => setDlg({ art: "verschieben", f }) : null} />
-          : <AuftragsChat g={g} f={null} d={d} ich={ich} darf={darf} toast={toast} kanal="gruppe" />}
+          : <AuftragsChat g={g} f={null} d={d} ich={ich} darf={darf} toast={toast} kanal="gruppe" onKonzept={konzeptId ? () => setSel({ g: konzeptId, f: null }) : undefined} />}
         </>}
       </div>}
       {dlg?.art === "feature" && <NeuesFeature g={g} ich={ich} texter={rolle === "texter"} toast={toast} onClose={() => setDlg(null)} onFertig={(id) => setSel({ g: g.id, f: id })} />}
@@ -494,7 +494,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
   );
 }
 
-function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschmiede", baustein, onBausteinFertig, eingebettet }) {
+function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschmiede", baustein, onBausteinFertig, eingebettet, onKonzept }) {
   const auftraege = d.auftraege.filter((a) => (f ? a.feature_id === f.id : a.gruppe_id === g.id));   // je Feature: Verlauf bleibt beim Verschieben
   const ids = auftraege.map((a) => a.id);
   const { nachrichten, log, erlaubnisse } = useAuftragDetails(ids);
@@ -509,6 +509,20 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
   const verlaufRef = useRef(null);
   useEffect(() => { const el = verlaufRef.current; if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }, [nachrichten.length, log.length, tab, g.id, f?.id]);
 
+  // Fragen gehen an den allgemeinen Chat im Konzept (Anweisung Gerhard 26.10.2026 08:07 – vorher wurde jede Frage hier zum Bau-Auftrag):
+  // die eingestellte KI liest nach und antwortet; wird etwas gebaut, legt sie dort die Aufträge an.
+  const istFrage = !frage && !baustein && /\?\s*$/.test(text.trim());
+  const fragen = async () => {
+    const t = text.trim(); if (!t) return; setBusy(true);
+    try {
+      const herkunft = f ? `Feature „${f.name}“ (${f.id}) in der Gruppe „${g.name}“` : `Gruppe „${g.name}“`;
+      const { error } = await supabase.from("ws_claude_chat").insert({ projekt_id: d.projektId, ort: "konzept", text: `Frage zu ${herkunft}: ${t}`.slice(0, 8000),
+        kontext: `Gerhard fragt aus der ${herkunft}${g.app_key ? `, Menüpunkt der App: ${g.app_key}` : ""}. Nur beantworten – gebaut wird erst, wenn er es bestätigt.`.slice(0, 6000) });
+      if (error) throw error;
+      setText(""); toast("Frage an den Konzept-Chat gesendet – die Antwort kommt dort");
+      onKonzept?.();
+    } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
+  };
   const senden = async () => {
     const t = text.trim(); if (!t) return; setBusy(true);
     try {
@@ -595,9 +609,12 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
       )}
       {kannAuftrag ? (
         <div className="border-t border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-2">
-          <MitErwaehnung id="ws-auftrag" className={`${input} min-h-[72px]`} value={text} onChange={setText} features={d.features.filter((x) => !x.ausgebaut)} placeholder={frage ? "Antwort auf die Rückfrage …" : f ? `Was soll sich bei „${f.name}“ ändern? (@ verweist auf ein Feature als Vorlage)` : `Was soll sich in ${g.name} ändern?`} aria-label="Nachricht" />
-          <div className="flex items-center justify-between gap-2 flex-wrap"><span className="text-xs text-slate-500">{frage ? "Antwort geht an den laufenden Auftrag" : laufend ? "Neuer Auftrag kommt in die Warteschlange" : "Wird vom nächsten freien Werkstatt-PC übernommen"}</span>
-            <button type="button" className={btn} disabled={busy || !text.trim()} onClick={senden}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}{frage ? "Antworten" : "Senden"}</button></div>
+          <MitErwaehnung id="ws-auftrag" className={`${input} min-h-[72px]`} value={text} onChange={setText} features={d.features.filter((x) => !x.ausgebaut)} placeholder={frage ? "Antwort auf die Rückfrage …" : f ? `Frage oder Änderung zu „${f.name}“ … (@ verweist auf ein Feature als Vorlage)` : `Frage oder Änderung zu ${g.name} …`} aria-label="Nachricht" />
+          <div className="flex items-center justify-between gap-2 flex-wrap"><span className="text-xs text-slate-500">{frage ? "Antwort geht an den laufenden Auftrag" : istFrage ? "Klingt nach einer Frage – „Fragen“ beantwortet sie im Konzept-Chat, ohne etwas zu bauen" : laufend ? "Neuer Auftrag kommt in die Warteschlange" : "„Als Auftrag“ wird vom nächsten freien Werkstatt-PC gebaut"}</span>
+            <div className="flex gap-2 flex-wrap">
+              {!frage && !baustein && <button type="button" className={istFrage ? btn : ghost} disabled={busy || !text.trim()} onClick={fragen} title="Die eingestellte KI antwortet im Konzept-Chat (nur lesen)"><MessageSquare className="w-4 h-4" />Fragen</button>}
+              <button type="button" className={istFrage ? ghost : btn} disabled={busy || !text.trim()} onClick={senden}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}{frage ? "Antworten" : baustein ? "Senden" : "Als Auftrag"}</button>
+            </div></div>
         </div>
       ) : <div className="border-t border-slate-200 dark:border-slate-800 p-4 text-xs text-slate-500">Für diesen Bereich hast du kein Recht, Aufträge zu geben.</div>}
     </aside>
