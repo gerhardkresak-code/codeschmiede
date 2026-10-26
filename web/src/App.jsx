@@ -402,7 +402,7 @@ function Zentrale({ d: alle, ich, toast, nurGlobal = false, onDesigner, start })
       </div>
       {station ? <StationsUebersicht station={station} d={d} darf={darf} toast={toast} onSchliessen={() => setStation(null)} onOeffne={(fid) => { setStation(null); setPlatz(fid); }} onGruppe={(gid) => { setStation(null); setSel({ g: gid, f: null }); }} />
       : platzF ? <FeatureArbeitsplatz f={platzF} g={platzG} d={d} ich={ich} darf={darf} toast={toast} onZurueck={() => setPlatz(null)} onLoeschen={() => setDlg({ art: "loeschen", f: platzF })} />
-      : <div className="grid gap-5 grid-cols-[minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_400px] items-start">
+      : <div className="grid gap-5 grid-cols-[minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_400px] items-start">
         <nav className={`${card} overflow-hidden`} aria-label="Bereiche und Gruppen">
           {d.bereiche.map((b) => (
             <div key={b.id} className="border-t first:border-t-0 border-slate-200 dark:border-slate-800 pb-1">
