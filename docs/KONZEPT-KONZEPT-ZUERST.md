@@ -40,3 +40,8 @@ Antwort: Konzept-Dokument. Umsetzung: Ansicht „Konzept-Dokument“ im Konzept-
 - **Stand im Chat:** Die Karte zeigt je Auftrag den Stand (In Arbeit, Rückfrage, Bereit zur Freigabe …). **Freigeben** und **Zusammenführen** bleiben Klicks
   des Admins – direkt auf der Karte, mit derselben Rückfrage wie in der Zentrale (`web/src/Auftragsknoepfe.jsx`).
 - Außerhalb des Konzepts gilt weiter: höchstens ein Auftrag je Antwort, angelegt erst per Klick.
+
+## Ergänzung 09:11 – Immer zuerst im Chat besprechen
+**Neue Anweisung Gerhard:** „Ich will immer zuerst im Chat alles besprechen.“ Im Gruppen- und Feature-Chat gibt es deshalb nur noch „Besprechen“: Die Nachricht geht
+mit Herkunft (Gruppe, Feature, Menüpunkt) in den Konzept-Chat; dort klärt die eingestellte KI und legt die Aufträge erst an, wenn alles geklärt ist.
+Direkt an die Werkstatt gehen nur Antworten auf Rückfragen eines laufenden Auftrags und Baustein-Aufträge aus dem App-Designer.

@@ -1584,6 +1584,16 @@ async function start() {
   try { const { data } = await db.from("ws_ki_kopplung").select("anbieter, anfragen_heute, anfragen_tag").eq("pc_id", pcId); for (const z of data || []) if (z.anfragen_tag) anfragen[z.anbieter] = { tag: z.anfragen_tag, n: z.anfragen_heute || 0 }; } catch { /* Spalten erst ab Datenbank 0029 */ }
   setInterval(() => aboAusStatuszeile().catch(() => {}), 60 * 1000);
   melde("status", "Werkstatt bereit");
+  // Beim Start: Aufträge, die auf diesem PC liefen, als unterbrochen melden – sonst hängen sie in „In Arbeit“ und lassen sich nicht abbrechen
+  // (Meldung Gerhard 26.10.2026: Auftrag #18 hing nach einem Neustart der Werkstatt)
+  try {
+    const { data: haengt } = await db.from("ws_auftraege").select("id, hand").eq("werkstatt_pc", pcId).eq("stand", "laeuft");
+    for (const a of haengt || []) {
+      if (a.hand) { await db.from("ws_auftraege").update({ stand: "abgebrochen" }).eq("id", a.id); continue; }
+      await nachricht(a.id, "frage", "Die Werkstatt wurde neu gestartet, während ich an diesem Auftrag gearbeitet habe. Soll ich weitermachen, oder willst du den Auftrag abbrechen?");
+      await db.from("ws_auftraege").update({ stand: "frage" }).eq("id", a.id);
+    }
+  } catch { /* nächster Start versucht es wieder */ }
   setInterval(() => lebenszeichen(true).catch(() => {}), 60 * 1000);
   // Abgleich im Hintergrund (alle 10 Min.), unabhängig von laufenden Aufträgen
   const abgleich = () => projektAbgleich().catch((e) => melde("fehler", ohneGeheimnisse(e?.message || String(e))));

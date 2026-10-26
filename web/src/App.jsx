@@ -511,7 +511,9 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
 
   // Fragen gehen an den allgemeinen Chat im Konzept (Anweisung Gerhard 26.10.2026 08:07 – vorher wurde jede Frage hier zum Bau-Auftrag):
   // die eingestellte KI liest nach und antwortet; wird etwas gebaut, legt sie dort die Aufträge an.
-  const istFrage = !frage && !baustein && /\?\s*$/.test(text.trim());
+  // Neue Anweisung Gerhard 26.10.2026 09:11: „Ich will immer zuerst im Chat alles besprechen“ – jede Nachricht geht in den Konzept-Chat;
+  // Aufträge legt dort die KI an, wenn alles geklärt ist. Direkt hier bleiben nur Antworten auf Rückfragen und Baustein-Aufträge.
+  const istFrage = !frage && !baustein;
   const fragen = async () => {
     const t = text.trim(); if (!t) return; setBusy(true);
     try {
@@ -519,7 +521,7 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
       const { error } = await supabase.from("ws_claude_chat").insert({ projekt_id: d.projektId, ort: "konzept", text: `Frage zu ${herkunft}: ${t}`.slice(0, 8000),
         kontext: `Gerhard fragt aus der ${herkunft}${g.app_key ? `, Menüpunkt der App: ${g.app_key}` : ""}. Nur beantworten – gebaut wird erst, wenn er es bestätigt.`.slice(0, 6000) });
       if (error) throw error;
-      setText(""); toast("Frage an den Konzept-Chat gesendet – die Antwort kommt dort");
+      setText(""); toast("Im Konzept-Chat – dort wird besprochen, die Antwort kommt gleich");
       onKonzept?.();
     } catch (e) { toast(fehler(e)); } finally { setBusy(false); }
   };
@@ -610,11 +612,9 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
       {kannAuftrag ? (
         <div className="border-t border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-2">
           <MitErwaehnung id="ws-auftrag" className={`${input} min-h-[72px]`} value={text} onChange={setText} features={d.features.filter((x) => !x.ausgebaut)} placeholder={frage ? "Antwort auf die Rückfrage …" : f ? `Frage oder Änderung zu „${f.name}“ … (@ verweist auf ein Feature als Vorlage)` : `Frage oder Änderung zu ${g.name} …`} aria-label="Nachricht" />
-          <div className="flex items-center justify-between gap-2 flex-wrap"><span className="text-xs text-slate-500">{frage ? "Antwort geht an den laufenden Auftrag" : istFrage ? "Klingt nach einer Frage – „Fragen“ beantwortet sie im Konzept-Chat, ohne etwas zu bauen" : laufend ? "Neuer Auftrag kommt in die Warteschlange" : "„Als Auftrag“ wird vom nächsten freien Werkstatt-PC gebaut"}</span>
-            <div className="flex gap-2 flex-wrap">
-              {!frage && !baustein && <button type="button" className={istFrage ? btn : ghost} disabled={busy || !text.trim()} onClick={fragen} title="Die eingestellte KI antwortet im Konzept-Chat (nur lesen)"><MessageSquare className="w-4 h-4" />Fragen</button>}
-              <button type="button" className={istFrage ? ghost : btn} disabled={busy || !text.trim()} onClick={senden}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}{frage ? "Antworten" : baustein ? "Senden" : "Als Auftrag"}</button>
-            </div></div>
+          <div className="flex items-center justify-between gap-2 flex-wrap"><span className="text-xs text-slate-500">{frage ? "Antwort geht an den laufenden Auftrag" : istFrage ? "Wird zuerst im Konzept-Chat besprochen – gebaut wird erst, wenn alles geklärt ist" : "Wird vom nächsten freien Werkstatt-PC übernommen"}</span>
+            {istFrage ? <button type="button" className={btn} disabled={busy || !text.trim()} onClick={fragen} title="Die eingestellte KI antwortet im Konzept-Chat und legt Aufträge erst an, wenn alles geklärt ist">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}Besprechen</button>
+              : <button type="button" className={btn} disabled={busy || !text.trim()} onClick={senden}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}{frage ? "Antworten" : "Senden"}</button>}</div>
         </div>
       ) : <div className="border-t border-slate-200 dark:border-slate-800 p-4 text-xs text-slate-500">Für diesen Bereich hast du kein Recht, Aufträge zu geben.</div>}
     </aside>
@@ -622,7 +622,8 @@ function AuftragsChat({ g, f, d, ich, darf, toast, onLoeschen, kanal = "codeschm
 }
 
 // Auftrag abbrechen (Datenbank 0023, Gerhard 2026-10-23 19:08): zweimal klicken, damit nichts aus Versehen abgebrochen wird
-const ABBRECHBAR = ["wartet", "frage", "nacharbeit", "freigabe"];
+// „laeuft“ auch: hängt ein Auftrag (Werkstatt neu gestartet, 3 Min. ohne Lebenszeichen), lässt er sich abbrechen – die Datenbank prüft (0049)
+const ABBRECHBAR = ["wartet", "laeuft", "frage", "nacharbeit", "freigabe"];
 function AbbrechenKnopf({ a, toast }) {
   const [sicher, setSicher] = useState(false); const [busy, setBusy] = useState(false);
   useEffect(() => { if (!sicher) return undefined; const t = setTimeout(() => setSicher(false), 6000); return () => clearTimeout(t); }, [sicher]);
