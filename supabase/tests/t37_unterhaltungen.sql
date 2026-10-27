@@ -67,6 +67,20 @@ update ws_abo_limits set abruf_erledigt=now(), abruf_art='abruf', abruf_hinweis=
 select abruf_art, quelle, abruf_angefordert is not null as angefordert from ws_abo_limits where benutzer_id=auth.uid();
 \echo [9] E1 aendert fremde Abo-Zeile nicht (E2 hat keine) und kann abruf_angefordert nicht direkt setzen -> FEHLER
 update ws_abo_limits set abruf_angefordert = now() - interval '1 hour' where benutzer_id=auth.uid();
+\echo [9b] Anhang ohne Pflichtschluessel -> FEHLER
+insert into ws_claude_chat(projekt_id,ort,text,anhaenge) values ('trainer-to-go','konzept','leer','[{"name":"x"}]');
+\echo [9c] Anhaenge entfernen: eigene -> OK und Pfad in Loesch-Warteschlange (1); fremde -> FEHLER
+select ws_chat_anhaenge_entfernen((select id from ws_claude_chat where text='mit Bild'));
+select count(*) warteschlange from ws_chat_dateien_weg;
+:E2
+select ws_chat_anhaenge_entfernen((select max(id) from ws_claude_chat));
+select count(*) e2_sieht_warteschlange from ws_chat_dateien_weg;
+:E1
+\echo [9d] Austragen nur, wenn Datei weg: vorhandene Datei bleibt (0), nach Loeschen (1)
+insert into storage.objects(bucket_id,name) values ('ws-chat','00000000-0000-0000-0000-0000000000e1/trainer-to-go/11111111-1111-1111-1111-111111111111.png');
+select ws_chat_dateien_erledigt(array['00000000-0000-0000-0000-0000000000e1/trainer-to-go/11111111-1111-1111-1111-111111111111.png']) as bleibt;
+delete from storage.objects where name='00000000-0000-0000-0000-0000000000e1/trainer-to-go/11111111-1111-1111-1111-111111111111.png';
+select ws_chat_dateien_erledigt(array['00000000-0000-0000-0000-0000000000e1/trainer-to-go/11111111-1111-1111-1111-111111111111.png']) as erledigt;
 \echo [10] Unterhaltung loeschen entfernt ihre Nachrichten
 delete from ws_unterhaltungen where true;
 select count(*) filter (where unterhaltung_id is not null) as rest from ws_claude_chat;

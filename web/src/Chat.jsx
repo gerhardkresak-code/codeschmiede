@@ -28,6 +28,17 @@ export function dateiTyp(datei) {
   return TYPEN[e] || null;
 }
 
+/** Gelöschte Chat-Anhänge im Speicher entfernen (Lösch-Warteschlange ws_chat_dateien_weg, nur eigene). */
+export async function dateienAufraeumen() {
+  try {
+    const { data } = await supabase.from("ws_chat_dateien_weg").select("pfad").limit(200);
+    const pfade = (data || []).map((x) => x.pfad);
+    if (!pfade.length) return;
+    await supabase.storage.from("ws-chat").remove(pfade);
+    await supabase.rpc("ws_chat_dateien_erledigt", { p_pfade: pfade });
+  } catch { /* beim nächsten Öffnen erneut */ }
+}
+
 /** Unterhaltungen nach Zeit gruppieren (Heute, Gestern, Diese Woche, Älter). */
 export function gruppiereNachZeit(liste, jetzt = new Date()) {
   const tag = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -75,15 +86,14 @@ export default function Chat({ d, ich, toast, start, onFeature }) {
   const anheften = async (u) => { const { error } = await supabase.from("ws_unterhaltungen").update({ angeheftet: !u.angeheftet }).eq("id", u.id); if (error) toast(fehler(error)); };
   const umbenennen = async (u, titel) => { const { error } = await supabase.from("ws_unterhaltungen").update({ titel: titel.slice(0, 120) }).eq("id", u.id); if (error) toast(fehler(error)); };
   const loeschen = async (u) => {
-    // Anhänge im Speicher zuerst entfernen (die Nachrichten löscht die Datenbank mit der Unterhaltung)
-    const { data } = await supabase.from("ws_claude_chat").select("anhaenge").eq("unterhaltung_id", u.id).not("anhaenge", "is", null);
-    const pfade = (data || []).flatMap((m) => (m.anhaenge || []).map((a) => a.pfad)).filter(Boolean);
-    if (pfade.length) await supabase.storage.from("ws-chat").remove(pfade);
+    // Nachrichten löscht die Datenbank mit der Unterhaltung; deren Dateien landen in der Lösch-Warteschlange (0050) und werden gleich entfernt
     const { error } = await supabase.from("ws_unterhaltungen").delete().eq("id", u.id);
     if (error) { toast(fehler(error)); return; }
     toast("Unterhaltung gelöscht");
     if (wahl === u.id) setWahl(KONZEPT);
+    dateienAufraeumen();
   };
+  useEffect(() => { dateienAufraeumen(); }, []);
   const neu = () => { setWahl("neu"); setListeAufHandy(false); };
   const bezuegeUmschalten = () => { const n = !bezuegeAn; setBezuegeAn(n); merken.schreib("cs-chat-bezuege", n ? "1" : "0"); };
 
@@ -183,7 +193,10 @@ function Gespraech({ d, ich, toast, unterhaltung, titel, onAngelegt, bezuegeAn, 
       uid = data.id;
     }
     const { error } = await supabase.from("ws_claude_chat").insert({ projekt_id: d.projektId, ort: "konzept", text: text.slice(0, 8000), unterhaltung_id: uid, ...(anhaenge.length ? { anhaenge } : {}) });
-    if (error) { toast(fehler(error)); return false; }
+    if (error) {
+      if (unterhaltung === "neu") await supabase.from("ws_unterhaltungen").delete().eq("id", uid);   // keine leere Unterhaltung zurücklassen
+      toast(fehler(error)); return false;
+    }
     if (unterhaltung === "neu") onAngelegt(uid); else holen();
     return true;
   };
@@ -217,7 +230,7 @@ function Gespraech({ d, ich, toast, unterhaltung, titel, onAngelegt, bezuegeAn, 
                   <div className="text-xs text-slate-500 mb-1">Du{m.ort !== "konzept" ? ` · aus ${ORT_NAME(m.ort)}` : ""} · {zeit(m.erstellt)}</div>
                   <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-2.5 text-[15px]">
                     <MitMarken text={m.text} features={features} gruppen={gruppen} onFeature={onFeature} />
-                    {Array.isArray(m.anhaenge) && <AnhangListe liste={m.anhaenge} />}
+                    {Array.isArray(m.anhaenge) && <AnhangListe liste={m.anhaenge} m={m} toast={toast} />}
                   </div>
                   {m.stand === "fehler" && <p className="text-xs text-red-600 mt-1">Nicht beantwortet</p>}
                 </div>
@@ -266,8 +279,20 @@ function MitMarken({ text, features, gruppen, onFeature }) {
   return <div className="whitespace-pre-wrap break-words">{teile}</div>;
 }
 
-function AnhangListe({ liste }) {
-  return <div className="flex flex-wrap gap-2 mt-2">{liste.map((a) => <AnhangChip key={a.pfad} a={a} />)}</div>;
+function AnhangListe({ liste, m, toast }) {
+  const [frage, setFrage] = useState(false);
+  const weg = async () => {
+    const { error } = await supabase.rpc("ws_chat_anhaenge_entfernen", { p_nachricht: m.id });
+    if (error) { toast(fehler(error)); return; }
+    toast("Anhänge entfernt"); setFrage(false); dateienAufraeumen();
+  };
+  return (
+    <div className="mt-2 flex flex-col gap-1.5">
+      <div className="flex flex-wrap gap-2">{liste.filter((a) => a && typeof a.pfad === "string").map((a) => <AnhangChip key={a.pfad} a={a} />)}</div>
+      {frage ? <span className="text-xs flex items-center gap-2"><span className="text-red-700 dark:text-red-300 font-semibold">Anhänge endgültig löschen?</span>
+          <button type="button" onClick={weg} className="px-2 py-0.5 rounded bg-red-600 text-white font-semibold">Löschen</button><button type="button" onClick={() => setFrage(false)} className="underline">Abbrechen</button></span>
+        : <button type="button" onClick={() => setFrage(true)} className="self-start text-xs text-slate-500 hover:text-red-700 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" />Anhänge löschen</button>}
+    </div>);
 }
 function AnhangChip({ a }) {
   const [url, setUrl] = useState(null);
@@ -280,7 +305,7 @@ function AnhangChip({ a }) {
   return (
     <a href={url || undefined} target="_blank" rel="noopener noreferrer" className="group inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-1.5 pr-3 text-sm max-w-[240px]">
       {bild && url ? <img src={url} alt="" className="w-10 h-10 rounded-lg object-cover" /> : <span className="w-10 h-10 rounded-lg bg-white dark:bg-slate-900 grid place-items-center text-slate-500">{bild ? <Bild className="w-4 h-4" /> : <FileText className="w-4 h-4" />}</span>}
-      <span className="min-w-0"><span className="block truncate font-semibold group-hover:underline">{a.name}</span><span className="block text-xs text-slate-500">{Math.max(1, Math.round(a.groesse / 1024))} KB</span></span>
+      <span className="min-w-0"><span className="block truncate font-semibold group-hover:underline">{a.name}</span><span className="block text-xs text-slate-500">{Number.isFinite(a.groesse) ? `${Math.max(1, Math.round(a.groesse / 1024))} KB` : ""}</span></span>
     </a>);
 }
 

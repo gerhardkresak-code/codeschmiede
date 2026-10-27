@@ -39,7 +39,7 @@ import { fehlerBlock } from "./lib/fehler.mjs";
 import { bausteinDatenBlock, anhangBild } from "./lib/bausteinAuftrag.mjs";
 import { kachelAusFrage, kachelPrompt, kachelAntwort, kiZuerst } from "./lib/kachelChat.mjs";
 import { aufgabeDatenBereinigen, aufgabeDatenBlock, anhangDateiOk, MAX_GESAMT } from "./lib/aufgabeAuftrag.mjs";
-import { rm, readdir, lstat } from "node:fs/promises";
+import { rm, readdir, lstat, realpath } from "node:fs/promises";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 // Claude Code finden. Windows: nativer Installer (claude.exe in %USERPROFILE%\.local\bin) oder npm (cli.js) – immer OHNE Shell
@@ -170,10 +170,16 @@ async function lebenszeichen(an = true) {
 
 // ---------- Abo-Limits ----------
 let aboStand = null;   // letzter bekannter Stand { fuenf_std_prozent, fuenf_std_reset, woche_prozent, woche_reset }
+const ABO_FELDER = ["fuenf_std_prozent", "fuenf_std_reset", "woche_prozent", "woche_reset"];
+// Nur die vier Wertefelder schreiben (Prüfung 0.10.0 Befund 1: sonst lehnt die Datenbank Spalten ohne Schreibrecht ab). true = gespeichert.
 async function aboMelden(r, quelle = "werkstatt") {
-  if (!r) return;
-  aboStand = { ...(aboStand || {}), ...Object.fromEntries(Object.entries(r).filter(([, v]) => v != null)) };
-  await db.from("ws_abo_limits").upsert({ benutzer_id: cfg.user_id, ...aboStand, quelle, aktualisiert: new Date().toISOString() });
+  if (!r) return false;
+  const neu = Object.fromEntries(ABO_FELDER.filter((k) => r[k] != null).map((k) => [k, r[k]]));
+  aboStand = { ...(aboStand || {}), ...neu };
+  const zeile = Object.fromEntries(ABO_FELDER.filter((k) => aboStand[k] !== undefined).map((k) => [k, aboStand[k]]));
+  const { error } = await db.from("ws_abo_limits").upsert({ benutzer_id: cfg.user_id, ...zeile, quelle, aktualisiert: new Date().toISOString() });
+  if (error) { melde("fehler", `Abo-Limits nicht gespeichert: ${kuerzen(ohneGeheimnisse(error.message), 200)}`); return false; }
+  return true;
 }
 // Statuszeile von Claude Code (tools/abo-statuszeile.mjs) schreibt ~/.codeschmiede/abo.json – neuere Werte übernehmen
 let aboDateiZeit = 0;
@@ -184,31 +190,45 @@ async function aboAusStatuszeile() {
     await aboMelden(findeAboLimits(JSON.parse(await readFile(datei, "utf8"))), "statuszeile");
   } catch { /* keine Statuszeile eingerichtet */ }
 }
-// Knopf „Jetzt aktualisieren“ (0050): kostenloser Abruf wie „/usage“, ersatzweise Mini-Anfrage; Ergebnis mit Hinweis zurückmelden
-let abrufLaeuft = false;
+// Knopf „Jetzt aktualisieren“ (0050): kostenloser Abruf wie „/usage“ im eigenen Takt (nur Netz, kein Claude-Lauf).
+// Klappt er nicht, wird die Mini-Anfrage nur vorgemerkt und in der Hauptschleife ausgeführt (nie neben einem Auftrag, nie in der Abo-Pause –
+// Prüfung 0.10.0 Befund 2). Neue Anforderungen erkennt die Werkstatt am geänderten Zeitstempel der Datenbank, nicht an der PC-Uhr (Befund 3).
+let abrufLaeuft = false; let abrufZuletzt = null; let miniNoetig = null;
+async function abrufMelden(art, hinweis) {
+  const { error } = await db.from("ws_abo_limits").update({ abruf_erledigt: new Date().toISOString(), abruf_art: art, abruf_hinweis: kuerzen(ohneGeheimnisse(hinweis), 290) }).eq("benutzer_id", cfg.user_id);
+  if (error) melde("fehler", `Limits-Abruf: ${kuerzen(ohneGeheimnisse(error.message), 200)}`);
+}
 async function limitsAbruf() {
-  if (abrufLaeuft || !cfg?.user_id) return;
-  const { data, error } = await db.from("ws_abo_limits").select("abruf_angefordert, abruf_erledigt").eq("benutzer_id", cfg.user_id).maybeSingle();
-  if (error || !data?.abruf_angefordert) return;
-  if (data.abruf_erledigt && Date.parse(data.abruf_erledigt) >= Date.parse(data.abruf_angefordert)) return;
-  if (Date.parse(data.abruf_angefordert) < Date.now() - 5 * 60 * 1000) return;   // alte Anforderung (PC war aus) – nicht nachholen
+  if (abrufLaeuft || miniNoetig || !cfg?.user_id) return;
+  const { data, error } = await db.from("ws_abo_limits").select("abruf_angefordert").eq("benutzer_id", cfg.user_id).maybeSingle();
+  if (error || !data?.abruf_angefordert || data.abruf_angefordert === abrufZuletzt) return;
+  abrufZuletzt = data.abruf_angefordert;
   abrufLaeuft = true;
   try {
-    const r = await nutzungAbrufen({ anmeldung: await anmeldungFinden() });
-    let art; let hinweis;
-    if (r.werte) { await aboMelden(r.werte, "abruf"); art = "abruf"; hinweis = "Kostenloser Abruf bei Anthropic"; }
-    else if (!laeuft && findeClaude()) {
-      const vorher = JSON.stringify(aboStand);
-      try {
-        await claudeOhneWerkzeuge("Antworte nur mit: OK", { modell: "haiku" });
-        const neu = JSON.stringify(aboStand) !== vorher;
-        art = neu ? "mini" : "fehler";
-        hinweis = `Kostenloser Abruf ging nicht (${r.grund}) – ${neu ? "Mini-Anfrage gemacht" : "auch die Mini-Anfrage brachte keine Werte"}`;
-      } catch { art = "fehler"; hinweis = `${r.grund}; Mini-Anfrage fehlgeschlagen`; }
-    } else { art = "fehler"; hinweis = laeuft ? `${r.grund} – gerade läuft ein Auftrag, die Werte kommen mit dessen nächster Antwort` : r.grund; }
     kopplungAbgleich(true).catch(() => {});   // ChatGPT-Limits gleich mit
-    await db.from("ws_abo_limits").update({ abruf_erledigt: new Date().toISOString(), abruf_art: art, abruf_hinweis: kuerzen(ohneGeheimnisse(hinweis), 290) }).eq("benutzer_id", cfg.user_id);
+    const r = await nutzungAbrufen({ anmeldung: await anmeldungFinden() });
+    if (r.werte) {
+      const ok = await aboMelden(r.werte, "abruf");
+      await abrufMelden(ok ? "abruf" : "fehler", ok ? "Kostenloser Abruf bei Anthropic" : "Werte abgerufen, aber nicht gespeichert – siehe Fehler der Werkstatt");
+    }
+    else if (findeClaude()) miniNoetig = { grund: r.grund };
+    else await abrufMelden("fehler", r.grund);
   } finally { abrufLaeuft = false; }
+}
+/** Vorgemerkte Mini-Anfrage (aus der Hauptschleife, nur wenn nichts anderes läuft). true = erledigt. */
+async function miniAnfrage() {
+  if (!miniNoetig) return false;
+  const { grund } = miniNoetig;
+  try {
+    if ((await aboLage()) === "pause") { await abrufMelden("fehler", `${grund} – keine Mini-Anfrage, weil die Limit-Schwelle erreicht ist`); return true; }
+    const vorher = JSON.stringify(aboStand);
+    try {
+      await claudeOhneWerkzeuge("Antworte nur mit: OK", { modell: "haiku" });
+      const neu = JSON.stringify(aboStand) !== vorher;
+      await abrufMelden(neu ? "mini" : "fehler", `Kostenloser Abruf ging nicht (${grund}) – ${neu ? "Mini-Anfrage gemacht" : "auch die Mini-Anfrage brachte keine Werte"}`);
+    } catch { await abrufMelden("fehler", `${grund}; Mini-Anfrage fehlgeschlagen`); }
+  } finally { miniNoetig = null; }
+  return true;
 }
 async function aboLage() {
   const { data: e } = await db.from("ws_einstellungen").select("*").maybeSingle();
@@ -487,9 +507,18 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
 }
 
 // Beim Start: Anhang-Ordner früherer (abgestürzter) Läufe in allen Arbeitsordnern löschen (Prüfung M3)
+// Pfad in .git/info/exclude des (Lese-)Ordners eintragen
+async function gitAusschliessen(ordner, muster) {
+  const exclude = path.join(path.resolve(ordner, await git(ordner, "rev-parse", "--git-common-dir")), "info", "exclude");
+  const alt = await readFile(exclude, "utf8").catch(() => "");
+  if (!alt.split(/\r?\n/).includes(muster)) { await mkdir(path.dirname(exclude), { recursive: true }); await writeFile(exclude, `${alt}${alt && !alt.endsWith("\n") ? "\n" : ""}${muster}\n`); }
+}
 async function alteAnhaengeAufraeumen() {
   const projekte = path.join(cfg.daten_ordner, "projekte");
+  // Chat-Anhänge (0050) aus abgebrochenen Läufen: Lese-Ordner und leere Chat-Ordner im Temp-Verzeichnis
+  for (const o of await readdir(os.tmpdir()).catch(() => [])) if (/^cs-chat-/.test(o)) await rm(path.join(os.tmpdir(), o), { recursive: true, force: true }).catch(() => {});
   for (const p of await readdir(projekte).catch(() => [])) {
+    await rm(path.join(projekte, p, "lesen", ".cs-anhaenge"), { recursive: true, force: true }).catch(() => {});
     for (const o of await readdir(path.join(projekte, p)).catch(() => [])) {
       if (!/^(auftrag|pruef)-\d+$/.test(o)) continue;
       await rm(path.join(projekte, p, o, ".codeschmiede-anhaenge"), { recursive: true, force: true }).catch(() => {});
@@ -1153,11 +1182,11 @@ async function claudeOhneWerkzeuge(prompt, { lesenIn = null, modell = "sonnet" }
     "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", ...(lesenIn ? [] : ["--setting-sources", "user"]),
     "--settings", JSON.stringify({ disableAllHooks: true })];   // Prüfung: eigene Hooks bekommen keinen fremden Text
   let ende = null;
-  laeuft = { id: "design", abort: new AbortController() };   // Prüfung O4: beenden()/Update stoppt auch den Chat
+  const meins = { id: "design", abort: new AbortController() }; laeuft = meins;   // Prüfung O4: beenden()/Update stoppt auch den Chat
   try {
     await new Promise((fertig, fehl) => {
       const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: lesenIn || leer, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-      laeuft.kind = kind; laeuft.abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
+      meins.kind = kind; meins.abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
       const uhr = setTimeout(() => kind.kill("SIGINT"), (lesenIn ? 6 : 3) * 60 * 1000);
       const rl = createInterface({ input: kind.stdout }); const offen = []; let fehlerText = "";
       kind.stderr.on("data", (d) => { fehlerText = (fehlerText + d.toString()).slice(-1500); });
@@ -1169,7 +1198,7 @@ async function claudeOhneWerkzeuge(prompt, { lesenIn = null, modell = "sonnet" }
       kind.on("error", (e) => { clearTimeout(uhr); fehl(e); });
       kind.on("close", (code) => { clearTimeout(uhr); Promise.all(offen).then(() => (ende ? fertig() : fehl(new Error(`Claude beendet (${code}): ${ohneGeheimnisse(fehlerText).slice(-300)}`)))); });
     });
-  } finally { laeuft = null; if (leer) await rm(leer, { recursive: true, force: true }).catch(() => {}); }
+  } finally { if (laeuft === meins) laeuft = null; if (leer) await rm(leer, { recursive: true, force: true }).catch(() => {}); }   // nur die eigene Belegung freigeben (Prüfung 0.10.0)
   if (ende?.subtype !== "success") throw new Error("Claude hat keine Antwort geliefert");
   return ende.result || "";
 }
@@ -1239,7 +1268,7 @@ async function claudeChat() {
   const f = data?.[0];
   if (!f) return false;
   melde("status", "Chat: KI antwortet");
-  let chatAnhangOrdner = null;   // Anhänge dieser Frage (0050) – im finally immer gelöscht
+  let chatAnhangOrdner = null; let chatBasis = null;   // Anhänge dieser Frage (0050) – im finally immer gelöscht
   try {
     const { data: projekt } = await db.from("ws_projekte").select("*").eq("id", f.projekt_id).single();
     const { data: gruppen } = await db.from("ws_gruppen").select("id, name, ws_bereiche!inner(projekt_id, global)").eq("ws_bereiche.projekt_id", f.projekt_id);
@@ -1253,15 +1282,16 @@ async function claudeChat() {
     let anhaenge = [];
     if (Array.isArray(f.anhaenge) && f.anhaenge.length) {
       if (!lesenIn) { lesenIn = await mkdtemp(path.join(os.tmpdir(), "cs-chat-")); chatAnhangOrdner = lesenIn; }
-      const unterordner = path.join(".cs-anhaenge", String(f.id));
+      const unterordner = path.join(".cs-anhaenge", String(f.id)); chatBasis = lesenIn;
       if (!chatAnhangOrdner) chatAnhangOrdner = path.join(lesenIn, ".cs-anhaenge", String(f.id));
-      anhaenge = await anhaengeLaden(f.anhaenge, { basis: lesenIn, unterordner, benutzer: cfg.user_id, projekt: f.projekt_id,
+      if (lesenIn !== chatAnhangOrdner) await gitAusschliessen(lesenIn, "/.cs-anhaenge/").catch(() => {});   // nie im Lese-Ordner sichtbar für Git
+      anhaenge = await anhaengeLaden(f.anhaenge, { basis: lesenIn, unterordner, benutzer: cfg.user_id, projekt: f.projekt_id, ordnerSicher: anhangOrdnerSicher,
         laden: async (pfad) => { const { data, error } = await db.storage.from("ws-chat").download(pfad); if (error) throw error; return data; } }).catch(() => []);
       if (anhaenge.length < f.anhaenge.length) melde("fehler", `Chat: ${f.anhaenge.length - anhaenge.length} Anhang/Anhänge nicht ladbar`);
     }
     const gids = (gruppen || []).map((g) => g.id);
     const { data: feats } = gids.length ? await db.from("ws_features").select("id, name, gruppe_id").in("gruppe_id", gids).eq("ausgebaut", false).limit(300) : { data: [] };
-    const prompt = assistentPrompt({ projekt, ort: f.ort, kontext: f.kontext, frage: f.text + anhaengeText(anhaenge), verlauf, wissen: await holeWissen(f.projekt_id),
+    const prompt = assistentPrompt({ projekt, ort: f.ort, kontext: f.kontext, frage: f.text, anhaenge: anhaengeText(anhaenge), verlauf, wissen: await holeWissen(f.projekt_id),
       gruppen: (gruppen || []).filter((g) => g.id !== projekt.konzept_gruppe_id).map((g) => ({ id: g.id, name: g.name, global: g.ws_bereiche?.global })), features: feats || [] });
     const aufgabe = f.ort === "konzept" || istKonzeptFrage(f.text, verlauf) ? "konzept" : "chat";
     const { roh, ki } = await kiAntwort(projekt, aufgabe, prompt, { claudeLesenIn: lesenIn || null, dokuLesen: true, frage: f.text });
@@ -1279,7 +1309,13 @@ async function claudeChat() {
   } catch (e) {
     await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: `Claude konnte gerade nicht antworten: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 300)}`, p_fehler: true });
   }
-  finally { if (chatAnhangOrdner) await rm(chatAnhangOrdner, { recursive: true, force: true }).catch(() => {}); chatAnhangOrdner = null; }
+  finally {
+    // nur löschen, was wirklich im Lese-Ordner (bzw. im eigenen Temp-Ordner) liegt – nie einem Link nach außen folgen
+    if (chatAnhangOrdner && chatBasis) {
+      const echt = await realpath(chatAnhangOrdner).catch(() => null); const basis = await realpath(chatBasis).catch(() => null);
+      if (echt && basis && (echt === basis || echt.startsWith(basis + path.sep))) await rm(chatAnhangOrdner, { recursive: true, force: true }).catch(() => {});
+    }
+  }
   melde("status", "Werkstatt bereit");
   return true;
 }
@@ -1556,6 +1592,7 @@ async function markeArbeit() {
 // ---------- Schleife ----------
 async function naechsterAuftrag() {
   if (laeuft || stopp) return;
+  if (await miniAnfrage()) return;   // Limits-Knopf: vorgemerkte Mini-Anfrage (0050)
   if (await repoArbeit()) return;
   if (await liveArbeit()) return;
   if (await aktionArbeit()) return;
@@ -1623,7 +1660,10 @@ async function start() {
   await tokenSchreiben();
   await pcAnmelden();
   await faehigkeitenMelden().catch(() => {});
-  try { const { data } = await db.from("ws_abo_limits").select("*").eq("benutzer_id", cfg.user_id).maybeSingle(); if (data) aboStand = data; } catch { /* noch keine Werte */ }
+  try {
+    const { data } = await db.from("ws_abo_limits").select("fuenf_std_prozent, fuenf_std_reset, woche_prozent, woche_reset, abruf_angefordert").eq("benutzer_id", cfg.user_id).maybeSingle();
+    if (data) { const { abruf_angefordert: alt, ...werte } = data; aboStand = werte; abrufZuletzt = alt || null; }   // alte Anforderung nicht nachholen
+  } catch { /* noch keine Werte */ }
   try { const { data } = await db.from("ws_ki_kopplung").select("anbieter, anfragen_heute, anfragen_tag").eq("pc_id", pcId); for (const z of data || []) if (z.anfragen_tag) anfragen[z.anbieter] = { tag: z.anfragen_tag, n: z.anfragen_heute || 0 }; } catch { /* Spalten erst ab Datenbank 0029 */ }
   setInterval(() => aboAusStatuszeile().catch(() => {}), 60 * 1000);
   setInterval(() => limitsAbruf().catch(() => {}), 4 * 1000);   // Knopf „Jetzt aktualisieren“ (0050)

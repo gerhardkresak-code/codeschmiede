@@ -69,6 +69,7 @@ language sql stable security definer set search_path = public as $$
   select a is null or (jsonb_typeof(a) = 'array' and jsonb_array_length(a) between 1 and 5 and not exists (
     select 1 from jsonb_array_elements(a) e
      where jsonb_typeof(e) <> 'object'
+        or not (e ?& array['pfad','name','typ','groesse'])   -- alle Schlüssel Pflicht (Prüfung 0.10.0 Befund 6)
         or exists (select 1 from jsonb_object_keys(e) k where k not in ('pfad','name','typ','groesse'))
         or jsonb_typeof(e->'pfad') <> 'string' or jsonb_typeof(e->'name') <> 'string' or jsonb_typeof(e->'typ') <> 'string' or jsonb_typeof(e->'groesse') <> 'number'
         or (e->>'pfad') !~ '^[0-9a-f-]{36}/[a-z0-9_-]{1,60}/[a-f0-9-]{36}\.(png|jpg|webp|gif|pdf|txt|md|csv|json)$'
@@ -145,6 +146,58 @@ create policy ws_chat_dateien_hochladen on storage.objects for insert to authent
 drop policy if exists ws_chat_dateien_loeschen on storage.objects;
 create policy ws_chat_dateien_loeschen on storage.objects for delete to authenticated
   using (bucket_id = 'ws-chat' and public.ws_chat_datei_eigen(name));
+
+-- Lösch-Warteschlange für Chat-Dateien (Prüfung 0.10.0 Befund 5, wie ws_aufgabe_dateien_weg in 0042):
+-- Wird eine Nachricht mit Anhängen gelöscht (einzeln, mit der Unterhaltung, mit dem Projekt) oder werden ihre Anhänge entfernt,
+-- kommen die Pfade hierher. Die Oberfläche (Chat) und die Werkstatt der Person löschen die Dateien und tragen sie aus.
+create table if not exists public.ws_chat_dateien_weg (
+  pfad text primary key,
+  benutzer uuid not null,
+  erstellt timestamptz not null default now()
+);
+alter table public.ws_chat_dateien_weg enable row level security;
+revoke all on public.ws_chat_dateien_weg from anon, authenticated;
+grant select on public.ws_chat_dateien_weg to authenticated;
+drop policy if exists ws_chat_dateien_weg_lesen on public.ws_chat_dateien_weg;
+create policy ws_chat_dateien_weg_lesen on public.ws_chat_dateien_weg for select to authenticated using (benutzer = auth.uid());
+
+create or replace function public.ws_chat_dateien_merken() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if old.anhaenge is not null and jsonb_typeof(old.anhaenge) = 'array' and (tg_op = 'DELETE' or new.anhaenge is distinct from old.anhaenge) then
+    insert into public.ws_chat_dateien_weg (pfad, benutzer)
+      select e->>'pfad', split_part(e->>'pfad', '/', 1)::uuid from jsonb_array_elements(old.anhaenge) e
+       where jsonb_typeof(e) = 'object' and (e->>'pfad') ~ '^[0-9a-f-]{36}/'
+         and (tg_op = 'DELETE' or new.anhaenge is null or not (new.anhaenge @> jsonb_build_array(e)))
+    on conflict (pfad) do nothing;
+  end if;
+  return null;
+end $$;
+drop trigger if exists ws_chat_dateien_merken on public.ws_claude_chat;
+create trigger ws_chat_dateien_merken after delete or update of anhaenge on public.ws_claude_chat for each row execute function public.ws_chat_dateien_merken();
+revoke execute on function public.ws_chat_dateien_merken() from public, anon, authenticated;
+
+-- Eigene Anhänge einer Nachricht entfernen (z. B. im Konzept-Chat, der sich nicht löschen lässt)
+create or replace function public.ws_chat_anhaenge_entfernen(p_nachricht bigint) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update public.ws_claude_chat set anhaenge = null, geaendert = now() where id = p_nachricht and von = auth.uid() and frage_id is null and anhaenge is not null;
+  if not found then raise exception 'Keine eigenen Anhänge an dieser Nachricht'; end if;
+end $$;
+revoke execute on function public.ws_chat_anhaenge_entfernen(bigint) from public, anon;
+grant execute on function public.ws_chat_anhaenge_entfernen(bigint) to authenticated;
+
+-- Austragen nur, wenn die Datei im Speicher wirklich weg ist
+create or replace function public.ws_chat_dateien_erledigt(p_pfade text[]) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  delete from public.ws_chat_dateien_weg w where w.benutzer = auth.uid() and w.pfad = any(coalesce(p_pfade, '{}'))
+    and not exists (select 1 from storage.objects o where o.bucket_id = 'ws-chat' and o.name = w.pfad);
+  get diagnostics n = row_count; return n;
+end $$;
+revoke execute on function public.ws_chat_dateien_erledigt(text[]) from public, anon;
+grant execute on function public.ws_chat_dateien_erledigt(text[]) to authenticated;
 
 -- ---------- 3) Limits per Knopf ----------
 alter table public.ws_abo_limits add column if not exists abruf_angefordert timestamptz;

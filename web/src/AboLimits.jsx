@@ -33,8 +33,9 @@ function Balken({ titel, prozent, reset, warn, pause }) {
 // (wie „/usage“ in Claude Code), ersatzweise mit einer Mini-Anfrage; Ergebnis und Hinweis kommen über ws_abo_limits zurück (0050).
 const vor = (t) => { if (!t) return ""; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 1 ? "gerade eben" : m < 60 ? `vor ${m} Min.` : m < 1440 ? `vor ${Math.round(m / 60)} Std.` : `vor ${Math.round(m / 1440)} Tg.`; };
 function Aktualisieren({ abo, toast, werkstattAn }) {
+  // fertig, sobald die Werkstatt einen NEUEN Erledigt-Stempel meldet (unabhängig von den Uhren von PC und Browser – Prüfung 0.10.0)
   const [warte, setWarte] = useState(null); const [meldung, setMeldung] = useState(null);
-  const erledigt = warte && abo?.abruf_erledigt && Date.parse(abo.abruf_erledigt) >= warte - 2000;
+  const erledigt = warte && (abo?.abruf_erledigt || null) !== warte.vorher;
   useEffect(() => { if (erledigt) { setWarte(null); setMeldung(null); } }, [erledigt]);
   useEffect(() => {
     if (!warte) return undefined;
@@ -45,7 +46,7 @@ function Aktualisieren({ abo, toast, werkstattAn }) {
     setMeldung(null);
     const { error } = await supabase.rpc("ws_abo_abruf");
     if (error) { (toast || (() => {}))((error.message || "").replace(/^.*?ERROR:\s*/, "")); return; }
-    setWarte(Date.now());
+    setWarte({ vorher: abo?.abruf_erledigt || null });
   };
   const fehlerHinweis = abo?.abruf_art && abo.abruf_art !== "abruf" ? abo.abruf_hinweis : null;
   return (
