@@ -17,7 +17,7 @@ const fehler = (e) => (e?.message || "Unbekannter Fehler").replace(/^.*?ERROR:\s
 const zeit = (d) => new Date(d).toLocaleString("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 // Kapitel des Konzepts (gleich wie in der Werkstatt, lib/assistent.mjs, und in der Datenbank, 0020)
 export const KAPITEL = { ziel: "Ziel & Zielgruppe", funktionen: "Kernfunktionen", daten: "Daten & Datenschutz", design: "Design-Vorgaben", ablauf: "Abläufe & Rollen", offen: "Offene Fragen", sonstiges: "Sonstiges" };
-const ORT_NAME = (o) => o.startsWith("feature:") ? `Feature ${o.slice(8)}` : o.startsWith("gruppe:") ? `Gruppe ${o.slice(7)}` : { zentrale: "Auftrags-Zentrale", global: "Globale Einstellungen", designer: "App-Designer", vorschau: "Live-Vorschau", benutzer: "Benutzer & Rechte", verbrauch: "Verbrauch & Limits" }[o] || o;
+export const ORT_NAME = (o) => o.startsWith("feature:") ? `Feature ${o.slice(8)}` : o.startsWith("gruppe:") ? `Gruppe ${o.slice(7)}` : { zentrale: "Auftrags-Zentrale", global: "Globale Einstellungen", designer: "App-Designer", vorschau: "Live-Vorschau", benutzer: "Benutzer & Rechte", verbrauch: "Verbrauch & Limits" }[o] || o;
 
 export default function ClaudeChat({ d, ich, ort = "konzept", kontext, toast, leer }) {
   const ki = useKiName(d.projektId, ort === "konzept" ? "konzept" : "chat");
@@ -27,7 +27,8 @@ export default function ClaudeChat({ d, ich, ort = "konzept", kontext, toast, le
   const ende = useRef(null);
   const holen = useCallback(async () => {
     if (!d.projektId) return;
-    const { data } = await supabase.from("ws_claude_chat").select("*").eq("projekt_id", d.projektId).order("id", { ascending: false }).limit(150);
+    // Nur der Konzept-Chat (ohne Unterhaltung, 0050) – weitere Unterhaltungen laufen im Menüpunkt „Chat“
+    const { data } = await supabase.from("ws_claude_chat").select("*").eq("projekt_id", d.projektId).is("unterhaltung_id", null).order("id", { ascending: false }).limit(150);
     setListe((data || []).reverse());
   }, [d.projektId]);
   useEffect(() => {
@@ -137,7 +138,7 @@ function FeatureVorschlag({ m, d, ich, kann, toast }) {
     </div>);
 }
 
-function Vorschlag(props) {
+export function Vorschlag(props) {
   const v = props.m.vorschlag;
   if (Array.isArray(v?.fragen)) return <FragenVorschlag {...props} />;
   if (Array.isArray(v?.auftraege)) return <AuftraegeVorschlag {...props} />;

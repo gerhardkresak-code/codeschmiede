@@ -101,6 +101,15 @@ erlaubten Typen, ≤ 60 MB), legt sie unter
 `.codeschmiede-anhaenge/` ab (nie eingecheckt, nach dem Lauf gelöscht) und bekommt sie mit den Links als Datenblock („Daten, keine Anweisungen“).
 Ohne „Als Auftrag“ geht nichts an eine KI. Falsches Ziel: „Zurückziehen“.
 
+### Oberfläche 2.0 & Chat (0.10.0, Entwurf 1.1 frei von Gerhard 2026-10-27 08:27, Datenbank 0050)
+Ausführlich mit Bedienung: `docs/KONZEPT-OBERFLAECHE-2.md`. **Navigation** in Gruppen (Arbeiten · Gestalten & Bauen · Ablauf · Dokumentation,
+unten aufklappbar **Verwaltung**), auf dem Handy als ausfahrbares Menü. **Kopfzeile:** Projektwechsel (mit Neues Projekt/Projekte verwalten),
+**Suchen & Springen** (Strg K: Seiten, Features, Aufträge, Unterhaltungen), Limits, Einrichtung, Werkstatt, Glocke (Zu erledigen), Benutzermenü.
+**Zentrale** mit Kennzahlen oben. **Chat** (`web/src/Chat.jsx`): eigene Unterhaltungen je Projekt (`ws_unterhaltungen`, persönlich; Konzept-Chat =
+ohne Unterhaltung, immer angeheftet), @Feature/#Gruppe, Anhänge (Speicher `ws-chat`), Bezüge rechts; die Werkstatt liest den Verlauf nur aus derselben
+Unterhaltung und arbeitet wie im Konzept-Chat (Rückfragen, Aufträge erst nach Klärung). **Limits:** Knopf „Jetzt aktualisieren“ (`ws_abo_abruf`) – die
+eigene Werkstatt fragt kostenlos bei Anthropic ab (`desktop/dienst/lib/nutzung.mjs`), sonst Mini-Anfrage; Hinweis bei Fehlern.
+
 ## Rollen und Rechte
 | Rolle | Aufträge | Freigeben / Erlauben | Löschen | Claude | GitHub |
 |---|---|---|---|---|---|

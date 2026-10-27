@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAutoHoehe } from "./autoHoehe";
-import { Link2, X, Plus, RefreshCw, Check, Loader2 } from "lucide-react";
+import { Link2, X, Plus, RefreshCw, Check, Loader2, Hash } from "lucide-react";
 import { supabase } from "./supabase";
 
 // Feature-Bezüge (KONZEPT-FEATURE-BEZUEGE.md, Entscheidungen Gerhard 2026-10-22 22:31): @Liga setzt einen festen Bezug „Vorlage“,
@@ -15,26 +15,44 @@ export function erwaehnte(text, features) {
   return [...features].sort((a, b) => b.name.length - a.name.length).filter((f) => t.includes(`@${f.name.toLowerCase()}`));
 }
 
-/** Eingabefeld mit @-Auswahl der Features des Projekts. */
-export function MitErwaehnung({ value, onChange, features, className, ...rest }) {
+/** Gruppen, die im Text mit #Name erwähnt sind (Chat 2.0, Entwurf 1.1). */
+export function erwaehnteGruppen(text, gruppen) {
+  const t = ` ${String(text || "").toLowerCase()}`;
+  return [...gruppen].sort((a, b) => b.name.length - a.name.length).filter((g) => t.includes(`#${g.name.toLowerCase()}`));
+}
+
+/** Eingabefeld mit @-Auswahl der Features und (wenn übergeben) #-Auswahl der Gruppen des Projekts. */
+export const MitErwaehnung = React.forwardRef(function MitErwaehnung({ value, onChange, features, gruppen = null, minHoehe, className, ...rest }, aussen) {
   const ref = useRef(null); const [treffer, setTreffer] = useState(null); const [aktiv, setAktiv] = useState(0);
+  React.useImperativeHandle(aussen, () => ({
+    // Knopf „@ Feature“ / „# Gruppe“: Zeichen an der Schreibmarke einfügen und die Auswahl öffnen
+    zeichen: (z) => {
+      const el = ref.current; if (!el) return;
+      const p = el.selectionStart ?? value.length; const v = `${value.slice(0, p)}${z}${value.slice(el.selectionEnd ?? p)}`;
+      onChange(v); requestAnimationFrame(() => { el.focus(); el.setSelectionRange(p + 1, p + 1); pruefe(v, p + 1); });
+    },
+    fokus: () => ref.current?.focus(),
+  }));
   const pruefe = (v, pos) => {
-    const m = v.slice(0, pos).match(/@([^\s@]{0,40})$/);
+    const m = v.slice(0, pos).match(gruppen ? /([@#])([^\s@#]{0,40})$/ : /(@)([^\s@]{0,40})$/);
     if (!m) { setTreffer(null); return; }
-    const q = m[1].toLowerCase();
-    const l = features.filter((f) => f.name.toLowerCase().includes(q)).slice(0, 8);
-    setTreffer(l.length ? { start: pos - m[0].length, pos, liste: l } : null); setAktiv(0);
+    const q = m[2].toLowerCase(); const art = m[1] === "#" ? "gruppe" : "feature";
+    const quelle = art === "gruppe" ? gruppen : features;
+    const l = quelle.filter((f) => f.name.toLowerCase().includes(q)).slice(0, 8);
+    setTreffer(l.length ? { start: pos - m[0].length, pos, liste: l, art } : null); setAktiv(0);
   };
   const waehle = (f) => {
-    const v = `${value.slice(0, treffer.start)}@${f.name} ${value.slice(treffer.pos)}`;
+    const z = treffer.art === "gruppe" ? "#" : "@";
+    const v = `${value.slice(0, treffer.start)}${z}${f.name} ${value.slice(treffer.pos)}`;
     onChange(v); setTreffer(null);
     requestAnimationFrame(() => { const el = ref.current; if (el) { const p = treffer.start + f.name.length + 2; el.focus(); el.setSelectionRange(p, p); } });
   };
-  useAutoHoehe(ref, value);
+  useAutoHoehe(ref, value, minHoehe ? { min: minHoehe } : undefined);
   return (
     <div className="relative">
       <textarea ref={ref} value={value} className={`${className || ""} resize-none`} {...rest}
         onChange={(e) => { onChange(e.target.value); pruefe(e.target.value, e.target.selectionStart); }}
+        onBlur={(e) => { setTimeout(() => setTreffer(null), 120); rest.onBlur?.(e); }}
         onKeyDown={(e) => {
           if (treffer) {
             if (e.key === "ArrowDown") { e.preventDefault(); setAktiv((aktiv + 1) % treffer.liste.length); return; }
@@ -45,14 +63,16 @@ export function MitErwaehnung({ value, onChange, features, className, ...rest })
           rest.onKeyDown?.(e);
         }} />
       {treffer && (
-        <ul role="listbox" aria-label="Feature wählen" className="absolute z-20 left-0 bottom-full mb-1 w-72 max-w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg py-1 text-sm">
+        <ul role="listbox" aria-label={treffer.art === "gruppe" ? "Gruppe wählen" : "Feature wählen"} className="absolute z-20 left-0 bottom-full mb-1 w-80 max-w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg p-1 text-sm">
+          <li className="px-2.5 pt-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500" aria-hidden="true">{treffer.art === "gruppe" ? "Gruppen" : "Features"}</li>
           {treffer.liste.map((f, i) => (
             <li key={f.id} role="option" aria-selected={i === aktiv}>
-              <button type="button" onMouseDown={(e) => { e.preventDefault(); waehle(f); }} className={`w-full text-left px-3 py-1.5 flex items-center gap-2 ${i === aktiv ? "bg-emerald-50 dark:bg-emerald-950" : ""}`}>
-                <Link2 className="w-3.5 h-3.5 text-emerald-700" /><span className="truncate">{f.name}</span><span className="ml-auto text-[11px] text-slate-400 font-mono">{f.id}</span></button></li>))}
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); waehle(f); }} className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center gap-2 ${i === aktiv ? "bg-emerald-50 dark:bg-emerald-950" : ""}`}>
+                {treffer.art === "gruppe" ? <Hash className="w-3.5 h-3.5 text-amber-600" /> : <Link2 className="w-3.5 h-3.5 text-emerald-700" />}<span className="truncate">{f.name}</span>
+                <span className="ml-auto text-[11px] text-slate-400 font-mono truncate max-w-[45%]">{treffer.art === "gruppe" ? (f.bereich || "") : f.id}</span></button></li>))}
         </ul>)}
     </div>);
-}
+});
 
 /** Bezüge und Hinweise eines Features (Kurzinfo / Arbeitsplatz). */
 export function FeatureBezuege({ f, d, darfAuftrag, toast, ich }) {

@@ -21,6 +21,8 @@ import { ohneGeheimnisse, kuerzen, heikleDatei } from "./lib/geheim.mjs";
 import { waehleModell } from "./lib/modell.mjs";
 import { werteAus, zweigName } from "./lib/ergebnis.mjs";
 import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
+import { anmeldungFinden, nutzungAbrufen } from "./lib/nutzung.mjs";
+import { anhaengeLaden, anhaengeText } from "./lib/anhaenge.mjs";
 import { pruefErgebnis } from "./lib/pruefung.mjs";
 import { designPrompt, designAntwort, bausteinAusFrage, bausteinVorschlag } from "./lib/design.mjs";
 import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
@@ -181,6 +183,32 @@ async function aboAusStatuszeile() {
     const z = (await stat(datei)).mtimeMs; if (z <= aboDateiZeit) return; aboDateiZeit = z;
     await aboMelden(findeAboLimits(JSON.parse(await readFile(datei, "utf8"))), "statuszeile");
   } catch { /* keine Statuszeile eingerichtet */ }
+}
+// Knopf „Jetzt aktualisieren“ (0050): kostenloser Abruf wie „/usage“, ersatzweise Mini-Anfrage; Ergebnis mit Hinweis zurückmelden
+let abrufLaeuft = false;
+async function limitsAbruf() {
+  if (abrufLaeuft || !cfg?.user_id) return;
+  const { data, error } = await db.from("ws_abo_limits").select("abruf_angefordert, abruf_erledigt").eq("benutzer_id", cfg.user_id).maybeSingle();
+  if (error || !data?.abruf_angefordert) return;
+  if (data.abruf_erledigt && Date.parse(data.abruf_erledigt) >= Date.parse(data.abruf_angefordert)) return;
+  if (Date.parse(data.abruf_angefordert) < Date.now() - 5 * 60 * 1000) return;   // alte Anforderung (PC war aus) – nicht nachholen
+  abrufLaeuft = true;
+  try {
+    const r = await nutzungAbrufen({ anmeldung: await anmeldungFinden() });
+    let art; let hinweis;
+    if (r.werte) { await aboMelden(r.werte, "abruf"); art = "abruf"; hinweis = "Kostenloser Abruf bei Anthropic"; }
+    else if (!laeuft && findeClaude()) {
+      const vorher = JSON.stringify(aboStand);
+      try {
+        await claudeOhneWerkzeuge("Antworte nur mit: OK", { modell: "haiku" });
+        const neu = JSON.stringify(aboStand) !== vorher;
+        art = neu ? "mini" : "fehler";
+        hinweis = `Kostenloser Abruf ging nicht (${r.grund}) – ${neu ? "Mini-Anfrage gemacht" : "auch die Mini-Anfrage brachte keine Werte"}`;
+      } catch { art = "fehler"; hinweis = `${r.grund}; Mini-Anfrage fehlgeschlagen`; }
+    } else { art = "fehler"; hinweis = laeuft ? `${r.grund} – gerade läuft ein Auftrag, die Werte kommen mit dessen nächster Antwort` : r.grund; }
+    kopplungAbgleich(true).catch(() => {});   // ChatGPT-Limits gleich mit
+    await db.from("ws_abo_limits").update({ abruf_erledigt: new Date().toISOString(), abruf_art: art, abruf_hinweis: kuerzen(ohneGeheimnisse(hinweis), 290) }).eq("benutzer_id", cfg.user_id);
+  } finally { abrufLaeuft = false; }
 }
 async function aboLage() {
   const { data: e } = await db.from("ws_einstellungen").select("*").maybeSingle();
@@ -1211,15 +1239,29 @@ async function claudeChat() {
   const f = data?.[0];
   if (!f) return false;
   melde("status", "Chat: KI antwortet");
+  let chatAnhangOrdner = null;   // Anhänge dieser Frage (0050) – im finally immer gelöscht
   try {
     const { data: projekt } = await db.from("ws_projekte").select("*").eq("id", f.projekt_id).single();
     const { data: gruppen } = await db.from("ws_gruppen").select("id, name, ws_bereiche!inner(projekt_id, global)").eq("ws_bereiche.projekt_id", f.projekt_id);
-    const { data: alle } = await db.from("ws_claude_chat").select("id, von, text, frage_id").eq("projekt_id", f.projekt_id).eq("ort", f.ort).lt("id", f.id).order("id", { ascending: false }).limit(30);
+    // Verlauf nur aus derselben Unterhaltung (0050); ohne Unterhaltung = der Konzept-Chat wie bisher
+    let vq = db.from("ws_claude_chat").select("id, von, text, frage_id").eq("projekt_id", f.projekt_id).eq("ort", f.ort).lt("id", f.id);
+    vq = f.unterhaltung_id ? vq.eq("unterhaltung_id", f.unterhaltung_id) : vq.is("unterhaltung_id", null);
+    const { data: alle } = await vq.order("id", { ascending: false }).limit(30);
     const verlauf = (alle || []).reverse().slice(-10);
     let lesenIn = null; try { lesenIn = await leseOrdner(projekt); } catch (e) { melde("fehler", `Lese-Ordner: ${ohneGeheimnisse(e?.message || String(e))}`); }
+    // Anhänge (0050): in einen eigenen Unterordner des Lese-Ordners (bzw. einen leeren Ordner) laden, danach wieder entfernen
+    let anhaenge = [];
+    if (Array.isArray(f.anhaenge) && f.anhaenge.length) {
+      if (!lesenIn) { lesenIn = await mkdtemp(path.join(os.tmpdir(), "cs-chat-")); chatAnhangOrdner = lesenIn; }
+      const unterordner = path.join(".cs-anhaenge", String(f.id));
+      if (!chatAnhangOrdner) chatAnhangOrdner = path.join(lesenIn, ".cs-anhaenge", String(f.id));
+      anhaenge = await anhaengeLaden(f.anhaenge, { basis: lesenIn, unterordner, benutzer: cfg.user_id, projekt: f.projekt_id,
+        laden: async (pfad) => { const { data, error } = await db.storage.from("ws-chat").download(pfad); if (error) throw error; return data; } }).catch(() => []);
+      if (anhaenge.length < f.anhaenge.length) melde("fehler", `Chat: ${f.anhaenge.length - anhaenge.length} Anhang/Anhänge nicht ladbar`);
+    }
     const gids = (gruppen || []).map((g) => g.id);
     const { data: feats } = gids.length ? await db.from("ws_features").select("id, name, gruppe_id").in("gruppe_id", gids).eq("ausgebaut", false).limit(300) : { data: [] };
-    const prompt = assistentPrompt({ projekt, ort: f.ort, kontext: f.kontext, frage: f.text, verlauf, wissen: await holeWissen(f.projekt_id),
+    const prompt = assistentPrompt({ projekt, ort: f.ort, kontext: f.kontext, frage: f.text + anhaengeText(anhaenge), verlauf, wissen: await holeWissen(f.projekt_id),
       gruppen: (gruppen || []).filter((g) => g.id !== projekt.konzept_gruppe_id).map((g) => ({ id: g.id, name: g.name, global: g.ws_bereiche?.global })), features: feats || [] });
     const aufgabe = f.ort === "konzept" || istKonzeptFrage(f.text, verlauf) ? "konzept" : "chat";
     const { roh, ki } = await kiAntwort(projekt, aufgabe, prompt, { claudeLesenIn: lesenIn || null, dokuLesen: true, frage: f.text });
@@ -1237,6 +1279,7 @@ async function claudeChat() {
   } catch (e) {
     await db.rpc("ws_claude_chat_antwort", { p_frage: f.id, p_text: `Claude konnte gerade nicht antworten: ${kuerzen(ohneGeheimnisse(e?.message || String(e)), 300)}`, p_fehler: true });
   }
+  finally { if (chatAnhangOrdner) await rm(chatAnhangOrdner, { recursive: true, force: true }).catch(() => {}); chatAnhangOrdner = null; }
   melde("status", "Werkstatt bereit");
   return true;
 }
@@ -1583,6 +1626,7 @@ async function start() {
   try { const { data } = await db.from("ws_abo_limits").select("*").eq("benutzer_id", cfg.user_id).maybeSingle(); if (data) aboStand = data; } catch { /* noch keine Werte */ }
   try { const { data } = await db.from("ws_ki_kopplung").select("anbieter, anfragen_heute, anfragen_tag").eq("pc_id", pcId); for (const z of data || []) if (z.anfragen_tag) anfragen[z.anbieter] = { tag: z.anfragen_tag, n: z.anfragen_heute || 0 }; } catch { /* Spalten erst ab Datenbank 0029 */ }
   setInterval(() => aboAusStatuszeile().catch(() => {}), 60 * 1000);
+  setInterval(() => limitsAbruf().catch(() => {}), 4 * 1000);   // Knopf „Jetzt aktualisieren“ (0050)
   melde("status", "Werkstatt bereit");
   // Beim Start: Aufträge, die auf diesem PC liefen, als unterbrochen melden – sonst hängen sie in „In Arbeit“ und lassen sich nicht abbrechen
   // (Meldung Gerhard 26.10.2026: Auftrag #18 hing nach einem Neustart der Werkstatt)

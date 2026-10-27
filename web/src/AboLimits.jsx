@@ -2,7 +2,7 @@
 // ein Reiter je gekoppelter KI in ihrer Farbe. Ehrlich: echte Prozentwerte liefern nur Claude (Claude Code) und ChatGPT (Codex);
 // für die anderen steht da, dass der Anbieter keine Limits zeigt – dazu die Anfragen der Werkstatt heute und wann zuletzt „Limit voll“ war.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { X, Gauge, Info } from "lucide-react";
+import { X, Gauge, Info, RefreshCw, Loader2, CircleAlert } from "lucide-react";
 import { supabase } from "./supabase";
 import { kiFarbe } from "./kiFarbe";
 
@@ -29,7 +29,39 @@ function Balken({ titel, prozent, reset, warn, pause }) {
     </div>);
 }
 
-export default function AboLimits({ d, ich, onSchliessen, onVerbrauch }) {
+// Knopf „Jetzt aktualisieren“ (Entwurf 1.1, Gerhard 2026-10-27): die eigene Werkstatt fragt die Werte kostenlos ab
+// (wie „/usage“ in Claude Code), ersatzweise mit einer Mini-Anfrage; Ergebnis und Hinweis kommen über ws_abo_limits zurück (0050).
+const vor = (t) => { if (!t) return ""; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 1 ? "gerade eben" : m < 60 ? `vor ${m} Min.` : m < 1440 ? `vor ${Math.round(m / 60)} Std.` : `vor ${Math.round(m / 1440)} Tg.`; };
+function Aktualisieren({ abo, toast, werkstattAn }) {
+  const [warte, setWarte] = useState(null); const [meldung, setMeldung] = useState(null);
+  const erledigt = warte && abo?.abruf_erledigt && Date.parse(abo.abruf_erledigt) >= warte - 2000;
+  useEffect(() => { if (erledigt) { setWarte(null); setMeldung(null); } }, [erledigt]);
+  useEffect(() => {
+    if (!warte) return undefined;
+    const t = setTimeout(() => { setWarte(null); setMeldung("Keine Antwort von deiner Werkstatt – ist das Programm offen und die Werkstatt an?"); }, 45000);
+    return () => clearTimeout(t);
+  }, [warte]);
+  const los = async () => {
+    setMeldung(null);
+    const { error } = await supabase.rpc("ws_abo_abruf");
+    if (error) { (toast || (() => {}))((error.message || "").replace(/^.*?ERROR:\s*/, "")); return; }
+    setWarte(Date.now());
+  };
+  const fehlerHinweis = abo?.abruf_art && abo.abruf_art !== "abruf" ? abo.abruf_hinweis : null;
+  return (
+    <div className="flex flex-col gap-2 px-4 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 rounded-b-2xl">
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-slate-500 min-w-0">{warte ? "Werkstatt fragt ab …" : abo?.aktualisiert ? `Stand ${uhr(abo.aktualisiert)} · ${vor(abo.aktualisiert)}` : "Noch kein Stand"}</span>
+        <button type="button" onClick={los} disabled={!!warte} className="ml-auto inline-flex items-center gap-2 h-9 px-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-display font-bold tracking-wide text-sm">
+          {warte ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}Jetzt aktualisieren</button>
+      </div>
+      {!werkstattAn && <p className="text-xs text-amber-700 dark:text-amber-300 flex gap-1.5"><CircleAlert className="w-3.5 h-3.5 shrink-0 mt-px" />Deine Werkstatt ist aus – der Knopf wirkt erst, wenn sie läuft.</p>}
+      {meldung && <p className="text-xs text-amber-700 dark:text-amber-300 flex gap-1.5"><CircleAlert className="w-3.5 h-3.5 shrink-0 mt-px" />{meldung}</p>}
+      {!meldung && fehlerHinweis && <p className={`text-xs flex gap-1.5 ${abo.abruf_art === "fehler" ? "text-red-700 dark:text-red-300" : "text-slate-600 dark:text-slate-300"}`}><Info className="w-3.5 h-3.5 shrink-0 mt-px" />{fehlerHinweis}</p>}
+    </div>);
+}
+
+export default function AboLimits({ d, ich, toast, onSchliessen, onVerbrauch }) {
   const [kopp, setKopp] = useState([]); const [eigene, setEigene] = useState({}); const [wahl, setWahl] = useState("claude");
   const warn = d.einstellungen?.abo_klein_ab_prozent ?? 75; const pause = d.einstellungen?.abo_pause_ab_prozent ?? 95;
   const laden = useCallback(async () => {
@@ -82,8 +114,8 @@ export default function AboLimits({ d, ich, onSchliessen, onVerbrauch }) {
           {aktiv === "claude" ? (abo && (abo.fuenf_std_prozent != null || abo.woche_prozent != null) ? <>
             <Balken titel="5 Std." prozent={abo.fuenf_std_prozent} reset={abo.fuenf_std_reset} warn={warn} pause={pause} />
             <Balken titel="Woche" prozent={abo.woche_prozent} reset={abo.woche_reset} warn={warn} pause={pause} />
-            <span className="text-xs text-slate-500">Stand {uhr(abo.aktualisiert)} · aus Claude Code</span></>
-            : <p className="text-sm text-slate-600 dark:text-slate-300 flex gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />Noch keine Werte: Claude Code meldet die Prozente mit der nächsten Antwort an die Werkstatt (Chat oder Auftrag).</p>)
+            <span className="text-xs text-slate-500">{abo.quelle === "abruf" ? "kostenloser Abruf bei Anthropic" : abo.quelle === "mini" ? "aus einer Mini-Anfrage" : "aus Claude Code"}</span></>
+            : <p className="text-sm text-slate-600 dark:text-slate-300 flex gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />Noch keine Werte – unten „Jetzt aktualisieren“ drücken.</p>)
           : k?.limits?.length ? <>
             {k.limits.map((f, i) => <Balken key={i} titel={FENSTER[f.art] || f.art} prozent={f.prozent} reset={f.reset} warn={warn} pause={pause} />)}
             <span className="text-xs text-slate-500">Stand {uhr(k.limits_zeit)} · vom Anbieter</span></>
@@ -94,7 +126,8 @@ export default function AboLimits({ d, ich, onSchliessen, onVerbrauch }) {
             <dt className="text-slate-500">Zuletzt „Limit voll“</dt><dd className={limitVoll ? "font-semibold text-red-700 dark:text-red-300" : ""}>{k?.limit_bis ? (limitVoll ? `bis ${uhr(k.limit_bis)}` : `bis ${uhr(k.limit_bis)} (vorbei)`) : "–"}</dd>
           </dl>}
         </div>
-        {onVerbrauch && <div className="px-4 pb-4"><button type="button" onClick={onVerbrauch} className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 hover:underline">Verbrauch & Limits ansehen</button></div>}
+        {onVerbrauch && <div className="px-4 pb-3"><button type="button" onClick={onVerbrauch} className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 hover:underline">Verbrauch & Limits ansehen</button></div>}
+        <Aktualisieren abo={abo} toast={toast} werkstattAn={(d.pcs || []).some((p) => p.benutzer_id === ich.id && p.an)} />
       </section>
     </div>);
 }
