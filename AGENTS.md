@@ -40,6 +40,11 @@ Zusammengeführt wird nur auf Gerhards Wort (in der Codeschmiede: Knopf „Freig
 - Werkstatt arbeitet nur im Arbeitsordner des Auftrags (eigener Zweig), nie direkt auf `main`; heikle Befehle brauchen Erlaubnis im Programm.
 
 ## Neue Anweisungen
+- **2026-10-27 08:18/08:27 – Oberfläche 2.0 & Chat (Entwurf 1.1 frei, `docs/KONZEPT-OBERFLAECHE-2.md`):** Chat wie bei Claude mit eigenen Unterhaltungen,
+  @Feature/#Gruppe und Anhängen; Oberfläche gruppiert und aufgeräumt; Limits per Knopf „Jetzt aktualisieren“ (kostenloser Abruf wie „/usage“, keine offizielle
+  Schnittstelle – bricht er, Mini-Anfrage und sichtbarer Hinweis; Anmeldung nur im Speicher). Gebaut wird künftig nur noch über die Codeschmiede;
+  diese Fassung ausnahmsweise im Claude-Chat (Werkstatt bis 29.10. im Wochenlimit, Entscheidung 08:28). Zurückgestellt: KI-Anbieter „zwingend verwenden“
+  und 3 Anbieter beim Programmieren – bis zu Gerhards Entscheidung gilt die Regel vom 2026-10-23 weiter.
 - **2026-10-25 20:13 – Umzug in die GitHub-Organisation:** Die Repos `codeschmiede` und `trainer-to-go` liegen jetzt in der Organisation
   `kresak-it-solutions` (GitHub Enterprise „Kresak IT-Solutions“, Testphase bis 24.11.2026). Neue Projekt-Repos legt die Codeschmiede dort an;
   das Regelwerk bleibt unter `gerhardkresak-code/ai-dev-os`. Der Eintrag vom 2026-10-23 18:38 gilt mit dieser Organisation statt des Kontos.

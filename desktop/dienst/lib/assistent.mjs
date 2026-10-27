@@ -18,7 +18,7 @@ export function wissenText(wissen = [], grenze = 8000) {
   }
   return Object.entries(KAPITEL).filter(([k]) => nach[k]).map(([k, t]) => `${t}:\n${nach[k].map((x) => `- ${x}`).join("\n")}`).join("\n");
 }
-export function assistentPrompt({ projekt, ort, kontext, frage, verlauf = [], gruppen = [], features = [], wissen = [] }) {
+export function assistentPrompt({ projekt, ort, kontext, frage, verlauf = [], gruppen = [], features = [], wissen = [], anhaenge = "" }) {
   const alt = verlauf.slice(-10).map((m) => `${m.von ? "Gerhard" : "Assistent"}: ${kurz(m.text, 900)}`).join("\n");
   const fl = features.slice(0, 300).map((x) => `${x.id} = ${x.name} (Gruppe ${x.gruppe_id})`).join("; ");
   const gl = gruppen.slice(0, 80).map((g) => `${g.id} = ${g.name}${g.global ? " (Globale Einstellungen – gilt für die ganze App)" : ""}`).join("; ");
@@ -42,7 +42,8 @@ KONZEPT-GESPRÄCH: Das ist Gerhards allgemeiner Chat mit dir (wie mit einem Entw
 ${wissen.length ? "Bau auf dem bestätigten Wissen auf und frag gezielt nach den Kapiteln, zu denen noch nichts feststeht." : "Für dieses Projekt steht noch nichts fest – fang bei Ziel und Zielgruppe an."}
 ` : ""}
 ${alt ? `Bisheriges Gespräch:\n${alt}\n\n` : ""}Gerhards Nachricht: ${kurz(frage, 6000)}
-
+${anhaenge ? `${anhaenge}
+` : ""}
 So antwortest du:
 - Deutsch, klar und kurz (meist unter 15 Zeilen), ohne Fachchinesisch. Prüfe zuerst, ob das Vorhaben Sinn ergibt, und frag nach fehlenden Details.
 - Schau bei Bedarf im Projekt nach (AGENTS.md, docs/, Code), bevor du etwas behauptest. Nenne Dateien, wenn es hilft.

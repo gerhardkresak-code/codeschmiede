@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useStat
 import {
   Inbox, Eye, GitBranch, ShieldCheck, BookOpen, History, Download, KeyRound, Plus, Send, Trash2, X, Check,
   Loader2, Info, Bot, Layers, GitPullRequest, Wrench, LogIn, MessageSquare, Users, Lock, Gauge, FolderPlus, Power,
-  ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale, ListChecks, Rocket, Undo2, Pin, FlaskConical, ScanSearch, Plug, Code2, AlertTriangle, ClipboardList, PenLine,
+  Menu, Search, Bell, Settings, ChevronDown, ArrowLeft, ExternalLink, RefreshCw, Smartphone, Tablet, Monitor, MousePointerClick, GitMerge, CircleCheck, Palette, Globe, FolderInput, Cpu, FolderCog, Archive, ArchiveRestore, Scale, ListChecks, Rocket, Undo2, Pin, FlaskConical, ScanSearch, Plug, Code2, AlertTriangle, ClipboardList, PenLine,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { Markdown } from "./Markdown";
@@ -18,6 +18,7 @@ import Regelwerk from "./Regelwerk";
 import Anbindungen, { NeuesProjektAssistent } from "./ProjektArten";
 import CodeEditor from "./CodeEditor";
 import Fehler from "./Fehler";
+import Chat from "./Chat";
 import Aufgaben, { AufgabenImChat, AufgabeBeilagen, AufgabePlakette, useMeineAufgaben } from "./Aufgaben";
 import { LogoZeichen } from "./Logo";
 import CodeschmiedeZeichen from "./Zeichen";
@@ -164,10 +165,11 @@ const merke = { lies: (k, art) => { try { return speicher(art).getItem(k); } cat
 export default function App() {
   const [sitzung, setSitzung] = useState(undefined);
   const [ich, setIch] = useState(undefined);
-  const [ansicht, setAnsicht] = useState("zentrale");
+  const [ansicht, setAnsicht] = useState(() => merke.lies("cs-ansicht") || "zentrale");   // zuletzt geöffnete Seite (Entwurf 1.1)
   const [oeffne, setOeffne] = useState(null);   // aus „Zu erledigen“: Feature-Arbeitsplatz bzw. Gruppen-Chat öffnen
   const [projekt, setProjekt] = useState(() => merke.lies("cs-projekt"));
   const [toast, setToast] = useState("");
+  const [menueOffen, setMenueOffen] = useState(false); const [sucheOffen, setSucheOffen] = useState(false); const [chatStart, setChatStart] = useState(null);
   const [neuesProjekt, setNeuesProjekt] = useState(false); const [projekteVerwalten, setProjekteVerwalten] = useState(false); const [einrichtung, setEinrichtung] = useState(false); const [aboOffen, setAboOffen] = useState(false);
 
   useEffect(() => {
@@ -186,90 +188,215 @@ export default function App() {
   const meineAufgaben = useMeineAufgaben(ich ? daten.projektId : null, ich?.id);   // Plakette „Aufgaben“: offene, mir zugewiesene (Datenbank 0042)
   const waehle = (id) => { setProjekt(id); merke.schreib("cs-projekt", id); };
 
+  // Strg K / ⌘ K: Suchen & Springen (Entwurf 1.1)
+  useEffect(() => {
+    const t = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSucheOffen(true); } };
+    window.addEventListener("keydown", t); return () => window.removeEventListener("keydown", t);
+  }, []);
   if (sitzung === undefined || (sitzung && ich === undefined)) return <Zentriert><Loader2 className="w-6 h-6 animate-spin text-emerald-700" /></Zentriert>;
   if (!sitzung) return <Anmelden />;
   if (!ich) return <EinladungAnnehmen sitzung={sitzung} onFertig={ladeIch} />;
 
-  const nav = [["zentrale", "Auftrags-Zentrale", Inbox], ["erledigen", "Zu erledigen", ListChecks], ["aufgaben", "Aufgaben", ClipboardList], ["vorschau", "Live-Vorschau", Eye], ["anbindungen", "Anbindungen", Plug], ["code", "Code", Code2], ["fehler", "Fehler", AlertTriangle], ["designer", "App-Designer", Palette], ["global", "Globale Einstellungen", Globe], ["_", "Ablauf"], ["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen], ["_", "Dokumentation"], ["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["regelwerk", "Regelwerk", Scale], ["_", "Verwaltung"], ["benutzer", "Benutzer & Rechte", KeyRound], ["ki", "KI-Anbieter", Cpu], ["einrichtung", "Einrichtung", Wrench], ["verbrauch", "Verbrauch & Limits", Gauge]];
+  // Navigation in Gruppen (Entwurf 1.1 „Oberfläche 2.0“, freigegeben 2026-10-27 08:27); „Verwaltung“ unten aufklappbar
+  const NAV = [
+    ["Arbeiten", [["chat", "Chat", MessageSquare], ["zentrale", "Zentrale", Inbox], ["erledigen", "Zu erledigen", ListChecks], ["aufgaben", "Aufgaben", ClipboardList]]],
+    ["Gestalten & Bauen", [["designer", "App-Designer", Palette], ["vorschau", "Live-Vorschau", Eye], ["code", "Code", Code2], ["fehler", "Fehler", AlertTriangle], ["global", "Globale Einstellungen", Globe]]],
+    ["Ablauf", [["zweige", "Zweige & Versionen", GitBranch], ["pruef", "Prüfstand", ShieldCheck], ["wissen", "Wissensdatenbank", BookOpen]]],
+    ["Dokumentation", [["log", "Änderungsprotokoll", History], ["doku", "Dokumentation", Download], ["regelwerk", "Regelwerk", Scale]]],
+  ];
+  const VERWALTUNG = [["benutzer", "Benutzer & Rechte", KeyRound], ["ki", "KI-Anbieter", Cpu], ["anbindungen", "Anbindungen", Plug], ["einrichtung", "Einrichtung", Wrench], ["verbrauch", "Verbrauch & Limits", Gauge]];
+  const nav = [...NAV.flatMap(([, l]) => l), ...VERWALTUNG];
   const offen = daten.auftraege.filter((a) => a.offeneFrage).length;
   const zuTun = daten.projektId ? aufgabenListe(daten, rechteVon(daten, ich)).length : 0;
   const aktuell = daten.projekte.find((p) => p.id === daten.projektId);
   const PIcon = WS_ICON[aktuell?.symbol] || Layers;
+  const geh = (id) => { if (id === "einrichtung") setEinrichtung(true); else { setAnsicht(id); merke.schreib("cs-ansicht", id); } setMenueOffen(false); };
+  const zahl = (id) => (id === "zentrale" ? offen : id === "erledigen" ? zuTun : id === "aufgaben" ? meineAufgaben : 0);
+  const verwaltungAktiv = VERWALTUNG.some(([id]) => id === ansicht);
+  const NavKnopf = ([id, t, Icon]) => (
+    <button key={id} type="button" aria-current={ansicht === id ? "page" : undefined} onClick={() => geh(id)}
+      className={`w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-sm text-left ${ansicht === id ? "bg-emerald-400/15 text-white font-semibold" : "text-emerald-50/85 hover:bg-white/5"}`}>
+      <Icon className="w-[17px] h-[17px] shrink-0 opacity-90" /><span className="truncate">{t}</span>
+      {id === "chat" && <span className="ml-auto text-[10px] font-bold tracking-wider bg-emerald-300 text-emerald-950 rounded px-1">NEU</span>}
+      {zahl(id) > 0 && <span className="ml-auto text-[11px] font-bold bg-amber-500 text-amber-950 rounded-full px-1.5" title={id === "aufgaben" ? "Offene Aufgaben, für die du zuständig bist" : undefined}>{zahl(id)}</span>}
+    </button>);
+  const vollflaeche = ansicht === "chat";
 
   return (
-    <div className={`min-h-screen grid grid-cols-[minmax(0,1fr)] md:grid-cols-[248px_minmax(0,1fr)] bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-body`}>
-      <aside className="bg-[#0f2a22] text-emerald-50 flex md:flex-col gap-1 p-3 md:sticky md:top-0 md:h-screen overflow-x-auto">
-        <div className="flex items-center gap-2.5 px-2 pb-0 md:pb-3">
-          <CodeschmiedeZeichen groesse={36} className="ring-1 ring-emerald-400/30 rounded-[9px]" />
-          <div className="hidden md:block leading-tight"><b className="font-display text-[19px] tracking-wide">Codeschmiede</b><div className="text-xs text-emerald-200/70">Deine Apps. Ein Ort.</div></div>
+    <div className="h-screen grid grid-cols-[minmax(0,1fr)] md:grid-cols-[236px_minmax(0,1fr)] bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-body overflow-hidden">
+      {menueOffen && <div className="md:hidden fixed inset-0 z-30 bg-slate-950/40" onClick={() => setMenueOffen(false)} aria-hidden="true" />}
+      <aside className={`bg-[#0f2a22] text-emerald-50 flex flex-col gap-0.5 p-3 h-screen overflow-y-auto z-40 fixed inset-y-0 left-0 w-[250px] transition-transform md:static md:w-auto md:translate-x-0 ${menueOffen ? "translate-x-0" : "-translate-x-full"}`} aria-label="Hauptmenü">
+        <div className="flex items-center gap-2.5 px-1.5 pb-3">
+          <CodeschmiedeZeichen groesse={32} className="ring-1 ring-emerald-400/30 rounded-[9px]" />
+          <div className="leading-tight"><b className="font-display text-[19px] tracking-wide">Codeschmiede</b><div className="text-[11px] text-emerald-200/70">Deine Apps. Ein Ort.</div></div>
         </div>
-        <div className="hidden md:block mb-2">
-          <label htmlFor="cs-projekt" className="text-[11px] uppercase tracking-widest text-emerald-200/60 px-2.5">Projekt</label>
-          <div className="mt-1 flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-2">
-            {aktuell?.logo ? <LogoZeichen werte={aktuell.logo} groesse={20} /> : <PIcon className="w-[18px] h-[18px] shrink-0" />}
-            <select id="cs-projekt" value={daten.projektId || ""} onChange={(e) => waehle(e.target.value)} className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none [&>option]:text-slate-900">
-              {daten.projekte.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          {ich.rolle === "admin" && <button type="button" onClick={() => setNeuesProjekt(true)} className="mt-1 w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm text-emerald-200 hover:bg-white/5"><FolderPlus className="w-4 h-4" />Neues Projekt</button>}
-          {ich.rolle === "admin" && <button type="button" onClick={() => setProjekteVerwalten(true)} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm text-emerald-200 hover:bg-white/5"><FolderCog className="w-4 h-4" />Projekte verwalten</button>}
-        </div>
-        <nav className="flex md:flex-col gap-0.5" aria-label="Programm-Menü">
-          {nav.map(([id, t, Icon], i) => id === "_" ? <div key={i} className="hidden md:block text-[11px] uppercase tracking-widest text-emerald-200/60 px-2.5 pt-3 pb-1">{t}</div> : (
-            <button key={id} type="button" aria-current={ansicht === id} onClick={() => (id === "einrichtung" ? setEinrichtung(true) : setAnsicht(id))}
-              className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm whitespace-nowrap text-left ${ansicht === id ? "bg-emerald-400/15 text-white font-semibold" : "hover:bg-white/5"}`}>
-              <Icon className="w-[18px] h-[18px]" />{t}{id === "zentrale" && offen > 0 && <span className="ml-auto text-[11px] font-bold bg-amber-500 text-amber-950 rounded-full px-1.5">{offen}</span>}{id === "erledigen" && zuTun > 0 && <span className="ml-auto text-[11px] font-bold bg-amber-500 text-amber-950 rounded-full px-1.5">{zuTun}</span>}{id === "aufgaben" && meineAufgaben > 0 && <span title="Offene Aufgaben, für die du zuständig bist" className="ml-auto text-[11px] font-bold bg-amber-500 text-amber-950 rounded-full px-1.5">{meineAufgaben}</span>}
-            </button>))}
+        <nav className="flex flex-col gap-0.5" aria-label="Programm-Menü">
+          {NAV.map(([titel, l]) => (
+            <React.Fragment key={titel}>
+              <div className="text-[11px] uppercase tracking-widest text-emerald-200/55 px-2.5 pt-3 pb-1">{titel}</div>
+              {l.map(NavKnopf)}
+            </React.Fragment>))}
         </nav>
-        <div className="hidden md:flex mt-auto items-center gap-2.5 p-2.5 rounded-xl bg-white/5 text-sm">
-          <span className="w-8 h-8 rounded-full bg-emerald-500 text-emerald-950 grid place-items-center text-xs font-bold">{ich.name.split(" ").map((s) => s[0]).join("").slice(0, 2)}</span>
-          <div className="min-w-0 flex-1">{ich.name}<div className="text-xs text-emerald-200/70">{ROLLEN[ich.rolle]}</div></div>
-          <button type="button" title="Abmelden" onClick={() => supabase.auth.signOut()} className="p-1.5 rounded-lg hover:bg-white/10"><Power className="w-4 h-4" /></button>
-        </div>
+        <details className="mt-auto pt-3 border-t border-white/10 group" open={verwaltungAktiv || undefined}>
+          <summary className="list-none cursor-pointer flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-sm text-emerald-50/85 hover:bg-white/5">
+            <Settings className="w-[17px] h-[17px]" />Verwaltung<ChevronDown className="w-4 h-4 ml-auto transition-transform group-open:rotate-180" /></summary>
+          <div className="flex flex-col gap-0.5 mt-0.5">{VERWALTUNG.map(NavKnopf)}</div>
+        </details>
       </aside>
-      <main className="min-w-0 px-4 md:px-6 pb-10">
-        <div className="flex flex-wrap items-center gap-3 py-3.5 border-b border-slate-200 dark:border-slate-800 mb-5">
-          <h1 className="font-display font-bold text-2xl">{nav.find((n) => n[0] === ansicht)?.[1]}</h1>
-          <span className="text-sm text-slate-500">{aktuell?.name}</span>
-          <span className="inline-flex items-center gap-1.5 text-xs text-slate-500"><i className="w-2 h-2 rounded-full bg-green-600" />Live synchronisiert</span>
-          <div className="ml-auto flex items-center gap-3 flex-wrap">
+
+      <div className="min-w-0 h-screen grid grid-rows-[auto_minmax(0,1fr)]">
+        <header className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <button type="button" className="md:hidden p-2 rounded-lg border border-slate-200 dark:border-slate-700" onClick={() => setMenueOffen(true)} aria-label="Menü öffnen"><Menu className="w-4 h-4" /></button>
+          <ProjektWahl projekte={daten.projekte} aktuell={aktuell} PIcon={PIcon} admin={ich.rolle === "admin"} onWahl={waehle} onNeu={() => setNeuesProjekt(true)} onVerwalten={() => setProjekteVerwalten(true)} />
+          <button type="button" onClick={() => setSucheOffen(true)} className="hidden sm:flex flex-1 max-w-[440px] items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-700/70">
+            <Search className="w-4 h-4" />Suchen oder springen … Feature, Auftrag, Chat<kbd className="ml-auto font-mono text-[11px] border border-slate-300 dark:border-slate-600 rounded px-1.5">Strg K</kbd></button>
+          <button type="button" onClick={() => setSucheOffen(true)} className="sm:hidden p-2 rounded-lg border border-slate-200 dark:border-slate-700" aria-label="Suchen"><Search className="w-4 h-4" /></button>
+          <div className="ml-auto flex items-center gap-2">
             <VerbrauchKurz d={daten} ich={ich} onClick={() => setAboOffen(true)} />
-            {aboOffen && <Suspense fallback={null}><AboLimits d={daten} ich={ich} onSchliessen={() => setAboOffen(false)} onVerbrauch={() => { setAboOffen(false); setAnsicht("verbrauch"); }} /></Suspense>}
-            <EinrichtungChip ich={ich} d={daten} onOeffnen={() => setEinrichtung(true)} />
+            <span className="hidden lg:contents"><EinrichtungChip ich={ich} d={daten} onOeffnen={() => setEinrichtung(true)} /></span>
             <WerkstattSchalter ich={ich} sitzung={sitzung} d={daten} toast={setToast} />
+            <button type="button" onClick={() => geh("erledigen")} className="relative p-2 rounded-xl border border-slate-200 dark:border-slate-700" aria-label={`Zu erledigen: ${offen + zuTun}`} title="Rückfragen, Freigaben und alles, was auf dich wartet">
+              <Bell className="w-4 h-4" />{offen + zuTun > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-amber-500 text-amber-950 text-[10px] font-bold grid place-items-center px-1">{offen + zuTun}</span>}</button>
+            <Benutzermenue ich={ich} />
           </div>
-        </div>
-        {daten.laden ? <div className="grid place-items-center py-20"><Loader2 className="w-6 h-6 animate-spin text-emerald-700" /></div>
-          : !daten.projektId ? <div className={`${card} p-8 text-slate-500`}>Du bist noch keinem Projekt zugeordnet. Der Admin nimmt dich in ein Projekt auf.</div>
-          : ansicht === "zentrale" ? <Zentrale key={daten.projektId} d={daten} ich={ich} toast={setToast} onDesigner={() => setAnsicht("designer")} start={oeffne} />
-          : ansicht === "erledigen" ? <ZuErledigen key={daten.projektId} d={daten} ich={ich} toast={setToast} onOeffne={(a) => { setOeffne({ f: a.feature_id, g: a.gruppe_id, n: Date.now() }); setAnsicht("zentrale"); }} />
-          : ansicht === "aufgaben" ? <Aufgaben key={daten.projektId} d={daten} ich={ich} toast={setToast} onOeffneChat={(z) => { setOeffne({ f: z.f, g: z.g, n: Date.now() }); setAnsicht("zentrale"); }} />
-          : ansicht === "global" ? <Zentrale key={daten.projektId + "-global"} d={daten} ich={ich} toast={setToast} nurGlobal />
-          : ansicht === "regelwerk" ? <Regelwerk key={daten.projektId} d={daten} ich={ich} toast={setToast} />
-          : ansicht === "ki" ? <KiAnbieter key={daten.projektId} d={daten} ich={ich} toast={setToast} />
-          : ansicht === "zweige" ? <ZweigeVersionen key={daten.projektId} d={daten} />
-          : ansicht === "pruef" ? <Pruefstand key={daten.projektId} d={daten} />
-          : ansicht === "wissen" ? <Wissensdatenbank key={daten.projektId} d={daten} />
-          : ansicht === "log" ? <Aenderungsprotokoll key={daten.projektId} d={daten} />
-          : ansicht === "doku" ? <Dokumentation key={daten.projektId} d={daten} />
-          : ansicht === "fehler" ? <Fehler key={daten.projektId} d={daten} ich={ich} toast={setToast} onAuftrag={() => setAnsicht("zentrale")} />
-          : ansicht === "code" ? <CodeEditor key={daten.projektId} d={daten} ich={ich} toast={setToast} onAuftrag={() => setAnsicht("zentrale")} />
-          : ansicht === "anbindungen" ? <Anbindungen key={daten.projektId} d={daten} ich={ich} toast={setToast} onVorschau={() => setAnsicht("vorschau")} />
-          : ansicht === "vorschau" ? <LiveVorschauSeite key={daten.projektId} d={daten} ich={ich} toast={setToast} />
-          : ansicht === "designer" ? <Designer key={daten.projektId} d={daten} ich={ich} toast={setToast} />
-          : ansicht === "benutzer" ? <BenutzerRechte d={daten} ich={ich} toast={setToast} />
-          : ansicht === "verbrauch" ? <Verbrauch d={daten} ich={ich} toast={setToast} />
-          : <Spaeter ansicht={ansicht} />}
-      </main>
-      {/* Die Chat-Spalte rechts entfällt (Gerhard 2026-10-23 17:52): Gespräche mit Claude laufen in der Gruppe „Konzept“ */}
+        </header>
+        <main className={`min-w-0 min-h-0 ${vollflaeche ? "overflow-hidden" : "overflow-y-auto px-4 md:px-6 pb-10"}`}>
+          {!vollflaeche && <div className="flex flex-wrap items-center gap-3 py-4">
+            <h1 className="font-display font-bold text-2xl">{nav.find((n) => n[0] === ansicht)?.[1]}</h1>
+            <span className="text-sm text-slate-500">{aktuell?.name}</span>
+            <span className="inline-flex items-center gap-1.5 text-xs text-slate-500"><i className="w-2 h-2 rounded-full bg-green-600" />Live synchronisiert</span>
+          </div>}
+          {aboOffen && <Suspense fallback={null}><AboLimits d={daten} ich={ich} toast={setToast} onSchliessen={() => setAboOffen(false)} onVerbrauch={() => { setAboOffen(false); geh("verbrauch"); }} /></Suspense>}
+          {daten.laden ? <div className="grid place-items-center py-20"><Loader2 className="w-6 h-6 animate-spin text-emerald-700" /></div>
+            : !daten.projektId ? <div className={`${card} p-8 text-slate-500`}>Du bist noch keinem Projekt zugeordnet. Der Admin nimmt dich in ein Projekt auf.</div>
+            : ansicht === "chat" ? <Chat key={daten.projektId} d={daten} ich={ich} toast={setToast} start={chatStart} onFeature={(f) => { setOeffne({ f: f.id, g: f.gruppe_id, n: Date.now() }); geh("zentrale"); }} />
+            : ansicht === "zentrale" ? <><Kennzahlen d={daten} onChat={() => geh("chat")} onErledigen={() => geh("erledigen")} /><Zentrale key={daten.projektId} d={daten} ich={ich} toast={setToast} onDesigner={() => geh("designer")} start={oeffne} /></>
+            : ansicht === "erledigen" ? <ZuErledigen key={daten.projektId} d={daten} ich={ich} toast={setToast} onOeffne={(a) => { setOeffne({ f: a.feature_id, g: a.gruppe_id, n: Date.now() }); geh("zentrale"); }} />
+            : ansicht === "aufgaben" ? <Aufgaben key={daten.projektId} d={daten} ich={ich} toast={setToast} onOeffneChat={(z) => { setOeffne({ f: z.f, g: z.g, n: Date.now() }); geh("zentrale"); }} />
+            : ansicht === "global" ? <Zentrale key={daten.projektId + "-global"} d={daten} ich={ich} toast={setToast} nurGlobal />
+            : ansicht === "regelwerk" ? <Regelwerk key={daten.projektId} d={daten} ich={ich} toast={setToast} />
+            : ansicht === "ki" ? <KiAnbieter key={daten.projektId} d={daten} ich={ich} toast={setToast} />
+            : ansicht === "zweige" ? <ZweigeVersionen key={daten.projektId} d={daten} />
+            : ansicht === "pruef" ? <Pruefstand key={daten.projektId} d={daten} />
+            : ansicht === "wissen" ? <Wissensdatenbank key={daten.projektId} d={daten} />
+            : ansicht === "log" ? <Aenderungsprotokoll key={daten.projektId} d={daten} />
+            : ansicht === "doku" ? <Dokumentation key={daten.projektId} d={daten} />
+            : ansicht === "fehler" ? <Fehler key={daten.projektId} d={daten} ich={ich} toast={setToast} onAuftrag={() => geh("zentrale")} />
+            : ansicht === "code" ? <CodeEditor key={daten.projektId} d={daten} ich={ich} toast={setToast} onAuftrag={() => geh("zentrale")} />
+            : ansicht === "anbindungen" ? <Anbindungen key={daten.projektId} d={daten} ich={ich} toast={setToast} onVorschau={() => geh("vorschau")} />
+            : ansicht === "vorschau" ? <LiveVorschauSeite key={daten.projektId} d={daten} ich={ich} toast={setToast} />
+            : ansicht === "designer" ? <Designer key={daten.projektId} d={daten} ich={ich} toast={setToast} />
+            : ansicht === "benutzer" ? <BenutzerRechte d={daten} ich={ich} toast={setToast} />
+            : ansicht === "verbrauch" ? <Verbrauch d={daten} ich={ich} toast={setToast} />
+            : <Spaeter ansicht={ansicht} />}
+        </main>
+      </div>
+      {sucheOffen && <Befehlsleiste d={daten} nav={nav} onSchliessen={() => setSucheOffen(false)}
+        onSeite={geh} onFeature={(f) => { setOeffne({ f: f.id, g: f.gruppe_id, n: Date.now() }); geh("zentrale"); }}
+        onAuftrag={(x) => { setOeffne({ f: x.feature_id, g: x.gruppe_id, n: Date.now() }); geh("zentrale"); }}
+        onChat={(u) => { setChatStart({ u, n: Date.now() }); geh("chat"); }} />}
+      {/* Die Chat-Spalte rechts entfällt (Gerhard 2026-10-23 17:52); Gespräche laufen im Menüpunkt „Chat“ (Entwurf 1.1) */}
       {einrichtung && !daten.laden && <Einrichtung ich={ich} d={daten} toast={setToast} onClose={() => setEinrichtung(false)} />}
       {!daten.laden && daten.projektId && <EinrichtungAuto ich={ich} d={daten} onOeffnen={() => setEinrichtung(true)} />}
       {!daten.laden && daten.projektId && <KonzeptAuto d={daten} ich={ich} />}
       {projekteVerwalten && <ProjekteVerwalten toast={setToast} aktiv={daten.projektId} onClose={() => setProjekteVerwalten(false)} onWeg={(id) => { if (id === daten.projektId) { const n = daten.projekte.find((p) => p.id !== id); if (n) waehle(n.id); } }} />}
-      {neuesProjekt && <NeuesProjektAssistent toast={setToast} onClose={() => setNeuesProjekt(false)} onFertig={(id) => { waehle(id); setAnsicht("anbindungen"); }} />}
+      {neuesProjekt && <NeuesProjektAssistent toast={setToast} onClose={() => setNeuesProjekt(false)} onFertig={(id) => { waehle(id); geh("anbindungen"); }} />}
       <Toast text={toast} onDone={() => setToast("")} />
     </div>
   );
+}
+
+// ---------------- Kopfzeile (Entwurf 1.1) ----------------
+function ProjektWahl({ projekte, aktuell, PIcon, admin, onWahl, onNeu, onVerwalten }) {
+  const [offen, setOffen] = useState(false);
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOffen(!offen)} aria-expanded={offen} aria-haspopup="menu" className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-sm font-semibold max-w-[220px]">
+        {aktuell?.logo ? <LogoZeichen werte={aktuell.logo} groesse={20} /> : <span className="w-6 h-6 rounded-md bg-emerald-700 text-white grid place-items-center shrink-0"><PIcon className="w-3.5 h-3.5" /></span>}
+        <span className="truncate hidden sm:inline">{aktuell?.name || "Projekt wählen"}</span><ChevronDown className="w-4 h-4 text-slate-500 shrink-0" /></button>
+      {offen && <>
+        <div className="fixed inset-0 z-40" onClick={() => setOffen(false)} aria-hidden="true" />
+        <div role="menu" className="absolute z-50 left-0 mt-1.5 w-64 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-1.5 text-sm">
+          <div className="px-2.5 pt-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Projekte</div>
+          {projekte.map((p) => { const I = WS_ICON[p.symbol] || Layers; return (
+            <button key={p.id} role="menuitem" type="button" onClick={() => { onWahl(p.id); setOffen(false); }} className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left ${p.id === aktuell?.id ? "bg-emerald-50 dark:bg-emerald-950 font-semibold" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}>
+              {p.logo ? <LogoZeichen werte={p.logo} groesse={18} /> : <I className="w-4 h-4" />}<span className="truncate">{p.name}</span>{p.id === aktuell?.id && <Check className="w-4 h-4 ml-auto text-emerald-700" />}</button>); })}
+          {admin && <div className="border-t border-slate-100 dark:border-slate-800 mt-1.5 pt-1.5">
+            <button role="menuitem" type="button" onClick={() => { onNeu(); setOffen(false); }} className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-slate-50 dark:hover:bg-slate-800"><FolderPlus className="w-4 h-4" />Neues Projekt</button>
+            <button role="menuitem" type="button" onClick={() => { onVerwalten(); setOffen(false); }} className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-slate-50 dark:hover:bg-slate-800"><FolderCog className="w-4 h-4" />Projekte verwalten</button>
+          </div>}
+        </div></>}
+    </div>);
+}
+
+function Benutzermenue({ ich }) {
+  const [offen, setOffen] = useState(false);
+  const kurz = ich.name.split(" ").map((s) => s[0]).join("").slice(0, 2);
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOffen(!offen)} aria-expanded={offen} aria-haspopup="menu" title={ich.name} className="w-9 h-9 rounded-full bg-emerald-600 text-white grid place-items-center text-xs font-bold">{kurz}</button>
+      {offen && <>
+        <div className="fixed inset-0 z-40" onClick={() => setOffen(false)} aria-hidden="true" />
+        <div role="menu" className="absolute z-50 right-0 mt-1.5 w-56 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-1.5 text-sm">
+          <div className="px-2.5 py-2"><b className="block truncate">{ich.name}</b><span className="text-xs text-slate-500">{ROLLEN[ich.rolle]}</span></div>
+          <button role="menuitem" type="button" onClick={() => supabase.auth.signOut()} className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-slate-50 dark:hover:bg-slate-800"><Power className="w-4 h-4" />Abmelden</button>
+        </div></>}
+    </div>);
+}
+
+// Kennzahlen über der Zentrale (Entwurf 1.1): was auf dich wartet, was läuft, was in Prüfung ist, was diese Woche live ging
+function Kennzahlen({ d, onChat, onErledigen }) {
+  const a = d.auftraege; const woche = Date.now() - 7 * 864e5;
+  const warten = a.filter((x) => x.offeneFrage || ["freigabe", "zusammen"].includes(x.stand)).length + (d.erlaubnisse?.length || 0);
+  const kacheln = [
+    ["Wartet auf dich", warten, `${a.filter((x) => ["freigabe", "zusammen"].includes(x.stand)).length} Freigaben · ${a.filter((x) => x.offeneFrage).length} Rückfragen`, warten > 0, onErledigen],
+    ["In Arbeit", a.filter((x) => x.stand === "laeuft").length, `${a.filter((x) => x.stand === "wartet").length} warten auf die Werkstatt`],
+    ["In Prüfung", a.filter((x) => ["sicherheit", "feature"].includes(x.stand)).length, "Sicherheit · Feature"],
+    ["Live diese Woche", a.filter((x) => x.stand === "wissen" && Date.parse(x.geaendert) >= woche).length, "fertig und veröffentlicht"],
+  ];
+  return (
+    <div className="flex flex-col gap-3 mb-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {kacheln.map(([t, n, u, warn, klick]) => {
+          const Inhalt = <><span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{t}</span><b className={`block font-display text-[28px] leading-tight tabular-nums ${warn ? "text-amber-600" : ""}`}>{n}</b><span className="text-xs text-slate-500">{u}</span></>;
+          return klick ? <button key={t} type="button" onClick={klick} className={`${card} text-left px-4 py-3 hover:border-emerald-500`}>{Inhalt}</button> : <div key={t} className={`${card} px-4 py-3`}>{Inhalt}</div>;
+        })}
+      </div>
+      <button type="button" onClick={onChat} className="self-start inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"><MessageSquare className="w-4 h-4" />Neues Vorhaben? Erst im Chat besprechen</button>
+    </div>);
+}
+
+// Suchen & Springen (Strg K): Seiten, Features, Aufträge und eigene Unterhaltungen
+function Befehlsleiste({ d, nav, onSchliessen, onSeite, onFeature, onAuftrag, onChat }) {
+  const [q, setQ] = useState(""); const [aktiv, setAktiv] = useState(0); const [chats, setChats] = useState([]);
+  useEffect(() => {
+    let aus = false;
+    supabase.from("ws_unterhaltungen").select("id, titel").eq("projekt_id", d.projektId || "").order("geaendert", { ascending: false }).limit(200).then(({ data }) => { if (!aus) setChats(data || []); });
+    return () => { aus = true; };
+  }, [d.projektId]);
+  const t = q.trim().toLowerCase();
+  const passt = (...w) => !t || w.some((x) => String(x || "").toLowerCase().includes(t));
+  const treffer = [
+    ...nav.filter(([, n]) => passt(n)).map(([id, n, Icon]) => ({ art: "Seite", text: n, Icon, los: () => onSeite(id) })),
+    ...chats.filter((c) => passt(c.titel)).slice(0, 6).map((c) => ({ art: "Chat", text: c.titel, Icon: MessageSquare, los: () => onChat(c.id) })),
+    ...(t ? d.features.filter((f) => !f.ausgebaut && passt(f.name, f.id)).slice(0, 8).map((f) => ({ art: f.id, text: f.name, Icon: Layers, los: () => onFeature(f) })) : []),
+    ...(t ? d.auftraege.filter((a) => passt(a.titel, `#${a.id}`, String(a.id))).slice(0, 6).map((a) => ({ art: `#${a.id}`, text: a.titel, Icon: ClipboardList, los: () => onAuftrag(a) })) : []),
+  ].slice(0, 30);
+  const waehle = (x) => { x.los(); onSchliessen(); };
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/40 grid justify-items-center items-start pt-[12vh] px-4" onClick={onSchliessen}>
+      <div role="dialog" aria-modal="true" aria-label="Suchen und springen" onClick={(e) => e.stopPropagation()} className="w-full max-w-[560px] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
+        <label className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-200 dark:border-slate-800"><Search className="w-5 h-5 text-slate-400" />
+          <input id="cs-befehl" autoFocus value={q} onChange={(e) => { setQ(e.target.value); setAktiv(0); }} placeholder="Seite, Feature, Auftrag oder Chat …" className="flex-1 bg-transparent outline-none text-[15px]"
+            onKeyDown={(e) => { if (e.key === "Escape") onSchliessen(); if (e.key === "ArrowDown") { e.preventDefault(); setAktiv(Math.min(aktiv + 1, treffer.length - 1)); } if (e.key === "ArrowUp") { e.preventDefault(); setAktiv(Math.max(aktiv - 1, 0)); } if (e.key === "Enter" && treffer[aktiv]) waehle(treffer[aktiv]); }} /></label>
+        <ul className="max-h-[50vh] overflow-y-auto p-1.5" role="listbox" aria-label="Treffer">
+          {treffer.map((x, i) => (
+            <li key={i} role="option" aria-selected={i === aktiv}><button type="button" onMouseEnter={() => setAktiv(i)} onClick={() => waehle(x)} className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm ${i === aktiv ? "bg-emerald-50 dark:bg-emerald-950" : ""}`}>
+              <x.Icon className="w-4 h-4 text-slate-500 shrink-0" /><span className="truncate">{x.text}</span><span className="ml-auto text-[11px] text-slate-400 font-mono shrink-0">{x.art}</span></button></li>))}
+          {!treffer.length && <li className="px-3 py-6 text-center text-sm text-slate-500">Nichts gefunden.</li>}
+        </ul>
+      </div>
+    </div>);
 }
 
 function Zentriert({ children }) {

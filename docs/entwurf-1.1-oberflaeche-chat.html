@@ -1,0 +1,438 @@
+<title>Codeschmiede Oberfläche 2.0</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: App-Rahmen wie ein Profi-Werkzeug – schmale gruppierte Navigation links, Kopfzeile mit Projekt/Suche/Limits, Arbeitsfläche (Chat: Unterhaltungen | Gespräch | Bezüge) */
+:root{
+  --bg:#f6f8f7; --flaeche:#ffffff; --flaeche2:#eef3f1; --linie:#dde5e1; --text:#0f1f1a; --leise:#5b6b65;
+  --akzent:#047857; --akzent-hell:#d1fae5; --akzent-text:#065f46; --glut:#f59e0b; --nav:#0f2a22; --nav-text:#cfe3db; --nav-leise:#7fa294; --nav-aktiv:#1b4337;
+  --gut:#059669; --warn:#d97706; --rot:#dc2626;
+  --f-display:"Barlow Semi Condensed","Barlow",system-ui,sans-serif; --f-text:"Barlow",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1310;--flaeche:#111c18;--flaeche2:#16241f;--linie:#22342d;--text:#e6efeb;--leise:#93a69f;--akzent:#34d399;--akzent-hell:#123a2d;--akzent-text:#6ee7b7;--nav:#08100d;--nav-aktiv:#173a2f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0b1310;--flaeche:#111c18;--flaeche2:#16241f;--linie:#22342d;--text:#e6efeb;--leise:#93a69f;--akzent:#34d399;--akzent-hell:#123a2d;--akzent-text:#6ee7b7;--nav:#08100d;--nav-aktiv:#173a2f;color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--f-text);font-size:15px;line-height:1.45}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--akzent);outline-offset:2px}
+.app{height:100%;display:grid;grid-template-columns:228px minmax(0,1fr)}
+/* Navigation */
+.nav{background:var(--nav);color:var(--nav-text);display:flex;flex-direction:column;padding-block:14px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:12px;overflow:auto;gap:2px}
+.marke{display:flex;align-items:center;gap:10px;padding:2px 6px 14px}
+.marke b{font-family:var(--f-display);font-size:19px;letter-spacing:.02em;color:#fff}
+.nav h6{margin:14px 8px 4px;font:600 11px var(--f-text);letter-spacing:.09em;text-transform:uppercase;color:var(--nav-leise)}
+.nav a{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;color:var(--nav-text);text-decoration:none;font-size:14px;cursor:pointer}
+.nav a:hover{background:#ffffff10}
+.nav a.aktiv{background:var(--nav-aktiv);color:#fff;font-weight:600}
+.nav a svg{width:17px;height:17px;flex:none;opacity:.85}
+.nav .zahl{margin-left:auto;font:600 11px var(--f-text);background:var(--glut);color:#1f1300;border-radius:20px;padding:1px 7px}
+.nav .neu{margin-left:auto;font:600 10px var(--f-text);letter-spacing:.06em;color:#0f2a22;background:#6ee7b7;border-radius:4px;padding:1px 5px}
+.nav .unten{margin-top:auto;padding-top:12px;border-top:1px solid #ffffff14}
+/* Kopfzeile */
+.haupt{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0;height:100%}
+.kopf{display:flex;align-items:center;gap:12px;padding-block:10px;padding-left:20px;padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--linie);background:var(--flaeche)}
+.projekt{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--linie);border-radius:10px;font-weight:600}
+.projekt i{width:22px;height:22px;border-radius:6px;background:var(--akzent);display:grid;place-items:center;color:#fff;font:700 11px var(--f-display);font-style:normal}
+.suche{flex:1;max-width:460px;display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:10px;background:var(--flaeche2);color:var(--leise);font-size:14px}
+.suche kbd{margin-left:auto;font:500 11px var(--f-mono);border:1px solid var(--linie);border-radius:5px;padding:1px 5px}
+.rechts{margin-left:auto;display:flex;align-items:center;gap:8px}
+.limitpille{display:flex;align-items:center;gap:10px;padding:5px 10px;border:1px solid var(--linie);border-radius:999px;font-size:13px}
+.mini{display:flex;align-items:center;gap:5px}
+.mini span{width:34px;height:6px;border-radius:9px;background:var(--flaeche2);overflow:hidden}
+.mini span i{display:block;height:100%;background:var(--gut)}
+.mini span i.w{background:var(--warn)} .mini span i.r{background:var(--rot)}
+.mini b{font-variant-numeric:tabular-nums;font-weight:600}
+.rund{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;border:1px solid var(--linie);position:relative}
+.rund .punkt{position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--glut)}
+.ich{width:34px;height:34px;border-radius:50%;background:var(--akzent);color:#fff;display:grid;place-items:center;font:700 13px var(--f-display)}
+svg{stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* Ansichten */
+.ansicht{min-height:0;overflow:hidden}
+.chat{display:grid;grid-template-columns:262px minmax(0,1fr) 0;height:100%;transition:grid-template-columns .2s}
+.chat.bezuege-an{grid-template-columns:262px minmax(0,1fr) 290px}
+.verlauf{border-right:1px solid var(--linie);background:var(--flaeche);display:flex;flex-direction:column;min-height:0}
+.verlauf .oben{padding:14px;display:flex;flex-direction:column;gap:10px}
+.knopf{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:38px;padding:0 14px;border-radius:10px;background:var(--akzent);color:#fff;font:700 15px var(--f-display);letter-spacing:.02em}
+:root[data-theme="dark"] .knopf{color:#06281d}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .knopf{color:#06281d}}
+.feld{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--linie);border-radius:9px;font-size:14px;color:var(--leise)}
+.feld input{border:0;background:none;outline:0;flex:1;min-width:0;font:inherit;color:var(--text)}
+.liste{overflow:auto;padding:0 8px 12px;min-height:0}
+.liste h6{margin:12px 8px 4px;font:600 11px var(--f-text);letter-spacing:.09em;text-transform:uppercase;color:var(--leise)}
+.unterh{display:block;width:100%;text-align:left;padding:8px 10px;border-radius:9px;font-size:14px}
+.unterh:hover{background:var(--flaeche2)}
+.unterh.aktiv{background:var(--akzent-hell);color:var(--akzent-text)}
+.unterh b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.unterh small{color:var(--leise);font-size:12px}
+.unterh.aktiv small{color:var(--akzent-text);opacity:.8}
+.pin{color:var(--glut)}
+/* Gespräch */
+.gespraech{display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-width:0;min-height:0;background:var(--bg)}
+.gkopf{display:flex;align-items:center;gap:10px;padding:12px 22px;border-bottom:1px solid var(--linie)}
+.gkopf h2{margin:0;font:700 19px var(--f-display);text-wrap:balance}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--flaeche2);color:var(--leise);white-space:nowrap}
+.chip.f{background:var(--akzent-hell);color:var(--akzent-text);cursor:pointer}
+.chip.g{background:#fef3c7;color:#92400e}
+:root[data-theme="dark"] .chip.g{background:#3b2a07;color:#fcd34d}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .chip.g{background:#3b2a07;color:#fcd34d}}
+.nachrichten{overflow:auto;padding:22px;display:flex;flex-direction:column;gap:18px;min-height:0}
+.nachricht{max-width:740px;width:100%;margin:0 auto;display:flex;gap:12px}
+.nachricht .av{width:30px;height:30px;border-radius:9px;flex:none;display:grid;place-items:center;font:700 12px var(--f-display)}
+.nachricht.ich .av{background:var(--akzent);color:#fff;border-radius:50%}
+.nachricht.ki .av{background:var(--nav)}
+.nachricht .inhalt{min-width:0;flex:1}
+.nachricht .wer{font-size:12px;color:var(--leise);margin-bottom:3px}
+.nachricht p{margin:0 0 8px}
+.nachricht.ich .blase{background:var(--flaeche);border:1px solid var(--linie);border-radius:14px;padding:10px 14px}
+.karte{border:1px solid var(--linie);border-radius:12px;background:var(--flaeche);overflow:hidden;margin-top:8px}
+.karte .kk{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--flaeche2);font:700 14px var(--f-display);letter-spacing:.02em}
+.karte .kb{padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.frage{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:14px}
+.frage > span{width:100%;font-weight:600}
+.wahl{padding:5px 10px;border:1px solid var(--linie);border-radius:8px;font-size:13px}
+.wahl.an{border-color:var(--akzent);background:var(--akzent-hell);color:var(--akzent-text);font-weight:600}
+.auftrag{display:flex;align-items:center;gap:10px;font-size:14px}
+.auftrag .nr{font:500 12px var(--f-mono);color:var(--leise)}
+.status{margin-left:auto;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--flaeche2)}
+.status.w{background:#fef3c7;color:#92400e}
+/* Eingabe */
+.eingabe{padding:0 22px 18px}
+.box{max-width:740px;margin:0 auto;border:1px solid var(--linie);background:var(--flaeche);border-radius:16px;box-shadow:0 6px 24px #0f2a2214;position:relative}
+.box textarea{width:100%;border:0;background:none;resize:none;outline:0;padding:14px 16px 6px;font:inherit;color:var(--text);min-height:56px}
+.leiste{display:flex;align-items:center;gap:6px;padding:6px 8px 8px 10px;flex-wrap:wrap}
+.werkzeug{height:32px;padding:0 9px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--leise)}
+.werkzeug:hover{background:var(--flaeche2);color:var(--text)}
+.ki{margin-left:auto;font-size:12px;color:var(--leise);display:flex;align-items:center;gap:6px}
+.ki i{width:8px;height:8px;border-radius:50%;background:#d97757}
+.senden{width:34px;height:34px;border-radius:10px;background:var(--akzent);color:#fff;display:grid;place-items:center}
+.vorschlag{position:absolute;left:12px;bottom:calc(100% + 6px);width:min(380px,calc(100% - 24px));background:var(--flaeche);border:1px solid var(--linie);border-radius:12px;box-shadow:0 12px 32px #0f2a2226;padding:6px;z-index:5}
+.vorschlag h6{margin:4px 8px;font:600 11px var(--f-text);letter-spacing:.09em;text-transform:uppercase;color:var(--leise)}
+.vorschlag button{display:flex;width:100%;gap:8px;align-items:center;text-align:left;padding:7px 8px;border-radius:8px;font-size:14px}
+.vorschlag button:hover,.vorschlag button.an{background:var(--akzent-hell)}
+.vorschlag small{margin-left:auto;color:var(--leise);font:500 11px var(--f-mono)}
+.hinweis{max-width:740px;margin:6px auto 0;font-size:12px;color:var(--leise);text-align:center}
+/* Bezüge */
+.bezuege{border-left:1px solid var(--linie);background:var(--flaeche);overflow:auto;min-width:0}
+.bezuege .in{padding:16px;display:flex;flex-direction:column;gap:14px;width:290px}
+.bezuege h4{margin:0 0 6px;font:700 15px var(--f-display);letter-spacing:.02em}
+.bez{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--linie);font-size:14px}
+.bez:last-child{border:0}
+.bez small{margin-left:auto;color:var(--leise);font:500 11px var(--f-mono)}
+/* Zentrale */
+.zentrale{height:100%;overflow:auto;padding-block:22px;padding-left:22px;padding-right:max(16px,env(safe-area-inset-right,0px))}
+.zkopf{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.zkopf h1{margin:0;font:700 28px var(--f-display)}
+.zkopf p{margin:2px 0 0;color:var(--leise)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--flaeche);border:1px solid var(--linie);border-radius:12px;padding:12px 14px}
+.kpi small{color:var(--leise);font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.kpi b{display:block;font:700 26px var(--f-display);font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--leise)}
+.spalten{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px}
+.tafel{background:var(--flaeche);border:1px solid var(--linie);border-radius:14px;overflow:hidden}
+.tafel > h3{margin:0;padding:12px 16px;font:700 16px var(--f-display);letter-spacing:.02em;border-bottom:1px solid var(--linie);display:flex;align-items:center;gap:8px}
+.zeile{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--linie);font-size:14px}
+.zeile:last-child{border:0}
+.zeile .nr{font:500 12px var(--f-mono);color:var(--leise)}
+.zeile b{font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zeile small{color:var(--leise)}
+.weg{display:flex;gap:3px;margin-top:5px}
+.weg i{height:4px;flex:1;border-radius:3px;background:var(--flaeche2)}
+.weg i.ok{background:var(--gut)} .weg i.jetzt{background:var(--glut)}
+.baum{padding:8px 16px 14px;font-size:14px}
+.baum details{border-bottom:1px solid var(--linie);padding:6px 0}
+.baum summary{cursor:pointer;font-weight:600;list-style:none;display:flex;gap:8px;align-items:center}
+.baum summary::before{content:"›";color:var(--leise);transition:transform .15s}
+.baum details[open] summary::before{transform:rotate(90deg)}
+.baum ul{margin:6px 0 2px 18px;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;color:var(--leise)}
+/* Limits-Fenster */
+.ueber{position:fixed;inset:0;background:#0b131040;display:flex;justify-content:flex-end;align-items:flex-start;padding-top:calc(58px + env(safe-area-inset-top,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-left:16px;z-index:20}
+.fenster{width:min(400px,100%);background:var(--flaeche);border:1px solid var(--linie);border-radius:16px;box-shadow:0 18px 50px #0f2a2233;overflow:hidden}
+.fenster .fk{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--linie)}
+.fenster .fk h3{margin:0;font:700 18px var(--f-display);flex:1}
+.fenster .fb{padding:14px 16px;display:flex;flex-direction:column;gap:14px}
+.anb{display:flex;flex-direction:column;gap:8px}
+.anb > div:first-child{display:flex;align-items:center;gap:8px;font-weight:600}
+.anb > div:first-child i{width:9px;height:9px;border-radius:50%}
+.balken{display:grid;grid-template-columns:62px minmax(0,1fr) 46px;gap:8px;align-items:center;font-size:13px}
+.balken span{height:8px;border-radius:9px;background:var(--flaeche2);overflow:hidden}
+.balken span i{display:block;height:100%;background:var(--gut);transition:width .5s}
+.balken b{text-align:right;font-variant-numeric:tabular-nums}
+.balken small{grid-column:2/4;margin-top:-5px;color:var(--leise);font-size:12px}
+.stand{font-size:12px;color:var(--leise)}
+.aktual{display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--linie);background:var(--flaeche2)}
+.aktual .knopf{height:34px;font-size:14px}
+.dreh{animation:dreh 1s linear infinite}
+@keyframes dreh{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.dreh{animation:none}.chat{transition:none}}
+/* Entwurfsband */
+.band{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom,0px));background:var(--nav);color:#fff;font-size:12px;padding:6px 12px;border-radius:999px;z-index:30;display:flex;gap:8px;align-items:center;white-space:nowrap}
+.band b{color:#6ee7b7}
+/* Handy */
+.menuknopf{display:none}
+@media (max-width:1100px){.chat.bezuege-an{grid-template-columns:240px minmax(0,1fr) 0}.chat{grid-template-columns:240px minmax(0,1fr) 0}.spalten{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:820px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .nav{position:fixed;inset:0 auto 0 0;width:250px;z-index:25;transform:translateX(-100%);transition:transform .2s}
+  .nav.offen{transform:none}
+  .menuknopf{display:grid}
+  .suche,.projekt span,.limitpille .mini:nth-child(3){display:none}
+  .kopf{padding-left:max(16px,env(safe-area-inset-left,0px))}
+  .chat,.chat.bezuege-an{grid-template-columns:minmax(0,1fr)}
+  .verlauf,.bezuege{display:none}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .nachrichten,.eingabe{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .zentrale{padding-left:max(16px,env(safe-area-inset-left,0px))}
+  .band{font-size:11px}
+}
+</style>
+
+<div class="app">
+  <nav class="nav" id="nav" aria-label="Hauptmenü">
+    <div class="marke">
+      <svg width="30" height="30" viewBox="0 0 64 64" style="stroke:none" aria-hidden="true"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#34d399"/><stop offset=".7" stop-color="#34d399"/><stop offset="1" stop-color="#fbbf24"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="#163a2f"/><path d="M48 20A18 18 0 1 0 48 44" stroke="url(#g)" stroke-width="9" fill="none" stroke-linecap="round"/><rect x="36" y="25" width="4" height="14" rx="2" fill="#fff"/></svg>
+      <b>Codeschmiede</b>
+    </div>
+    <h6>Arbeiten</h6>
+    <a data-ziel="chat" class="aktiv"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Chat<span class="neu">NEU</span></a>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Zentrale</a>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>Zu erledigen<span class="zahl">3</span></a>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/></svg>Aufgaben</a>
+    <h6>Gestalten &amp; Bauen</h6>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="16" cy="10" r="1.2"/></svg>App-Designer</a>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Live-Vorschau</a>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg>Code</a>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17.5v.01"/></svg>Fehler</a>
+    <h6>Ablauf</h6>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 5-12 2-12 7"/></svg>Zweige &amp; Versionen</a>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>Prüfstand</a>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/></svg>Wissen</a>
+    <h6>Dokumentation</h6>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Änderungsprotokoll</a>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Dokumentation</a>
+    <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><path d="M12 3v18M5 7h14M3 13l2-6 2 6a2 2 0 0 1-4 0zM17 13l2-6 2 6a2 2 0 0 1-4 0z"/></svg>Regelwerk</a>
+    <div class="unten">
+      <a data-ziel="zentrale"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Verwaltung</a>
+    </div>
+  </nav>
+
+  <div class="haupt">
+    <header class="kopf">
+      <button class="rund menuknopf" id="menu" aria-label="Menü öffnen"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <button class="projekt" aria-label="Projekt wechseln"><i>T</i><span>Trainer to go</span><svg width="14" height="14" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+      <div class="suche"><svg width="16" height="16" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>Suchen oder springen … Feature, Auftrag, Chat<kbd>Strg K</kbd></div>
+      <div class="rechts">
+        <button class="limitpille" id="limitpille" aria-label="Limits ansehen">
+          <span style="font-weight:600">Limits</span>
+          <span class="mini" title="5-Stunden-Fenster"><span><i id="p5" style="width:42%"></i></span><b id="t5">42 %</b></span>
+          <span class="mini" title="Woche"><span><i id="pw" class="r" style="width:100%"></i></span><b id="tw">100 %</b></span>
+        </button>
+        <button class="rund" aria-label="Rückfragen und Freigaben"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="punkt"></span></button>
+        <span class="ich" title="Gerhard Kresak">GK</span>
+      </div>
+    </header>
+
+    <main class="ansicht" id="v-chat">
+      <div class="chat" id="chat">
+        <aside class="verlauf" aria-label="Unterhaltungen">
+          <div class="oben">
+            <button class="knopf" id="neu"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Neuer Chat</button>
+            <label class="feld"><svg width="15" height="15" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="such" placeholder="Unterhaltungen durchsuchen"></label>
+          </div>
+          <div class="liste" id="liste">
+            <h6>Angeheftet</h6>
+            <button class="unterh"><b><span class="pin">●</span> Konzept · Trainer to go</b><small>Grundkonzept · 128 Einträge im Wissen</small></button>
+            <h6>Heute</h6>
+            <button class="unterh aktiv"><b>Kader-Einladungen bei Spielen</b><small>@Abstimmungen · 2 Aufträge</small></button>
+            <button class="unterh"><b>Fuhrpark: Fahrten bei Auswärtsspielen</b><small>#Fuhrpark &amp; Geräte · 07:26</small></button>
+            <button class="unterh"><b>KM-Modul Etappe 1</b><small>#Kampfmannschaft · 07:28</small></button>
+            <h6>Gestern</h6>
+            <button class="unterh"><b>Programmierstunden je Feature</b><small>ERP-Kalkulation · erledigt</small></button>
+            <button class="unterh"><b>Kantine: Rückfrage Eltern-Ansicht</b><small>@Kantine › Vorbestellung</small></button>
+            <h6>Diese Woche</h6>
+            <button class="unterh"><b>Postfach &amp; Signaturen</b><small>v1.33.0 live</small></button>
+            <button class="unterh"><b>Marketing-Modul</b><small>v1.34.0 live</small></button>
+          </div>
+        </aside>
+
+        <section class="gespraech" aria-label="Gespräch">
+          <div class="gkopf">
+            <h2>Kader-Einladungen bei Spielen</h2>
+            <span class="chip g">#Abstimmungen &amp; Chat</span>
+            <button class="rund" id="bezknopf" style="margin-left:auto" aria-pressed="false" aria-label="Bezüge ein- oder ausblenden" title="Bezüge"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></button>
+          </div>
+          <div class="nachrichten" id="nachrichten">
+            <div class="nachricht ich"><div class="av">GK</div><div class="inhalt"><div class="wer">Du · 07:14</div><div class="blase"><p>Bei Spielen soll nicht mehr automatisch an alle eine Abstimmung gehen. Schau dir dazu <span class="chip f">@F-118 Abstimmungen › Zusage-Modus</span> und <span class="chip f">@F-121 Termine › Spiele</span> an.</p></div></div></div>
+            <div class="nachricht ki"><div class="av"><svg width="18" height="18" viewBox="0 0 64 64" style="stroke:none"><path d="M48 20A18 18 0 1 0 48 44" stroke="#34d399" stroke-width="9" fill="none" stroke-linecap="round"/></svg></div><div class="inhalt"><div class="wer">Codeschmiede · 07:15</div>
+              <p>Verstanden. Beide Features hängen zusammen: der Zusage-Modus steuert heute für <b>alle</b> Termine gleich. Für Dorfvereine passt „Offene Zusage“, im Nachwuchsleistungszentrum wird meist nominiert. Zwei Punkte muss ich noch klären:</p>
+              <div class="karte"><div class="kk">Rückfragen</div><div class="kb">
+                <div class="frage"><span>Wo wird die Art der Einladung eingestellt?</span><button class="wahl an">Je Mannschaft und Terminart</button><button class="wahl">Nur je Mannschaft</button><button class="wahl">Pro Spiel</button></div>
+                <div class="frage"><span>Neutrale Verfügbarkeitsabfrage vor der Nominierung?</span><button class="wahl an">Optional</button><button class="wahl">Immer</button><button class="wahl">Nie</button></div>
+              </div></div>
+            </div></div>
+            <div class="nachricht ich"><div class="av">GK</div><div class="inhalt"><div class="wer">Du · 07:18</div><div class="blase"><p>Alles wie empfohlen.</p></div></div></div>
+            <div class="nachricht ki"><div class="av"><svg width="18" height="18" viewBox="0 0 64 64" style="stroke:none"><path d="M48 20A18 18 0 1 0 48 44" stroke="#34d399" stroke-width="9" fill="none" stroke-linecap="round"/></svg></div><div class="inhalt"><div class="wer">Codeschmiede · 07:19</div>
+              <p>Ins Wissen übernommen und zwei Aufträge angelegt. Gebaut wird, sobald du in der Zentrale freigibst.</p>
+              <div class="karte"><div class="kk">Aufträge</div><div class="kb">
+                <div class="auftrag"><span class="nr">#26</span>Einladungsart je Mannschaft und Terminart<span class="status w">wartet auf Freigabe</span></div>
+                <div class="auftrag"><span class="nr">#27</span>Nachrücker und Gastspieler im Kader<span class="status w">wartet auf Freigabe</span></div>
+              </div></div>
+            </div></div>
+          </div>
+          <div class="eingabe">
+            <div class="box">
+              <div class="vorschlag" id="vorschlag" hidden>
+                <h6 id="vtitel">Features</h6>
+                <div id="vliste"></div>
+              </div>
+              <textarea id="text" rows="2" placeholder="Nachricht … mit @ ein Feature, mit # eine Gruppe einfügen"></textarea>
+              <div class="leiste">
+                <button class="werkzeug" title="Datei oder Bild anhängen"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.6 8.5a2 2 0 0 1-2.8-2.8L15 7.5"/></svg>Anhang</button>
+                <button class="werkzeug" data-zeichen="@"><b>@</b>Feature</button>
+                <button class="werkzeug" data-zeichen="#"><b>#</b>Gruppe</button>
+                <span class="ki" title="Eingestellt unter Verwaltung › KI-Anbieter (Aufgabe „Chat“)"><i></i>Chat · Claude</span>
+                <button class="senden" id="senden" aria-label="Senden"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+              </div>
+            </div>
+            <p class="hinweis">Es wird erst gebaut, wenn alles geklärt ist und du freigibst. Alles hier landet beim jeweiligen Feature.</p>
+          </div>
+        </section>
+
+        <aside class="bezuege" aria-label="Bezüge dieses Chats">
+          <div class="in">
+            <div><h4>Features in diesem Chat</h4>
+              <div class="bez"><span class="chip f">F-118</span>Zusage-Modus<small>live</small></div>
+              <div class="bez"><span class="chip f">F-121</span>Spiele<small>live</small></div>
+              <div class="bez"><span class="chip f">F-204</span>Nominierung<small>neu</small></div></div>
+            <div><h4>Aufträge</h4>
+              <div class="bez"><b style="font:500 12px var(--f-mono)">#26</b>Einladungsart<small>Freigabe</small></div>
+              <div class="bez"><b style="font:500 12px var(--f-mono)">#27</b>Nachrücker<small>Freigabe</small></div></div>
+            <div><h4>Ins Wissen übernommen</h4>
+              <div class="bez">Einladung je Mannschaft und Terminart</div>
+              <div class="bez">Verfügbarkeitsabfrage optional</div></div>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <main class="ansicht" id="v-zentrale" hidden>
+      <div class="zentrale">
+        <div class="zkopf"><div><h1>Zentrale</h1><p>Trainer to go · alles, was gerade läuft und auf dich wartet</p></div><button class="knopf" style="margin-left:auto" data-ziel="chat">Im Chat besprechen</button></div>
+        <div class="kpis">
+          <div class="kpi"><small>Wartet auf dich</small><b>3</b><span>2 Freigaben · 1 Rückfrage</span></div>
+          <div class="kpi"><small>In Arbeit</small><b>1</b><span>Werkstatt-PC Büro</span></div>
+          <div class="kpi"><small>In Prüfung</small><b>2</b><span>Sicherheit · Feature</span></div>
+          <div class="kpi"><small>Live diese Woche</small><b>4</b><span>v1.31 – v1.34</span></div>
+        </div>
+        <div class="spalten">
+          <div class="tafel"><h3>Aufträge</h3>
+            <div class="zeile"><span class="nr">#27</span><div><b>Nachrücker und Gastspieler im Kader</b><small>Abstimmungen &amp; Chat · Freigabe</small><div class="weg"><i class="ok"></i><i class="jetzt"></i><i></i><i></i><i></i><i></i><i></i></div></div><span class="status w">Freigeben</span></div>
+            <div class="zeile"><span class="nr">#26</span><div><b>Einladungsart je Mannschaft und Terminart</b><small>Abstimmungen &amp; Chat · Freigabe</small><div class="weg"><i class="ok"></i><i class="jetzt"></i><i></i><i></i><i></i><i></i><i></i></div></div><span class="status w">Freigeben</span></div>
+            <div class="zeile"><span class="nr">#25</span><div><b>Veranstaltungen: Anmeldung öffentlich</b><small>Veranstaltungen · Sicherheitsprüfung</small><div class="weg"><i class="ok"></i><i class="ok"></i><i class="ok"></i><i class="jetzt"></i><i></i><i></i><i></i></div></div><span class="status">läuft</span></div>
+            <div class="zeile"><span class="nr">#24</span><div><b>Veranstaltungen: Trainingslager</b><small>Veranstaltungen · Live &amp; Wissen</small><div class="weg"><i class="ok"></i><i class="ok"></i><i class="ok"></i><i class="ok"></i><i class="ok"></i><i class="ok"></i><i class="ok"></i></div></div><span class="status">fertig</span></div>
+          </div>
+          <div class="tafel"><h3>Aufbau der App</h3>
+            <div class="baum">
+              <details open><summary>Sport</summary><ul><li>Training</li><li>Taktik</li><li>Mannschaft &amp; Kader</li><li>Abstimmungen &amp; Chat</li></ul></details>
+              <details><summary>Verein</summary><ul><li>Veranstaltungen</li><li>Fuhrpark &amp; Geräte</li><li>Kantine</li></ul></details>
+              <details><summary>Leitung</summary><ul><li>Vorstand</li><li>Finanzen</li><li>Sponsoring</li></ul></details>
+              <details><summary>Plattform-ERP</summary><ul><li>Vertrieb</li><li>Marketing</li><li>Finanzen</li></ul></details>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="ueber" id="limits" hidden>
+  <section class="fenster" role="dialog" aria-modal="true" aria-label="Limits">
+    <div class="fk"><h3>Limits</h3><button class="rund" id="zu" aria-label="Schließen"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="fb">
+      <div class="anb"><div><i style="background:#d97757"></i>Claude <span class="chip">Max</span></div>
+        <div class="balken"><span>5 Std.</span><span><i id="b5" style="width:42%"></i></span><b id="c5">42 %</b><small id="r5">Reset heute 11:40</small></div>
+        <div class="balken"><span>Woche</span><span><i id="bw" style="width:100%;background:var(--rot)"></i></span><b id="cw">100 %</b><small>Reset Do 29.10. 09:00 · Werkstatt pausiert</small></div>
+      </div>
+      <div class="anb"><div><i style="background:#10a37f"></i>ChatGPT</div>
+        <div class="balken"><span>5 Std.</span><span><i style="width:18%"></i></span><b>18 %</b><small>Reset heute 12:05</small></div>
+        <div class="balken"><span>Woche</span><span><i style="width:31%"></i></span><b>31 %</b><small>Reset Mo 02.11.</small></div>
+      </div>
+      <div class="anb"><div><i style="background:#4285f4"></i>Gemini</div>
+        <p class="stand" style="margin:0">Gemini zeigt keine Limits an. Anfragen der Werkstatt heute: <b>14</b> · zuletzt „Limit voll“: –</p>
+      </div>
+    </div>
+    <div class="aktual">
+      <span class="stand" id="stand">Stand 08:02 · vor 18 Min.</span>
+      <button class="knopf" id="aktual" style="margin-left:auto"><svg id="drehicon" width="15" height="15" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></svg>Jetzt aktualisieren</button>
+    </div>
+  </section>
+</div>
+
+<div class="band">Entwurf 1.1 · <b>Oberfläche 2.0 &amp; Chat</b> · klickbar, Beispieldaten</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+function zeige(z){
+  $("#v-chat").hidden = z !== "chat"; $("#v-zentrale").hidden = z !== "zentrale";
+  document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("aktiv", a.dataset.ziel === z && a.textContent.trim().startsWith(z === "chat" ? "Chat" : "Zentrale")));
+  $("#nav").classList.remove("offen");
+}
+document.querySelectorAll("[data-ziel]").forEach((a) => a.addEventListener("click", () => zeige(a.dataset.ziel)));
+$("#menu").addEventListener("click", () => $("#nav").classList.toggle("offen"));
+// Bezüge
+$("#bezknopf").addEventListener("click", (e) => { const an = $("#chat").classList.toggle("bezuege-an"); e.currentTarget.setAttribute("aria-pressed", an); });
+// Unterhaltungen
+document.querySelectorAll(".unterh").forEach((b) => b.addEventListener("click", () => { document.querySelectorAll(".unterh").forEach((x) => x.classList.remove("aktiv")); b.classList.add("aktiv"); }));
+$("#such").addEventListener("input", (e) => { const q = e.target.value.toLowerCase(); document.querySelectorAll(".unterh").forEach((b) => b.hidden = q && !b.textContent.toLowerCase().includes(q)); });
+// @ und # Vorschläge
+const FEAT = [["F-118","Abstimmungen › Zusage-Modus"],["F-121","Termine › Spiele"],["F-204","Kader › Nominierung"],["F-143","Kantine › Vorbestellung"],["F-188","Fuhrpark › Fahrten"],["F-097","Training › Belastung (RPE)"]];
+const GRUP = [["Sport","Abstimmungen & Chat"],["Sport","Mannschaft & Kader"],["Verein","Veranstaltungen"],["Verein","Fuhrpark & Geräte"],["Leitung","Finanzen"],["ERP","Marketing"]];
+const ta = $("#text"), vs = $("#vorschlag"); let modus = null, sel = 0;
+function zeichne(q){
+  const l = (modus === "@" ? FEAT : GRUP).filter(([a,b]) => (a+" "+b).toLowerCase().includes(q.toLowerCase())).slice(0,6);
+  $("#vtitel").textContent = modus === "@" ? "Features" : "Gruppen";
+  $("#vliste").innerHTML = l.map(([a,b],i) => `<button type="button" class="${i===sel?"an":""}" data-w="${esc(modus + (modus==="@"?a+" "+b:b))}">${esc(b)}<small>${esc(a)}</small></button>`).join("") || `<p class="stand" style="margin:6px 8px">Nichts gefunden</p>`;
+  vs.hidden = false;
+  $("#vliste").querySelectorAll("button").forEach((b) => b.addEventListener("mousedown", (e) => { e.preventDefault(); einfuegen(b.dataset.w); }));
+}
+function einfuegen(w){ const v = ta.value, p = ta.selectionStart, s = v.lastIndexOf(modus, p-1); ta.value = v.slice(0,s) + w + " " + v.slice(p); modus = null; vs.hidden = true; ta.focus(); }
+ta.addEventListener("input", () => {
+  const v = ta.value.slice(0, ta.selectionStart); const m = /([@#])([^\s@#]*)$/.exec(v);
+  if (m){ modus = m[1]; sel = 0; zeichne(m[2]); } else { modus = null; vs.hidden = true; }
+});
+ta.addEventListener("keydown", (e) => {
+  if (!vs.hidden && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); const n = $("#vliste").querySelectorAll("button").length; sel = (sel + (e.key==="ArrowDown"?1:-1) + n) % n; const m = /([@#])([^\s@#]*)$/.exec(ta.value.slice(0, ta.selectionStart)); zeichne(m?m[2]:""); }
+  else if (!vs.hidden && e.key === "Enter") { e.preventDefault(); const b = $("#vliste").querySelectorAll("button")[sel]; if (b) einfuegen(b.dataset.w); }
+  else if (e.key === "Escape") { vs.hidden = true; modus = null; }
+  else if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); senden(); }
+});
+ta.addEventListener("blur", () => setTimeout(() => { vs.hidden = true; }, 120));
+document.querySelectorAll("[data-zeichen]").forEach((b) => b.addEventListener("click", () => { ta.focus(); ta.setRangeText(b.dataset.zeichen, ta.selectionStart, ta.selectionEnd, "end"); ta.dispatchEvent(new Event("input")); }));
+const esc = (t) => t.replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function senden(){
+  const t = ta.value.trim(); if (!t) return;
+  const html = esc(t).replace(/@(F-\d+)( [^@#\n]*?›\s?[^\s@#,.]+(?: [^\s@#,.]+)?)?/g, (m) => `<span class="chip f">${m}</span>`).replace(/#([A-ZÄÖÜ][^\s@#,.]*(?: &amp; [^\s@#,.]+)?)/g, (m) => `<span class="chip g">${m}</span>`);
+  const n = document.createElement("div"); n.className = "nachricht ich";
+  n.innerHTML = `<div class="av">GK</div><div class="inhalt"><div class="wer">Du · jetzt</div><div class="blase"><p>${html}</p></div></div>`;
+  $("#nachrichten").appendChild(n); ta.value = ""; $("#nachrichten").scrollTop = 1e6;
+}
+$("#senden").addEventListener("click", senden);
+$("#neu").addEventListener("click", () => { $("#nachrichten").innerHTML = `<div class="nachricht" style="justify-content:center;color:var(--leise);text-align:center;flex-direction:column;align-items:center;margin-top:12vh"><b style="font:700 24px var(--f-display);color:var(--text)">Worüber sprechen wir?</b><span>Mit @ ein Feature oder mit # eine Gruppe einbeziehen. Ohne Bezug geht es ins Konzept.</span></div>`; document.querySelector(".gkopf h2").textContent = "Neuer Chat"; document.querySelector(".gkopf .chip").hidden = true; ta.focus(); });
+// Limits
+const ueber = $("#limits");
+$("#limitpille").addEventListener("click", () => { ueber.hidden = false; });
+$("#zu").addEventListener("click", () => { ueber.hidden = true; });
+ueber.addEventListener("click", (e) => { if (e.target === ueber) ueber.hidden = true; });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") ueber.hidden = true; });
+$("#aktual").addEventListener("click", () => {
+  const k = $("#aktual"); k.disabled = true; $("#drehicon").classList.add("dreh"); $("#stand").textContent = "Frage Claude ab … (kostenlos)";
+  setTimeout(() => {
+    $("#drehicon").classList.remove("dreh"); k.disabled = false;
+    const z = new Date(); const u = z.toLocaleTimeString("de-AT",{hour:"2-digit",minute:"2-digit"});
+    $("#b5").style.width = "47%"; $("#c5").textContent = "47 %"; $("#p5").style.width = "47%"; $("#t5").textContent = "47 %";
+    $("#stand").textContent = `Stand ${u} · gerade eben`;
+  }, 1200);
+});
+</script>
