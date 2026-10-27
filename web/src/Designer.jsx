@@ -160,8 +160,11 @@ export default function Designer({ d, ich, toast }) {
   // App-Designer 2.0 (Entwurf 2026-10-24 22:08): Bausteine wirken sofort über die Design-Pakete der App (BausteinInspektor.jsx)
   const bs = useBausteinDesigner({ dunkel });
   const [seitenTab, setSeitenTab] = useState(null);
-  const [bsSeite, setBsSeite] = useState("inspektor");   // Modus „Bausteine“: rechts Inspektor oder Design-Chat
-  const zumChat = (t) => { setRechts("chat"); setBsSeite("chat"); setChatText(t); };
+  // Modus „Bausteine“: EIN Inspektor mit Reitern „Bearbeiten“ und „Chat“ (Gerhard 25.10.2026 18:27: Chat war doppelt).
+  // „Chat“ zeigt das Gespräch zum gewählten Baustein; ohne Auswahl bzw. aus dem Assistenten „Neuer Baustein“ den allgemeinen Design-Chat.
+  const [bsSeite, setBsSeite] = useState("bearbeiten");
+  const [bsAllgemein, setBsAllgemein] = useState(false);
+  const zumChat = (t) => { setRechts("chat"); setBsSeite("chat"); setBsAllgemein(true); setChatText(t); };
   const zurFreigabe = (tab) => { if (tab === "freigabe") { setModus("uebernehmen"); return; } setSeitenTab(tab); setModus("seiten"); };
   const [sofortAnzahl, setSofortAnzahl] = useState(null);   // offene Änderungen im Design-Paket (meldet der Freigabe-Reiter der App)
 
@@ -259,6 +262,12 @@ export default function Designer({ d, ich, toast }) {
   const rot = befunde.filter((b) => !b.ok && b.stufe === "rot").length;
   const hinweise = befunde.filter((b) => !b.ok && b.stufe !== "rot").length;
 
+  // Allgemeiner Design-Chat (Grunddesign, Marke, Bausteine) – einmal gebaut, je nach Modus an seiner Stelle gezeigt
+  const designChat = (
+    <DesignChat d={d} ich={ich} projekt={projekt} entwurf={aktiv} werte={werte} befunde={befunde} darf={darf} toast={toast} modus={modus} text={chatText} setText={setChatText} start={!laden && !live && !entwuerfe.length}
+                  onUebernehmen={(v) => { if (!bearbeitbar) { toast(fest ? "Dieser Entwurf ist fest – lege eine Kopie an" : "Kein Recht zum Gestalten"); return false; }
+                    setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, nurGrunddesign(v))); setGeaendert(true); if (modus === "grund") setMitte("geruest"); return true; }} />
+  );
   return (
     <div className="space-y-3">
       {/* Kopfleiste: Entwurf wählen, rückgängig, speichern, vergleichen, senden */}
@@ -327,13 +336,9 @@ export default function Designer({ d, ich, toast }) {
             </div>
           </section></>}
           <aside className={`${card} lg:col-span-2 xl:col-span-1 self-start flex flex-col min-h-[520px] max-h-[calc(100vh-140px)]`}>
-            {/* Prüfbefund Etappe 1: im Modus „Bausteine“ gibt es neben dem Inspektor weiter den Design-Chat (Neuer Baustein, [Bausteine]-Fragen) */}
-            {modus === "bausteine" && <div role="tablist" aria-label="Seitenleiste Bausteine" className="flex gap-1 p-2 border-b border-slate-200 dark:border-slate-800">
-              {[["inspektor", "Baustein", Shapes], ["chat", `Design-Chat mit ${ki.name}`, Bot]].map(([id, t, I]) => (
-                <button key={id} type="button" role="tab" aria-selected={bsSeite === id} onClick={() => setBsSeite(id)}
-                  className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-sm font-semibold ${bsSeite === id ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"}`}><I className="w-4 h-4" />{t}</button>))}
-            </div>}
-            {modus === "bausteine" && bsSeite === "inspektor" ? <BausteinInspektor bs={bs} d={d} ich={ich} projekt={projekt} darf={darf} toast={toast} dunkel={dunkel} onFreigabe={zurFreigabe} /> : <>
+            {/* Prüfbefund Etappe 1: im Modus „Bausteine“ bleibt der allgemeine Design-Chat erreichbar (Neuer Baustein, [Bausteine]-Fragen) – jetzt im Reiter „Chat“ des Inspektors */}
+            {modus === "bausteine" ? <BausteinInspektor bs={bs} d={d} ich={ich} projekt={projekt} darf={darf} toast={toast} dunkel={dunkel} onFreigabe={zurFreigabe}
+              reiter={bsSeite} setReiter={(r) => { setBsSeite(r); setBsAllgemein(false); }} allgemein={bsAllgemein} onAllgemein={() => setBsAllgemein(true)} chatAllgemein={designChat} /> : <>
             {modus !== "bausteine" && <div role="tablist" aria-label="Seitenleiste" className="flex gap-1 p-2 border-b border-slate-200 dark:border-slate-800">
               {[["chat", `Chat mit ${ki.name}`, Bot], ["pruef", "Prüfungen", ShieldCheck]].map(([id, t, I]) => (
                 <button key={id} type="button" role="tab" aria-selected={rechts === id} onClick={() => setRechts(id)}
@@ -341,9 +346,7 @@ export default function Designer({ d, ich, toast }) {
                   <I className="w-4 h-4" />{t}{id === "pruef" && (rot ? <span className="text-[11px] font-bold bg-red-600 text-white rounded-full px-1.5">{rot}</span> : hinweise ? <span className="text-[11px] font-bold bg-amber-500 text-amber-950 rounded-full px-1.5">{hinweise}</span> : null)}</button>))}
             </div>}
             {rechts === "pruef" && modus !== "bausteine" ? <Pruefliste befunde={befunde} rot={rot} hinweise={hinweise} kiName={ki.name} onFragen={() => setRechts("chat")} />
-              : <DesignChat d={d} ich={ich} projekt={projekt} entwurf={aktiv} werte={werte} befunde={befunde} darf={darf} toast={toast} modus={modus} text={chatText} setText={setChatText} start={!laden && !live && !entwuerfe.length}
-                  onUebernehmen={(v) => { if (!bearbeitbar) { toast(fest ? "Dieser Entwurf ist fest – lege eine Kopie an" : "Kein Recht zum Gestalten"); return false; }
-                    setVerlauf((h) => ({ zurueck: [...h.zurueck.slice(-49), werte], vor: [] })); setWerte(mische(werte, nurGrunddesign(v))); setGeaendert(true); if (modus === "grund") setMitte("geruest"); return true; }} />}
+              : designChat}
             </>}
           </aside>
         </div>)}

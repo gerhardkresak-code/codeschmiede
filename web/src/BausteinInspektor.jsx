@@ -156,9 +156,14 @@ function Farbfeld({ name, wert, onWert, gesperrt }) {
     </span>);
 }
 
-/** Rechte Spalte im Modus „Bausteine“: Inspektor mit Reitern „Bearbeiten“ und „Chat“. */
-export function BausteinInspektor({ bs, d, ich, projekt, darf, toast, dunkel, onFreigabe }) {
-  const [reiter, setReiter] = useState("bearbeiten");
+/**
+ * Rechte Spalte im Modus „Bausteine“: Inspektor mit Reitern „Bearbeiten“ und „Chat“ – der EINZIGE Chat dieser Ansicht.
+ * „Chat“ = Gespräch zum gewählten Baustein; ohne Auswahl (oder aus dem Assistenten, allgemein=true) der allgemeine Design-Chat.
+ * reiter/setReiter/allgemein/chatAllgemein kommen aus dem Designer (sonst wie bisher eigener Zustand).
+ */
+export function BausteinInspektor({ bs, d, ich, projekt, darf, toast, dunkel, onFreigabe, reiter: reiterAussen, setReiter: setReiterAussen, allgemein = false, onAllgemein, chatAllgemein = null }) {
+  const [reiterInnen, setReiterInnen] = useState("bearbeiten");
+  const reiter = reiterAussen ?? reiterInnen; const setReiter = setReiterAussen ?? setReiterInnen;
   const ki = useKiName(projekt.id, "design");
   const b = bausteinVon(bs.wahl);
   return (
@@ -168,10 +173,15 @@ export function BausteinInspektor({ bs, d, ich, projekt, darf, toast, dunkel, on
           <button key={id} type="button" role="tab" aria-selected={reiter === id} onClick={() => setReiter(id)}
             className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-sm font-semibold ${reiter === id ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"}`}><I className="w-4 h-4" />{t}</button>))}
       </div>
-      {!b ? <div className="p-4 text-sm text-slate-500 flex flex-col gap-2"><Shapes className="w-6 h-6 text-emerald-700" aria-hidden="true" /><p>Wähle links oder per Linksklick in der Galerie einen Baustein. Änderungen wirken sofort in der Vorschau und werden als Entwurf des Design-Pakets gespeichert.</p>
+      {reiter === "chat" && chatAllgemein && (allgemein || !b) ? <>
+          <div className="px-3 pt-2 text-xs text-slate-500 flex items-center gap-2 flex-wrap">Allgemeiner Design-Chat{b ? <button type="button" className="font-semibold text-emerald-700 dark:text-emerald-400 hover:underline" onClick={() => setReiter("chat")}>Zum Chat für „{b.name}“</button> : " – wähle einen Baustein für das Gespräch zu genau diesem Baustein."}</div>
+          {chatAllgemein}</>
+        : !b ? <div className="p-4 text-sm text-slate-500 flex flex-col gap-2"><Shapes className="w-6 h-6 text-emerald-700" aria-hidden="true" /><p>Wähle links oder per Linksklick in der Galerie einen Baustein. Änderungen wirken sofort in der Vorschau und werden als Entwurf des Design-Pakets gespeichert.</p>
           <EbeneWahl bs={bs} /></div>
         : reiter === "bearbeiten" ? <Bearbeiten b={b} bs={bs} darf={darf} dunkel={dunkel} projekt={projekt} onFreigabe={onFreigabe} />
-        : <BausteinChat b={b} bs={bs} d={d} ich={ich} projekt={projekt} darf={darf} toast={toast} ki={ki} />}
+        : <>
+          {chatAllgemein && <div className="px-3 pt-2 text-xs text-slate-500">Gespräch zu „{b.name}“ · <button type="button" className="font-semibold text-emerald-700 dark:text-emerald-400 hover:underline" onClick={() => onAllgemein?.()}>Allgemeiner Design-Chat</button></div>}
+          <BausteinChat b={b} bs={bs} d={d} ich={ich} projekt={projekt} darf={darf} toast={toast} ki={ki} /></>}
     </>);
 }
 
