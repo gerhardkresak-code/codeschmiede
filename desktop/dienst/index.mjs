@@ -211,15 +211,26 @@ async function limitsAbruf() {
       const ok = await aboMelden(r.werte, "abruf");
       await abrufMelden(ok ? "abruf" : "fehler", ok ? "Kostenloser Abruf bei Anthropic" : "Werte abgerufen, aber nicht gespeichert – siehe Fehler der Werkstatt");
     }
-    else if (findeClaude()) miniNoetig = { grund: r.grund };
+    else if (laeuft) await abrufMelden("fehler", `${r.grund} – gerade läuft ein Auftrag, die Werte kommen mit dessen nächster Antwort`);   // Nachprüfung N2
+    else if (findeClaude()) miniNoetig = { grund: r.grund, stand: JSON.stringify(aboStand) };
     else await abrufMelden("fehler", r.grund);
   } finally { abrufLaeuft = false; }
+}
+/** Gelöschte Chat-Anhänge der eigenen Person im Speicher entfernen (ws_chat_dateien_weg, 0050). */
+async function chatDateienAufraeumen() {
+  const { data, error } = await db.from("ws_chat_dateien_weg").select("pfad").limit(200);
+  if (error || !data?.length) return;
+  const pfade = data.map((x) => x.pfad);
+  await db.storage.from("ws-chat").remove(pfade);
+  await db.rpc("ws_chat_dateien_erledigt", { p_pfade: pfade });
 }
 /** Vorgemerkte Mini-Anfrage (aus der Hauptschleife, nur wenn nichts anderes läuft). true = erledigt. */
 async function miniAnfrage() {
   if (!miniNoetig) return false;
-  const { grund } = miniNoetig;
+  const { grund, stand } = miniNoetig;
   try {
+    // Inzwischen neue Werte (z. B. von einem gerade beendeten Auftrag)? Dann keine Mini-Anfrage nötig
+    if (JSON.stringify(aboStand) !== stand) { await abrufMelden("abruf", "Werte kamen gerade mit einer Antwort von Claude Code"); return true; }
     if ((await aboLage()) === "pause") { await abrufMelden("fehler", `${grund} – keine Mini-Anfrage, weil die Limit-Schwelle erreicht ist`); return true; }
     const vorher = JSON.stringify(aboStand);
     try {
@@ -1177,7 +1188,8 @@ async function claudeOhneWerkzeuge(prompt, { lesenIn = null, modell = "sonnet" }
     // --permission-prompts none lehnt alles andere ab; zusätzlich feste Sperren für Anmeldedaten
     ? ["--restricted", "--tools", "Read,Grep,Glob", "--disallowedTools", ["Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task", "mcp__*", ...VERBOTEN.filter((v) => v.startsWith("Read(")), ...LESE_SPERREN].join(","), "--permission-prompts", "none"]
     : ["--tools", "", "--disallowedTools", "*"];
-  const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", /^(opus|sonnet|haiku|claude-[a-z0-9.-]{1,50})$/.test(modell) ? modell : "sonnet", ...werkzeuge,
+  // Frage über die Standardeingabe statt als Argument (Windows erlaubt nur 32.767 Zeichen je Befehlszeile – Nachprüfung 0.10.0 N1)
+  const args = ["-p", "--output-format", "stream-json", "--verbose", "--model", /^(opus|sonnet|haiku|claude-[a-z0-9.-]{1,50})$/.test(modell) ? modell : "sonnet", ...werkzeuge,
     "--max-turns", lesenIn ? "12" : "2", "--no-session-persistence", "--permission-mode", "default",
     "--mcp-config", JSON.stringify({ mcpServers: {} }), "--strict-mcp-config", ...(lesenIn ? [] : ["--setting-sources", "user"]),
     "--settings", JSON.stringify({ disableAllHooks: true })];   // Prüfung: eigene Hooks bekommen keinen fremden Text
@@ -1185,7 +1197,8 @@ async function claudeOhneWerkzeuge(prompt, { lesenIn = null, modell = "sonnet" }
   const meins = { id: "design", abort: new AbortController() }; laeuft = meins;   // Prüfung O4: beenden()/Update stoppt auch den Chat
   try {
     await new Promise((fertig, fehl) => {
-      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: lesenIn || leer, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+      const kind = spawn(claude.befehl, [...claude.vorne, ...args], { cwd: lesenIn || leer, env, shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+      kind.stdin.on("error", () => {}); kind.stdin.end(prompt);
       meins.kind = kind; meins.abort.signal.addEventListener("abort", () => kind.kill("SIGINT"));
       const uhr = setTimeout(() => kind.kill("SIGINT"), (lesenIn ? 6 : 3) * 60 * 1000);
       const rl = createInterface({ input: kind.stdout }); const offen = []; let fehlerText = "";
@@ -1667,6 +1680,7 @@ async function start() {
   try { const { data } = await db.from("ws_ki_kopplung").select("anbieter, anfragen_heute, anfragen_tag").eq("pc_id", pcId); for (const z of data || []) if (z.anfragen_tag) anfragen[z.anbieter] = { tag: z.anfragen_tag, n: z.anfragen_heute || 0 }; } catch { /* Spalten erst ab Datenbank 0029 */ }
   setInterval(() => aboAusStatuszeile().catch(() => {}), 60 * 1000);
   setInterval(() => limitsAbruf().catch(() => {}), 4 * 1000);   // Knopf „Jetzt aktualisieren“ (0050)
+  setTimeout(() => chatDateienAufraeumen().catch(() => {}), 30 * 1000); setInterval(() => chatDateienAufraeumen().catch(() => {}), 10 * 60 * 1000);   // Lösch-Warteschlange (0050)
   melde("status", "Werkstatt bereit");
   // Beim Start: Aufträge, die auf diesem PC liefen, als unterbrochen melden – sonst hängen sie in „In Arbeit“ und lassen sich nicht abbrechen
   // (Meldung Gerhard 26.10.2026: Auftrag #18 hing nach einem Neustart der Werkstatt)

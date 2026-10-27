@@ -393,7 +393,7 @@ const ta = $("#text"), vs = $("#vorschlag"); let modus = null, sel = 0;
 function zeichne(q){
   const l = (modus === "@" ? FEAT : GRUP).filter(([a,b]) => (a+" "+b).toLowerCase().includes(q.toLowerCase())).slice(0,6);
   $("#vtitel").textContent = modus === "@" ? "Features" : "Gruppen";
-  $("#vliste").innerHTML = l.map(([a,b],i) => `<button type="button" class="${i===sel?"an":""}" data-w="${modus}${modus==="@"?a+" "+b:b}">${modus==="@"?b:b}<small>${a}</small></button>`).join("") || `<p class="stand" style="margin:6px 8px">Nichts gefunden</p>`;
+  $("#vliste").innerHTML = l.map(([a,b],i) => `<button type="button" class="${i===sel?"an":""}" data-w="${esc(modus + (modus==="@"?a+" "+b:b))}">${esc(b)}<small>${esc(a)}</small></button>`).join("") || `<p class="stand" style="margin:6px 8px">Nichts gefunden</p>`;
   vs.hidden = false;
   $("#vliste").querySelectorAll("button").forEach((b) => b.addEventListener("mousedown", (e) => { e.preventDefault(); einfuegen(b.dataset.w); }));
 }
