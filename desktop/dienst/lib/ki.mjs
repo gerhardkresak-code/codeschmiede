@@ -51,7 +51,8 @@ export function reiheFuer(aufgabe, eintrag, mitSandbox = undefined) {
 export function istLimit(text) {
   // nur die letzten Zeilen der Fehlerausgabe (dort steht die Meldung des Anbieters, nicht die Frage) – Prüfung N5
   const t = String(text || "").split(/\r?\n/).slice(-6).join("\n");
-  return /usage limit|rate limit|too many requests|\b429\b|limit reached|resource_exhausted|quota exceeded/i.test(t);
+  // Claude Code meldet ein volles Abo als normales Ergebnis: „You've hit your weekly limit · resets Oct 29, 9am“ (Auftrag #19, 26.10.2026)
+  return /usage limit|rate limit|too many requests|\b429\b|limit reached|resource_exhausted|quota exceeded|hit your (?:[a-z-]+ )?limit|(?:weekly|session|5-hour|daily) limit/i.test(t);
 }
 
 /** Kennung fürs Protokoll, z. B. „chatgpt/gpt-5“ oder „gemini“. */
