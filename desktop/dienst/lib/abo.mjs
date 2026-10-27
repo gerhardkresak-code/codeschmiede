@@ -81,3 +81,26 @@ export function codexFenster(obj, tiefe = 0, bezug = Date.now()) {
   for (const v of Object.values(obj)) if (v && typeof v === "object") { const r = codexFenster(v, tiefe + 1, bezug); if (r) return r; }
   return null;
 }
+
+const MONATE = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+/**
+ * Limit-Meldung von Claude Code auswerten (Auftrag #19, 26.10.2026): „You've hit your weekly limit · resets Oct 29, 9am (Europe/Vienna)“.
+ * Ergebnis: { woche: boolean, bis: Zeitpunkt (ms) oder null }. Die Uhrzeit gilt in der Zeitzone dieses PCs.
+ */
+export function limitAusText(text, jetzt = Date.now()) {
+  const t = String(text || "");
+  const woche = /week|woche/i.test(t);
+  const m = /resets?\s+(?:([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+)?(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i.exec(t);
+  if (!m) return { woche, bis: null };
+  const d = new Date(jetzt);
+  let h = Number(m[3]) % 24; const min = Number(m[4] || 0);
+  if (m[5]) { h = h % 12; if (/pm/i.test(m[5])) h += 12; }
+  if (m[1] && MONATE[m[1].toLowerCase()] != null) {
+    const ziel = new Date(d.getFullYear(), MONATE[m[1].toLowerCase()], Number(m[2]), h, min);
+    if (ziel.getTime() < jetzt - 24 * 3600 * 1000) ziel.setFullYear(ziel.getFullYear() + 1);
+    return { woche, bis: ziel.getTime() };
+  }
+  const ziel = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, min);
+  if (ziel.getTime() <= jetzt) ziel.setDate(ziel.getDate() + 1);
+  return { woche, bis: ziel.getTime() };
+}

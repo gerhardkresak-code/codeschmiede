@@ -125,3 +125,10 @@ test("Abo-Limits: absurde Zeitwerte stürzen nicht ab (Prüfung 0.8.7)", async (
   assert.equal(x[0].reset, null);
   assert.equal(findeAboLimits({ unifiedWindows: { five_hour: { utilization: 0.5, resetsAt: "abc" } } }).fuenf_std_reset, null);
 });
+
+test("Limit-Meldung von Claude Code wird erkannt (Auftrag #19, 26.10.2026)", () => {
+  assert.ok(istLimit("You've hit your weekly limit · resets Oct 29, 9am (Europe/Vienna)"));
+  assert.ok(istLimit("You've hit your session limit · resets 11pm"));
+  assert.ok(istLimit("5-hour limit reached"));
+  assert.ok(!istLimit("Die Bandenwerbung hat ein Limit von 16 Plätzen"));
+});

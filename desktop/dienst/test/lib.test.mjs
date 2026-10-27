@@ -212,3 +212,17 @@ test("Vorlagen enthalten keine vermeintlichen Geheimnisse (sonst lehnt der Hand-
     assert.equal(og(t), t, `Vorlage ${path.relative(wurzel, p)} würde als Geheimnis gelten`);
   }
 });
+
+test("limitAusText liest Woche und Rücksetzzeit (Auftrag #19)", async () => {
+  const { limitAusText } = await import("../lib/abo.mjs");
+  const jetzt = new Date(2026, 9, 26, 20, 38).getTime();
+  const a = limitAusText("You've hit your weekly limit · resets Oct 29, 9am (Europe/Vienna)", jetzt);
+  assert.equal(a.woche, true);
+  assert.equal(new Date(a.bis).getTime(), new Date(2026, 9, 29, 9, 0).getTime());
+  const b = limitAusText("You've hit your session limit · resets 11:30pm", jetzt);
+  assert.equal(b.woche, false);
+  assert.equal(new Date(b.bis).getTime(), new Date(2026, 9, 26, 23, 30).getTime());
+  const c = limitAusText("You've hit your session limit · resets 1am", jetzt);
+  assert.equal(new Date(c.bis).getTime(), new Date(2026, 9, 27, 1, 0).getTime());
+  assert.equal(limitAusText("limit reached", jetzt).bis, null);
+});

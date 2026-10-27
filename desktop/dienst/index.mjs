@@ -20,7 +20,7 @@ import { createClient } from "@supabase/supabase-js";
 import { ohneGeheimnisse, kuerzen, heikleDatei } from "./lib/geheim.mjs";
 import { waehleModell } from "./lib/modell.mjs";
 import { werteAus, zweigName } from "./lib/ergebnis.mjs";
-import { findeAboLimits, aboEntscheidung } from "./lib/abo.mjs";
+import { findeAboLimits, aboEntscheidung, limitAusText } from "./lib/abo.mjs";
 import { pruefErgebnis } from "./lib/pruefung.mjs";
 import { designPrompt, designAntwort, bausteinAusFrage, bausteinVorschlag } from "./lib/design.mjs";
 import { wissenText, assistentPrompt, assistentAntwort, istKonzeptFrage } from "./lib/assistent.mjs";
@@ -183,6 +183,7 @@ async function aboAusStatuszeile() {
   } catch { /* keine Statuszeile eingerichtet */ }
 }
 async function aboLage() {
+  if (kiLimitBis.claude > Date.now()) return "pause";   // Claude hat „Limit voll“ gemeldet (Auftrag #19)
   const { data: e } = await db.from("ws_einstellungen").select("*").maybeSingle();
   return aboEntscheidung(aboStand, { kleinAb: e?.abo_klein_ab_prozent ?? 75, pauseAb: e?.abo_pause_ab_prozent ?? 95 });
 }
@@ -288,14 +289,40 @@ function auftragstext(auftrag, projekt, gruppe, feature, nachrichten, zweig, neu
   ].filter(Boolean).join("\n");
 }
 
+// ---------- Claudes Abo-Limit voll (Meldung Gerhard 27.10.2026, Auftrag #19) ----------
+// Claude Code beendet den Lauf bei vollem Abo mit „You've hit your weekly limit · resets …“ – bisher wurde das als Antwort gewertet
+// und der Auftrag als „erledigt“ abgelegt. Jetzt: Claude bis zur Rücksetzung sperren, Stand sichtbar machen, Auftrag zurück in die Warteschlange.
+class LimitFehler extends Error {}
+async function claudeLimitVoll(text) {
+  const { woche, bis } = limitAusText(text);
+  kiLimitBis.claude = bis && bis > Date.now() ? bis : Date.now() + 60 * 60 * 1000;
+  const reset = new Date(kiLimitBis.claude).toISOString();
+  await aboMelden(woche ? { woche_prozent: 100, woche_reset: reset } : { fuenf_std_prozent: 100, fuenf_std_reset: reset }).catch(() => {});
+}
+const bisText = (ms) => new Date(ms).toLocaleString("de-AT", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+async function auftragWartetAufLimit(auftrag, projektId, meldung) {
+  await claudeLimitVoll(meldung);
+  const grund = projektId ? await ersatzGrund(projektId) : "Projekt unbekannt";
+  await db.from("ws_auftraege").update({ stand: "wartet", werkstatt_pc: null }).eq("id", auftrag.id);
+  const text = `Claudes Abo-Limit ist voll (Meldung von Claude: „${kuerzen(meldung, 160)}“). Der Auftrag wartet und startet automatisch, sobald das Limit zurückgesetzt ist (voraussichtlich ${bisText(kiLimitBis.claude)}).`
+    + (grund ? `\nEin Ersatz durch ChatGPT ist hier nicht möglich: ${grund}.` : "\nDer Ersatz durch ChatGPT übernimmt beim nächsten Durchlauf.");
+  // dieselbe Meldung nicht stündlich wiederholen
+  const { data: n } = await db.from("ws_nachrichten").select("text").eq("auftrag_id", auftrag.id).order("id", { ascending: false }).limit(1);
+  if (!String(n?.[0]?.text || "").startsWith("Claudes Abo-Limit ist voll")) await nachricht(auftrag.id, "system", text);
+  await log(auftrag.id, "info", "Claudes Abo-Limit voll – Auftrag zurück in die Warteschlange");
+  melde("status", `Abo-Limit voll – Werkstatt wartet bis ${bisText(kiLimitBis.claude)}`, auftrag.id);
+}
+
 async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersatz = false } = {}) {
   const abort = new AbortController();
   laeuft = { id: auftrag.id, abort };
   melde("status", fortsetzen ? "Setzt Auftrag fort" : "Übernimmt Auftrag", auftrag.id);
   let anhangOrdner = null;   // .codeschmiede-anhaenge/ dieses Laufs – wird im finally IMMER gelöscht (Prüfung M3)
+  let projektId = null;
   try {
     const { data: gruppe } = await db.from("ws_gruppen").select("*, ws_bereiche!inner(projekt_id, global)").eq("id", auftrag.gruppe_id).single();
     const { data: projekt } = await db.from("ws_projekte").select("*").eq("id", gruppe.ws_bereiche.projekt_id).single();
+    projektId = projekt?.id || null;
     if (!projekt.repo) {
       // Noch kein GitHub-Repository (Datenbank 0021): Auftrag wartet als Rückfrage, nichts wird gebaut
       await nachricht(auftrag.id, "frage", "Für dieses Projekt gibt es noch kein GitHub-Repository. Bitte unter „Projekte verwalten“ auf „GitHub-Repository anlegen“ klicken (oder ein vorhandenes eintragen) und hier dann mit „weiter“ antworten.");
@@ -371,9 +398,8 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
         })().catch(() => { /* einzelne Meldung nicht verarbeitbar */ }));
       });
       kind.on("error", (e) => fehl(new Error(e.code === "ENOENT" ? "Claude Code ist auf diesem PC nicht installiert." : e.message)));
-      kind.on("close", (code) => Promise.all(offen).then(() => (ende || code === 0 ? fertig() : fehl(new Error(/log ?in|login|not logged/i.test(fehlerText)
+      kind.on("close", (code) => Promise.all(offen).then(() => (ende || code === 0 ? fertig() : fehl(istLimit(fehlerText) ? new LimitFehler(fehlerText.trim().split(/\r?\n/).slice(-1)[0] || "Abo-Limit erreicht") : new Error(/log ?in|login|not logged/i.test(fehlerText)
         ? "Claude Code ist nicht angemeldet – bitte einmal „claude“ starten und mit deinem Abo anmelden."
-        : /limit/i.test(fehlerText) ? "Abo-Nutzungslimit erreicht – die Werkstatt wartet bis zur Rücksetzung."
         // ohne Ausgangscode = von außen beendet (Werkstatt aus/neu gestartet, Programm geschlossen, Update) – Meldung 26.10.2026 („Claude Code beendet (null)“)
         : code === null ? "Claude Code wurde unterbrochen (Werkstatt aus- oder neu gestartet, Programm geschlossen oder Update). Einfach noch einmal versuchen."
         : `Claude Code beendet (${code}): ${fehlerText.slice(-300)}`)))));
@@ -381,6 +407,9 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
     await merkeSitzung(auftrag.id, { sitzung, versuch });
     await db.from("ws_verbrauch").insert({ auftrag_id: auftrag.id, projekt_id: projekt.id, modell, kosten_usd: kosten, tokens_ein: ein, tokens_aus: aus, werkstatt_pc: pcId });
 
+    // Volles Abo kommt als (kurzes) Ergebnis zurück – nie als Antwort werten (Auftrag #19)
+    const ergebnisText = String(ende?.result || "");
+    if (ende && ergebnisText.length < 600 && istLimit(ergebnisText)) throw new LimitFehler(ergebnisText.trim());
     if (!ende || ende.subtype !== "success") throw new Error(ende?.subtype ? `Lauf beendet: ${ende.subtype}` : "Lauf ohne Ergebnis beendet");
     r = werteAus(ende.result);
     }
@@ -440,6 +469,10 @@ async function fuehreAus(auftrag, { fortsetzen = false, nacharbeit = false, ersa
     }
   } catch (e) {
     const text = ohneGeheimnisse(e?.message || String(e));
+    if (e instanceof LimitFehler && !auftrag.hand) {
+      try { await auftragWartetAufLimit(auftrag, projektId, text); } catch { /* Datenbank nicht erreichbar – nächster Durchlauf */ }
+      return;
+    }
     melde("fehler", text, auftrag.id);
     try {
       const s = await sitzungen(); const v = (s[auftrag.id]?.versuch || 0) + 1; await merkeSitzung(auftrag.id, { ...(s[auftrag.id] || {}), versuch: v });
@@ -635,13 +668,17 @@ async function codeArbeit() {
 // ---------- Ersatz beim Programmieren (Gerhard 2026-10-23 „Nur als Ersatz“) ----------
 // Nur wenn Claudes Abo-Limit voll ist UND der Admin ChatGPT als zweiten Eintrag für „Programmieren“ gewählt hat, nur auf macOS/Linux
 // (Betriebssystem-Sandbox) und nur für neue Aufträge. Codex ändert nur Dateien; Commit, Hochladen und Pull Request macht die Werkstatt.
-async function ersatzErlaubt(projektId) {
-  if (cfg.admin) return false;          // der Admin-PC führt nie Projekt-Code aus (Prüfung 0.8.6 O1)
-  if (!sandboxArt()) return false;
-  if (kiLimitBis.chatgpt > Date.now() || (kiKopplung.chatgpt && !kiKopplung.chatgpt.gekoppelt)) return false;
+// Warum der Ersatz NICHT geht (null = Ersatz möglich) – der Grund wird beim Auftrag angezeigt (Meldung Gerhard 27.10.2026)
+async function ersatzGrund(projektId) {
+  if (cfg.admin) return "auf dem Admin-PC läuft aus Sicherheitsgründen nie Code eines Ersatz-Anbieters";   // Prüfung 0.8.6 O1
+  if (!sandboxArt()) return "der Ersatz braucht eine abgeschottete Umgebung (Mac oder Linux), auf Windows gibt es sie noch nicht";
+  if (kiLimitBis.chatgpt > Date.now()) return "auch das ChatGPT-Limit ist voll";
+  if (kiKopplung.chatgpt && !kiKopplung.chatgpt.gekoppelt) return "ChatGPT ist auf diesem PC nicht gekoppelt";
   const { reihe } = await kiReihe(projektId, "bauen");
-  return reihe.length === 2 && reihe[0].anbieter === "claude" && reihe[1].anbieter === "chatgpt";
+  if (!(reihe.length === 2 && reihe[0].anbieter === "claude" && reihe[1].anbieter === "chatgpt")) return "für „Programmieren“ ist ChatGPT nicht als einziger Ersatz nach Claude eingestellt";
+  return null;
 }
+async function ersatzErlaubt(projektId) { return !(await ersatzGrund(projektId)); }
 // Git im echten Auftragsordner nur mit festen, sicheren Einstellungen (keine Hooks, kein fsmonitor, keine fremden Zugangs-Helfer)
 const gitSicher = (ordner, ...args) => git(ordner, "-c", "core.fsmonitor=false", "-c", `core.hooksPath=${path.join(path.dirname(ordner), "keine-hooks")}`, "-c", "commit.gpgsign=false", ...args);
 async function ersatzBau({ auftrag, projekt, ordner, zweig, prompt, signal }) {
@@ -1143,7 +1180,9 @@ async function claudeOhneWerkzeuge(prompt, { lesenIn = null, modell = "sonnet" }
     });
   } finally { laeuft = null; if (leer) await rm(leer, { recursive: true, force: true }).catch(() => {}); }
   if (ende?.subtype !== "success") throw new Error("Claude hat keine Antwort geliefert");
-  return ende.result || "";
+  const res = String(ende.result || "");
+  if (res.length < 600 && istLimit(res)) { await claudeLimitVoll(res); throw new Error(`Claudes Abo-Limit ist voll – ${res.trim()}`); }
+  return res;
 }
 
 async function designChat() {
@@ -1516,8 +1555,10 @@ async function naechsterAuftrag() {
   if (await repoArbeit()) return;
   if (await liveArbeit()) return;
   if (await aktionArbeit()) return;
-  // 0. Designer-Chat: kurz, eigene Fragen zuerst (nicht während der Abo-Pause)
-  if ((await aboLage()) !== "pause" && ((await designChat()) || (await claudeChat()) || (await markeArbeit()))) return;
+  // 0. Designer- und Konzept-Chat: kurz, eigene Fragen zuerst. Auch während Claudes Abo-Pause – die KI-Reihe springt dann
+  //    selbst zum nächsten Anbieter (z. B. ChatGPT) oder meldet im Chat, warum keiner antworten kann (Meldung 27.10.2026:
+  //    5 Fragen im Konzept-Chat blieben ohne Antwort, obwohl ChatGPT zuständig war). Marken-Arbeit braucht Claude: nur ohne Pause.
+  if ((await designChat()) || (await claudeChat()) || ((await aboLage()) !== "pause" && (await markeArbeit()))) return;
   // 1. Fortsetzen: eigene Rückfragen, auf die geantwortet wurde
   // (auch von früheren Werkstatt-PC-Einträgen derselben Person, z. B. nach Neuinstallation)
   const { data: meinePcs } = await db.from("ws_werkstatt_pcs").select("id").eq("benutzer_id", cfg.user_id);
